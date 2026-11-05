@@ -13,8 +13,9 @@ function makeProj(lat0, lon0) {
   return { lat0, lon0, mLat, mLon, toXZ: (lat, lon) => ({ x: (lon - lon0) * mLon, z: -(lat - lat0) * mLat }), toLL: (x, z) => ({ lat: lat0 - z / mLat, lon: lon0 + x / mLon }) };
 }
 /** Overpass-spørring: biler kan kjøre på alle klasser. Boligveier bare nær sentrum (holder datamengden nede). */
-function overpassQuery(cfg) {
+function overpassQuery(cfg, live) {
   const [w, s, e, n] = cfg.bbox, c = cfg.center;
+  if (live) return '[out:json][timeout:90];way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link)$"](around:' + (cfg.liveR || 2600) + ',' + c.lat + ',' + c.lon + ');out geom tags;';   // mindre utsnitt = raskere når data/ mangler
   return '[out:json][timeout:180];(' +
     'way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link)$"](' + s + ',' + w + ',' + n + ',' + e + ');' +
     'way["highway"~"^(residential|living_street)$"](around:' + (cfg.innerR || 3000) + ',' + c.lat + ',' + c.lon + ');' +
@@ -31,7 +32,7 @@ function overpassToGeoJSON(json) {
 async function fetchOverpassLive(cfg) {
   let lastErr;
   for (const url of OVERPASS) {
-    try { const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(overpassQuery(cfg)) }); if (!r.ok) throw new Error('HTTP ' + r.status); return overpassToGeoJSON(await r.json()); } catch (e) { lastErr = e; }
+    try { const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(overpassQuery(cfg, true)), signal: AbortSignal.timeout ? AbortSignal.timeout(60000) : undefined }); if (!r.ok) throw new Error('HTTP ' + r.status); return overpassToGeoJSON(await r.json()); } catch (e) { lastErr = e; }
   }
   throw lastErr || new Error('Overpass utilgjengelig');
 }
@@ -210,6 +211,7 @@ function buildWorld(cfg, roadGJ, siteFeats) {
   /* tomter: navngitte steder (data eller config) + jevnt fordelte generiske tomter */
   const lots = [], lotById = new Map(), taken = [];
   const addLot = (o) => {
+    { const rr_ = nav.nearestRP(o.x, o.z, true); if (!rr_ || (o.real && rr_.dist > 400)) return null; }
     const lot = Object.assign({ id: 'l' + lots.length, kind: 'tomt', free: true, floors: 0 }, o);
     const r = nav.nearestRP(lot.x, lot.z, true); lot.rp = { a: r.a, b: r.b, e: r.e, t: r.t }; lot.snap = r.dist;
     const rx = nav.rpXZ(lot.rp), dx = rx.x - lot.x, dz = rx.z - lot.z; lot.face = Math.atan2(dx, dz);

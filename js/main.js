@@ -25,7 +25,7 @@ Game.worlds = {};
 /** Laster veinett (data/*.geojson, ellers Overpass) og bygger verden for en by. */
 Game.loadWorld = async function (id) {
   if (Game.worlds[id]) return Game.worlds[id];
-  const cfg = CITY_CONFIGS[id]; UI.toast('Laster kart og veinett for ' + cfg.navn + ' …', 'info');
+  const cfg = CITY_CONFIGS[id]; UI.toast('Laster veinett for ' + cfg.navn + ' – første gang kan det ta et halvt minutt …', 'info');
   const rd = await loadRoadData(cfg), sites = await loadSites(cfg);
   const w = buildWorld(cfg, rd.gj, sites); w.kilde = rd.kilde; Game.worlds[id] = w;
   console.info('[NødByen]', cfg.navn, 'veinett fra', rd.kilde, w.stat);
@@ -33,7 +33,8 @@ Game.loadWorld = async function (id) {
 };
 Game.fail = function (e, retry) {
   console.error(e);
-  UI.modal({ title: 'Kunne ikke laste kartdata', html: '<p>Veinettet for byen kunne ikke hentes (' + esc(String(e && e.message || e)) + '). Sjekk nettforbindelsen. Hvis du publiserer selv: kjør <code>npm run data</code> for å lage <code>data/*.geojson</code>.</p>', buttons: [{ label: 'Prøv igjen', cls: 'primary', fn: () => { retry(); } }, { label: 'Lukk', cls: 'ghost' }] });
+  const fil = location.protocol === 'file:' ? ' Du har åpnet siden som fil – start den via en webserver (<code>npm start</code>), ellers kan ikke veidata leses.' : '';
+  UI.modal({ title: 'Kunne ikke laste kartdata', html: '<p>Veinettet for byen kunne ikke hentes (' + esc(String(e && e.message || e)) + ').' + fil + ' Sjekk nettforbindelsen. Eier du siden: kjør <code>npm run data</code> og legg <code>data/*.geojson</code> i repoet.</p>', buttons: [{ label: 'Prøv igjen', cls: 'primary', fn: () => { retry(); } }, { label: 'Lukk', cls: 'ghost' }] });
 };
 /** Viser (og laster ved behov) en by som bakgrunn i menyene. */
 Game.showCity = async function (id, season) {
@@ -99,7 +100,7 @@ function loop(now) {
       simDt = rdt * S.speed * MIN_PER_SEC;
       let rem = simDt; while (rem > 1e-6) { const d = Math.min(rem, 0.25); Sim.tick(d); rem -= d; }
     }
-    if (Game.mode === 'menu' && R.map && R.world && !R.map.isMoving()) R.map.setBearing(R.map.getBearing() + rdt * 2.5);
+    if (Game.mode === 'menu' && R.map && !R.map.isMoving()) R.map.setBearing(R.map.getBearing() + rdt * 2.5);
     const live = (Game.mode === 'play' || Game.mode === 'place0') && S;
     if (live) {
       Game.envT += rdt;
@@ -138,7 +139,8 @@ async function boot() {
   UI.init();
   let ok; try { ok = await R.init($('#view'), { offline: q.has('offline') }); } catch (e) { fatal('Kartet kunne ikke startes: ' + esc(String(e.message || e))); return; }
   R.onTileError = () => UI.toast('Fikk ikke kontakt med kartfliser (OpenFreeMap). Spillet virker, men bakgrunnskartet kan mangle.', 'warn');
-  try { await Game.showCity('oslo', UI.season); } catch (e) { $('#loadMsg').remove(); UI.screenCities(); Game.fail(e, () => location.reload()); return; }
+  // menyen vises alltid med en gang; veinett lastes først når du velger by
+  const c0 = CITY_CONFIGS.oslo; R.map.jumpTo({ center: [c0.center.lon, c0.center.lat], zoom: c0.zoom, pitch: c0.pitch, bearing: c0.bearing });
   $('#loadMsg').remove(); UI.screenCities();
   Game.last = performance.now(); requestAnimationFrame(loop);
   window.addEventListener('pagehide', () => Store.save());

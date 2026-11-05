@@ -86,6 +86,53 @@ R.makeWindows = function (name) {
   const d = x.getImageData(0, 0, S_, S_); return { width: S_, height: S_, data: new Uint8Array(d.data.buffer) };
 };
 
+
+/* ---------- tak: saltak oppå lave hus, bygget fra byggeomrisset i vektorflisene ---------- */
+const ROOF_COL = [0xB5694F, 0xA65F47, 0x6F6A68, 0x7A5F55, 0x8E5E4C, 0x5E6670, 0xC07A5A];
+function gableGeo() {
+  const A = [-.5, 0, -.5], B = [.5, 0, -.5], C = [.5, 0, .5], D = [-.5, 0, .5], R1 = [-.5, 1, 0], R2 = [.5, 1, 0], t = [].concat(D, C, R2, D, R2, R1, B, A, R1, B, R1, R2, A, D, R1, C, B, R2);
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(t, 3)); g.computeVertexNormals(); return g;
+}
+/** Minste omskrevne rektangel (roterende), returnerer {cx,cz,w,d,a} der w er langside, a vinkel i x/z-planet. */
+function minRect(pts) {
+  let best = null;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i], q = pts[(i + 1) % pts.length], a = Math.atan2(q[1] - p[1], q[0] - p[0]), c = Math.cos(a), sn = Math.sin(a);
+    let x0 = 1e18, x1 = -1e18, z0 = 1e18, z1 = -1e18;
+    for (const r of pts) { const u = r[0] * c + r[1] * sn, v = -r[0] * sn + r[1] * c; x0 = Math.min(x0, u); x1 = Math.max(x1, u); z0 = Math.min(z0, v); z1 = Math.max(z1, v); }
+    const area = (x1 - x0) * (z1 - z0); if (!best || area < best.area) best = { area, a, c, sn, x0, x1, z0, z1 };
+  }
+  const b = best, mu = (b.x0 + b.x1) / 2, mv = (b.z0 + b.z1) / 2, w = b.x1 - b.x0, d = b.z1 - b.z0;
+  return { cx: mu * b.c - mv * b.sn, cz: mu * b.sn + mv * b.c, w, d, a: b.a, area: b.area };
+}
+function polyArea(pts) { let s = 0; for (let i = 0; i < pts.length; i++) { const p = pts[i], q = pts[(i + 1) % pts.length]; s += p[0] * q[1] - q[0] * p[1]; } return Math.abs(s) / 2; }
+R.roofs = { mesh: null, keys: new Set(), items: [], busy: false };
+R.updateRoofs = function () {
+  const map = R.map, w = R.world; if (!map || !w || !map.getSource('om') || map.getZoom() < 15.4 || R.roofs.busy) return;
+  R.roofs.busy = true;
+  try {
+    const c = map.getCenter(), cp = w.proj.toXZ(c.lat, c.lng), rad = clamp(R.mpp * Math.max(R.w, R.h) * 0.8, 300, 1800), feats = map.querySourceFeatures('om', { sourceLayer: 'building' }), RR = R.roofs;
+    for (const f of feats) {
+      const g = f.geometry; if (!g || (g.type !== 'Polygon' && g.type !== 'MultiPolygon')) continue;
+      const ring = (g.type === 'Polygon' ? g.coordinates[0] : g.coordinates[0][0]); if (!ring || ring.length < 4) continue;
+      const h = (f.properties && f.properties.render_height) || 6; if (h >= 16) continue;
+      const pts = ring.slice(0, -1).map(q => { const p = w.proj.toXZ(q[1], q[0]); return [p.x, p.z]; });
+      const r = minRect(pts); if (Math.hypot(r.cx - cp.x, r.cz - cp.z) > rad) continue;
+      const short = Math.min(r.w, r.d), long = Math.max(r.w, r.d); if (short < 4 || long > 60 || polyArea(pts) / r.area < 0.8) continue;   // bare tilnærmet rektangulære hus
+      const key = Math.round(r.cx / 1.5) + ',' + Math.round(r.cz / 1.5) + ',' + Math.round(h); if (RR.keys.has(key)) continue; RR.keys.add(key);
+      const ridgeAlongW = r.w >= r.d;
+      RR.items.push({ x: r.cx, z: r.cz, y: (f.properties && f.properties.render_min_height ? 0 : 0) + h, sx: (ridgeAlongW ? r.w : r.d) + 0.8, sz: (ridgeAlongW ? r.d : r.w) + 0.8, rh: clamp(short * 0.34, 1.6, 5), a: ridgeAlongW ? r.a : r.a + Math.PI / 2, col: ROOF_COL[(Math.abs(Math.round(r.cx * 7 + r.cz * 13))) % ROOF_COL.length] });
+    }
+    if (RR.items.length > 6000) RR.items.splice(0, RR.items.length - 6000);
+    if (RR.mesh) { R.scene.remove(RR.mesh); RR.mesh.dispose(); }
+    const m = RR.mesh = new THREE.InstancedMesh(R.geo('gable', gableGeo), new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide }), Math.max(1, RR.items.length)), col = new THREE.Color();
+    RR.items.forEach((it, i) => { _v3.set(it.x, it.y, it.z); _q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -it.a); _s3.set(it.sx, it.rh, it.sz); _m4.compose(_v3, _q, _s3); m.setMatrixAt(i, _m4); col.setHex(it.col); m.setColorAt(i, col); });
+    m.count = RR.items.length; m.frustumCulled = false; R.scene.add(m);
+  } catch (e) { console.warn('tak', e); }
+  R.roofs.busy = false;
+};
+R.clearRoofs = function () { const RR = R.roofs; if (RR.mesh) { R.scene.remove(RR.mesh); RR.mesh = null; } RR.keys.clear(); RR.items = []; };
+
 /* ---------- initialisering ---------- */
 R.init = function (container, opts) {
   opts = opts || {}; R.offline = !!opts.offline;
@@ -114,8 +161,9 @@ R.init = function (container, opts) {
     map.on('load', () => { map.addLayer(R.layer); R.ready = true; R.setBase(R.base || 'sat'); if (!done) { done = true; resolve(true); } });
     map.on('click', e => { if (R.onTap) R.onTap(e.point.x, e.point.y, !!(e.originalEvent && (e.originalEvent.pointerType === 'touch' || e.originalEvent.type === 'touchend'))); });
     map.on('resize', () => R.resize());
+    let rt = 0; const roofSoon = () => { clearTimeout(rt); rt = setTimeout(() => R.updateRoofs(), 350); }; map.on('moveend', roofSoon); setInterval(() => { if (!map.isMoving()) R.updateRoofs(); }, 4000);
     R.resize();
-    setTimeout(() => { if (!done) { done = true; resolve(false); } }, 15000);
+    setTimeout(() => { if (!done) { done = true; resolve(false); } }, 3500);
   });
 };
 R.resize = function () { if (!R.map) return; const c = R.map.getCanvas(); R.w = c.clientWidth || window.innerWidth; R.h = c.clientHeight || window.innerHeight; R.dpr = window.devicePixelRatio || 1; };
@@ -124,6 +172,7 @@ R.setPadding = function (right, bottom) { R.insetR = right; R.insetB = bottom; i
 
 /* ---------- verden: opprinnelse for lokale meterkoordinater, dekningslag, strender ---------- */
 R.clearWorld = function () {
+  R.clearRoofs();
   if (R.roadDebug) { R.scene.remove(R.roadDebug); R.roadDebug = null; }
   while (R.dyn.children.length) R.dyn.remove(R.dyn.children[0]);
   if (R.coverMesh) { R.scene.remove(R.coverMesh); R.coverMesh = null; }
