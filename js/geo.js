@@ -33,15 +33,31 @@ async function fetchOverpassLive(cfg) {
   // mellomlager i nettleseren (Cache Storage) så Overpass bare trengs første gang
   const ck = new Request(location.origin + '/__cache/overpass/' + cfg.id + '/v1');
   try { const c = await caches.open('nodbyen-data'), hit = await c.match(ck); if (hit) return await hit.json(); } catch (e) { /* ingen cache */ }
-  let lastErr;
-  for (const url of OVERPASS) {
-    try { const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(overpassQuery(cfg, true)), signal: AbortSignal.timeout ? AbortSignal.timeout(60000) : undefined }); if (!r.ok) throw new Error('HTTP ' + r.status); const gj = overpassToGeoJSON(await r.json()); try { (await caches.open('nodbyen-data')).put(ck, new Response(JSON.stringify(gj))); } catch (e) { /* ignorer */ } return gj; } catch (e) { lastErr = e; }
+  if (cfg._opFail && Date.now() - cfg._opFail < 120000) throw new Error('Overpass utilgjengelig');   // ikke prøv på nytt rett etter feil
+  const body = 'data=' + encodeURIComponent(overpassQuery(cfg, true));
+  try {   // alle speil samtidig – første som svarer vinner
+    const gj = await Promise.any(OVERPASS.map(async url => { const r = await fetch(url, { method: 'POST', body, signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined }); if (!r.ok) throw new Error('HTTP ' + r.status); return overpassToGeoJSON(await r.json()); }));
+    try { (await caches.open('nodbyen-data')).put(ck, new Response(JSON.stringify(gj))); } catch (e) { /* ignorer */ }
+    return gj;
+  } catch (e) { cfg._opFail = Date.now(); throw new Error('Overpass utilgjengelig'); }
+}
+/** Siste utvei: veier fra vektorflisene som allerede er lastet i kartet (ingen ekstra nettverk). */
+async function roadsFromTiles(cfg) {
+  const map = typeof R !== 'undefined' && R.map; if (!map || !map.getSource('om')) throw new Error('kartflis-kilden er ikke klar');
+  const c = map.getCenter(); if (Math.hypot((c.lng - cfg.center.lon) * 55000, (c.lat - cfg.center.lat) * 111000) > 1500) throw new Error('kartet viser ikke byen');
+  for (let i = 0; i < 40 && !map.areTilesLoaded(); i++) await new Promise(r => setTimeout(r, 250));
+  const CL = { motorway: 'motorway', trunk: 'trunk', primary: 'primary', secondary: 'secondary', tertiary: 'tertiary', minor: 'residential' }, q = v => Math.round(v * 1e5) / 1e5, out = [], seen = new Set();
+  for (const f of map.querySourceFeatures('om', { sourceLayer: 'transportation' })) {
+    const hw = CL[f.properties.class]; if (!hw || f.properties.brunnel === 'tunnel' || !f.geometry) continue;
+    const lines = f.geometry.type === 'LineString' ? [f.geometry.coordinates] : f.geometry.type === 'MultiLineString' ? f.geometry.coordinates : [];
+    for (const l of lines) { const co = l.map(p => [q(p[0]), q(p[1])]).filter((p, i, a) => !i || p[0] !== a[i - 1][0] || p[1] !== a[i - 1][1]); if (co.length < 2) continue; const k = co[0] + '|' + co[co.length - 1] + '|' + co.length; if (seen.has(k)) continue; seen.add(k); out.push({ type: 'Feature', properties: { highway: hw, name: f.properties.name || '' }, geometry: { type: 'LineString', coordinates: co } }); }
   }
-  throw lastErr || new Error('Overpass utilgjengelig');
+  if (out.length < 30) throw new Error('for få veier i kartflisene');
+  return { type: 'FeatureCollection', features: out };
 }
 async function loadRoadData(cfg) {
   try { const r = await fetch(cfg.roads, { cache: 'force-cache' }); if (r.ok) { const j = await r.json(); if (j.features && j.features.length) return { gj: j, kilde: 'fil' }; } } catch (e) { /* prøv Overpass */ }
-  return { gj: await fetchOverpassLive(cfg), kilde: 'overpass' };
+  try { return { gj: await fetchOverpassLive(cfg), kilde: 'overpass' }; } catch (e) { return { gj: await roadsFromTiles(cfg), kilde: 'kartfliser' }; }
 }
 async function loadSites(cfg) {
   try { const r = await fetch(cfg.sitesFile); if (r.ok) return (await r.json()).features || []; } catch (e) { /* bruker config */ }
