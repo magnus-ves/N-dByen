@@ -200,7 +200,7 @@ R.init = function (container, opts) {
     map.on('load', () => { addFacades(); map.addLayer(R.layer); R.ready = true; R.setBase(R.base || 'sat'); R.setSeason(R.seasonIdx); if (!done) { done = true; resolve(true); } });
     map.on('click', e => { if (R.onTap) R.onTap(e.point.x, e.point.y, !!(e.originalEvent && (e.originalEvent.pointerType === 'touch' || e.originalEvent.type === 'touchend'))); });
     map.on('resize', () => R.resize());
-    let rt = 0; const roofSoon = () => { clearTimeout(rt); rt = setTimeout(() => (window.requestIdleCallback ? requestIdleCallback(() => City.update(), { timeout: 1500 }) : City.update()), 500); }; map.on('moveend', roofSoon); map.on('idle', () => { if (!City.mesh || City.lastKey === '') roofSoon(); });
+    let rt = 0; const roofSoon = () => { clearTimeout(rt); rt = setTimeout(() => (window.requestIdleCallback ? requestIdleCallback(() => City.update(), { timeout: 1500 }) : City.update()), 500); }; map.on('moveend', roofSoon); map.on('idle', () => { if (!City.mesh || City.lastKey === '') roofSoon(); R.fixBeaches(); });
     R.resize();
     setTimeout(() => { if (!done) { done = true; resolve(false); } }, 3500);
   });
@@ -321,8 +321,8 @@ R.showCoverage = function (on) { R.coverOn = !!on; if (R.coverMesh) R.coverMesh.
 function buildBeaches() {
   const g = R.beachGroup = new THREE.Group(); R.beachViews = {}; R.scene.add(g);
   for (const id in R.world.beaches) {
-    const b = R.world.beaches[id], grp = new THREE.Group(); grp.position.set(b.x, 0, b.z); g.add(grp);
-    const disc = new THREE.Mesh(new THREE.CircleGeometry(34, 28), new THREE.MeshBasicMaterial({ color: 0xEBD9A8, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide })); disc.rotation.x = -Math.PI / 2; disc.position.y = 0.6; grp.add(disc);
+    const b = R.world.beaches[id], grp = new THREE.Group(); grp.position.set(b.tower.x, 0, b.tower.z); grp.rotation.y = Math.atan2(b.wv[0], b.wv[1]); g.add(grp);
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(22, 28), new THREE.MeshBasicMaterial({ color: 0xEBD9A8, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide })); disc.rotation.x = -Math.PI / 2; disc.position.set(0, 0.6, 6); grp.add(disc);
     const tw = new THREE.Group(); tw.scale.setScalar(5.5);
     for (const sx of [-0.45, 0.45]) for (const sz of [-0.45, 0.45]) tw.add(R.box(0.1, 1.5, 0.1, 0xC8A27A, sx, 0.75, sz));
     for (const sz of [-0.45, 0.45]) { const br = R.box(0.06, 1.25, 0.06, 0xB08B64, 0, 0.75, sz); br.rotation.z = 0.62; tw.add(br); }
@@ -333,7 +333,7 @@ function buildBeaches() {
     const ring = new THREE.Mesh(R.geo('buoyr', () => new THREE.TorusGeometry(0.17, 0.05, 6, 14)), R.mat(0xE2452F)); ring.position.set(-0.56, 1.95, 0.25); ring.rotation.y = Math.PI / 2; tw.add(ring);
     const guard = new THREE.Group(); guard.position.set(0.3, 1.56, 0.45); guard.add(R.box(0.2, 0.32, 0.14, 0xE2452F, 0, 0.3, 0)); guard.add(R.box(0.21, 0.07, 0.15, 0xF2D21B, 0, 0.42, 0)); const hd = new THREE.Mesh(R.geo('ico', () => new THREE.SphereGeometry(1, 16, 12)), R.mat(0xE9C2A0)); hd.scale.setScalar(0.09); hd.position.y = 0.55; guard.add(hd); guard.add(R.box(0.16, 0.24, 0.12, 0x1E3A5F, 0, 0.06, 0)); guard.visible = false; tw.add(guard); grp.add(tw);
     // parasoller og håndklær
-    for (let k = 0; k < 4; k++) { const a = k * 1.7, r = 70 + k * 9, px = Math.cos(a) * r * 0.4, pz = Math.sin(a) * r * 0.25; const pole = R.box(0.25, 6, 0.25, 0xdddddd, px, 3, pz); grp.add(pole); const top = new THREE.Mesh(R.geo('umb', () => new THREE.ConeGeometry(4, 1.6, 10)), R.mat([0xE2452F, 0x2D7FB8, 0xF2D21B, 0x5FAF6B][k])); top.position.set(px, 6.4, pz); grp.add(top); grp.add(R.box(3.5, 0.1, 1.6, [0xF4F1EA, 0xE58A6B, 0x7FB3D5, 0xF2D21B][k], px + 3, 0.7, pz + 2)); }
+    for (let k = 0; k < 4; k++) { const px = [-14, -6, 8, 15][k], pz = [4, 10, 7, 2][k]; const pole = R.box(0.25, 6, 0.25, 0xdddddd, px, 3, pz); grp.add(pole); const top = new THREE.Mesh(R.geo('umb', () => new THREE.ConeGeometry(4, 1.6, 10)), R.mat([0xE2452F, 0x2D7FB8, 0xF2D21B, 0x5FAF6B][k])); top.position.set(px, 6.4, pz); grp.add(top); grp.add(R.box(3.5, 0.1, 1.6, [0xF4F1EA, 0xE58A6B, 0x7FB3D5, 0xF2D21B][k], px + 3, 0.7, pz + 2)); }
     R.beachViews[id] = { guard, grp };
   }
 }
@@ -654,14 +654,22 @@ R.fixBeaches = function () {
   const w = R.world, map = R.map; if (!w || !map || !map.getSource('om') || !R.ready) return;
   const b0 = map.getBounds();
   for (const id in w.beaches) {
-    const b = w.beaches[id]; if (b.fixed) continue; const ll = w.proj.toLL(b.x, b.z); if (!b0.contains([ll.lon, ll.lat])) continue;
-    R._blk = null; const road = w.nav.rpXZ(b.rp); let dx = b.x - road.x, dz = b.z - road.z, d = Math.hypot(dx, dz);
-    if (d < 5 || b.island) { dx = b.wv[0]; dz = b.wv[1]; d = 1; }   // øyer: bruk oppgitt retning mot sjøen
-    dx /= d; dz /= d; const start = b.island ? { x: b.x - dx * 120, z: b.z - dz * 120 } : road;
-    let shore = null; for (let k = 0; k < 140; k++) { const px = start.x + dx * k * 4, pz = start.z + dz * k * 4; if (R.isWater(px, pz)) { shore = { x: px - dx * 4, z: pz - dz * 4 }; break; } }
-    b.fixed = true; if (!shore) continue;
-    b.shore = shore; b.tower = { x: shore.x - dx * 14, z: shore.z - dz * 14 }; b.swim = { x: shore.x + dx * 28, z: shore.z + dz * 28 }; b.x = (b.tower.x + shore.x) / 2; b.z = (b.tower.z + shore.z) / 2; b.wv = [dx, dz];
-    const v = R.beachViews && R.beachViews[id]; if (v) { v.grp.position.set(b.x, 0, b.z); v.grp.rotation.y = Math.atan2(dx, dz); }
+    const b = w.beaches[id]; if (b.fixed) continue; const ll = w.proj.toLL(b.tower.x, b.tower.z); if (!b0.contains([ll.lon, ll.lat])) continue;
+    R._blk = null; b.tries = (b.tries || 0) + 1; if (b.tries >= 6) b.fixed = true; let dx, dz, shore = null;   // prøver igjen til kartflisene er lastet
+    if (b.towerFixed) {
+      // tårnet står der det er oppgitt: let i alle retninger etter nærmeste vann og legg badeplassen der
+      let best = null;
+      for (let k = 0; k < 24; k++) { const a = k / 24 * TAU, ux = Math.cos(a), uz = Math.sin(a); for (let st = 1; st <= 45; st++) { const px = b.tower.x + ux * st * 4, pz = b.tower.z + uz * st * 4; if (R.isWater(px, pz)) { if (!best || st < best.st) best = { st, ux, uz, px, pz }; break; } } }
+      if (!best) continue; dx = best.ux; dz = best.uz; shore = { x: best.px - dx * 3, z: best.pz - dz * 3 };
+    } else {
+      const road = w.nav.rpXZ(b.rp); dx = b.x - road.x; dz = b.z - road.z; let d = Math.hypot(dx, dz);
+      if (d < 5 || b.island) { dx = b.wv[0]; dz = b.wv[1]; d = 1; }
+      dx /= d; dz /= d; const start = b.island ? { x: b.x - dx * 120, z: b.z - dz * 120 } : road;
+      for (let k = 0; k < 140; k++) { const px = start.x + dx * k * 4, pz = start.z + dz * k * 4; if (R.isWater(px, pz)) { shore = { x: px - dx * 4, z: pz - dz * 4 }; break; } }
+      if (!shore) continue; b.tower = { x: shore.x - dx * 14, z: shore.z - dz * 14 };
+    }
+    b.fixed = true; b.shore = shore; b.swim = { x: shore.x + dx * 28, z: shore.z + dz * 28 }; b.x = (b.tower.x + shore.x) / 2; b.z = (b.tower.z + shore.z) / 2; b.wv = [dx, dz];
+    const v = R.beachViews && R.beachViews[id]; if (v) { v.grp.position.set(b.tower.x, 0, b.tower.z); v.grp.rotation.y = Math.atan2(dx, dz); }
     if (typeof S !== 'undefined' && S) for (const u of Object.values(S.units)) if (u.type === 'livredder' && u.beach === id && u.status === 'ledig') { u.x = b.tower.x; u.z = b.tower.z; }
   }
 };

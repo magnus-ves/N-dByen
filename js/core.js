@@ -466,11 +466,12 @@ const CITY_CONFIGS = {
     ],
     hospitals: [{ id: 'h1', navn: 'Aker sykehus (ca.)', lat: 59.9356, lon: 10.7850 }, { id: 'h2', navn: 'Oslo legevakt, Storgata (ca.)', lat: 59.9163, lon: 10.7575, type: 'legevakt' }],
     masts: [{ id: 'm1', navn: 'Rådhusplassen', lat: 59.9117, lon: 10.7338 }, { id: 'm2', navn: 'Majorstuen', lat: 59.9295, lon: 10.7155 }, { id: 'm3', navn: 'Grønland', lat: 59.9125, lon: 10.7640 }],
-    beaches: [
-      { id: 'sorenga', navn: 'Sørenga sjøbad', lat: 59.9013, lon: 10.7518, crowd: 1.3, wdir: [0, 1] },
+    beaches: [   // tårnposisjoner (lat, lon) – livredderne står her; retningen ut mot vannet finnes fra kartdataene
+      { id: 'sorenga', navn: 'Sørenga sjøbad', lat: 59.9006614, lon: 10.7512228, crowd: 1.3, wdir: [-1, 0.2], fast: true },
+      { id: 'opera', navn: 'Oprastranda', lat: 59.9065057, lon: 10.7528321, crowd: 1.0, wdir: [0, 1], fast: true },
       { id: 'paradisbukta', navn: 'Paradisbukta', lat: 59.9043, lon: 10.6934, crowd: 1.0, wdir: [1, 0] },
-      { id: 'huk', navn: 'Huk', lat: 59.9008, lon: 10.6775, crowd: 1.2, wdir: [0, 1] },
-      { id: 'hovedoya', navn: 'Hovedøya', lat: 59.8925, lon: 10.7345, crowd: 0.7, island: true, wdir: [0, 1] },
+      { id: 'huk', navn: 'Huk', lat: 59.8951209, lon: 10.6760143, crowd: 1.2, wdir: [-0.8, 0.6], fast: true },
+      { id: 'hovedoya', navn: 'Hovedøya', lat: 59.8934992, lon: 10.72728, crowd: 0.7, island: true, wdir: [-0.6, 0.8], fast: true },
       { id: 'langoyene', navn: 'Langøyene', lat: 59.8790, lon: 10.7285, crowd: 0.8, island: true, wdir: [-1, 0] }
     ],
     parks: [{ navn: 'Slottsparken', lat: 59.9170, lon: 10.7270 }, { navn: 'Frognerparken', lat: 59.9272, lon: 10.7040 }, { navn: 'Sofienbergparken', lat: 59.9232, lon: 10.7600 }, { navn: 'Botanisk hage', lat: 59.9170, lon: 10.7690 }, { navn: 'Ekebergparken', lat: 59.9040, lon: 10.7690 }],

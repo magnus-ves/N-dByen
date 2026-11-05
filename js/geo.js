@@ -481,7 +481,7 @@ function buildWorld(cfg, roadGJ, siteFeats) {
   for (const bd of (cfg.beaches || [])) {
     const p = proj.toXZ(bd.lat, bd.lon), r = nav.nearestRP(p.x, p.z, true), wd = bd.wdir || [0, 1]; if (!r) continue;
     world.beaches[bd.id] = { id: bd.id, navn: bd.navn, x: p.x, z: p.z, island: !!bd.island, crowd: bd.crowd || 1, rp: { a: r.a, b: r.b, e: r.e, t: r.t }, snap: r.dist, wv: wd, addr: bd.navn,
-      tower: { x: p.x, z: p.z }, shore: { x: p.x, z: p.z }, swim: { x: p.x + wd[0] * 26, z: p.z + wd[1] * 26 }, approach: approachFor(r.dist, bd.island) };
+      tower: { x: p.x, z: p.z }, shore: { x: p.x + wd[0] * 12, z: p.z + wd[1] * 12 }, swim: { x: p.x + wd[0] * 35, z: p.z + wd[1] * 35 }, approach: approachFor(r.dist, bd.island), towerFixed: !!bd.fast };
   }
   const pts = (arr, k) => (arr || []).map(o => { const p = proj.toXZ(o.lat, o.lon), r = nav.nearestRP(p.x, p.z, true); return r ? { navn: o.navn, x: p.x, z: p.z, rp: { a: r.a, b: r.b, e: r.e, t: r.t }, snap: r.dist, approach: approachFor(r.dist, false) } : null; }).filter(Boolean);
   world.parks = pts(cfg.parks); world.waterfront = pts(cfg.waterfront); world.mountain = pts(cfg.mountain);
