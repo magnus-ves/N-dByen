@@ -174,6 +174,7 @@ UI.menu = function () {
 /* ---------- startflyt: by → etat → første stasjon ---------- */
 UI.showScreen = function (html) { $('#screens').innerHTML = html; };
 UI.hideScreen = function () { $('#screens').innerHTML = ''; };
+UI.showLoading = function (msg) { UI.showScreen('<div class="screen"><div class="inner" style="max-width:420px;text-align:center"><div class="logo"><h1>Nød<span>Byen</span></h1><p>' + esc(msg) + '</p></div><div class="bar"><i class="indet"></i></div><p class="muted sm" style="margin-top:12px">Første gang kan det ta litt tid. Neste gang går det raskere.</p></div></div>'); };
 UI.screenCities = function (selectedCity) {
   Game.mode = 'menu'; $('#hud').classList.add('hidden'); $('#panel').classList.add('hidden'); $('#miniLog').innerHTML = ''; R.setLabels([]); R.setSelection(null); R.setPlacement(null); R.showCoverage(false);
   const cards = cityList().map(c => {

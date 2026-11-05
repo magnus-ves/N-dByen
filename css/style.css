@@ -215,3 +215,6 @@ h3.sec:first-child{margin-top:4px}
 @media(max-width:899px){#panel{bottom:calc(26px + var(--safe-b))}#miniLog{bottom:calc(var(--sheetPeek,70px) + 36px)}}
 @media(min-width:900px){#panel{bottom:28px}}
 code{background:rgba(62,74,63,.1);padding:1px 6px;border-radius:8px;font-size:12px}
+
+.bar>i.indet{width:35%!important;animation:indet 1.2s ease-in-out infinite}
+@keyframes indet{0%{margin-left:-35%}100%{margin-left:100%}}

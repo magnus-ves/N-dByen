@@ -54,11 +54,14 @@ Game.toMenu = function (cityId) {
   if (R.world) { R.setPlacement(null); R.setSelection(null); R.showCoverage(false); } R.setLabels([]);
   UI.screenCities();
 };
-Game.pickAgency = async function (cityId) {
-  try { await Game.showCity(cityId, UI.season); R.resetCamera(false); UI.screenAgency(cityId); } catch (e) { Game.fail(e, () => Game.pickAgency(cityId)); }
+/** Etatvalg vises straks; veinettet lastes i bakgrunnen og avventes først når etat er valgt. */
+Game.pickAgency = function (cityId) {
+  const c = CITY_CONFIGS[cityId]; if (R.map) R.map.flyTo({ center: [c.center.lon, c.center.lat], zoom: c.zoom, pitch: c.pitch, bearing: c.bearing, duration: 1800 });
+  UI.screenAgency(cityId); Game.loadWorld(cityId, true).catch(() => {});
 };
 Game.beginFirstStation = async function (cityId, agency) {
-  try { await Game.showCity(cityId, UI.season); } catch (e) { Game.fail(e, () => Game.beginFirstStation(cityId, agency)); return; }
+  if (!Game.worlds[cityId]) UI.showLoading('Laster kart og veinett for ' + CITY_CONFIGS[cityId].navn + ' …');
+  try { await Game.showCity(cityId, UI.season); } catch (e) { UI.screenAgency(cityId); Game.fail(e, () => Game.beginFirstStation(cityId, agency)); return; }
   Sim.newGame(cityId, agency, UI.season, Game.world);
   R.seasonIdx = S.startSeason; R.setWorld(WORLD); R.setEnv(Game.envFor(S.startSeason), true);
   Game.mode = 'place0'; UI.hideScreen();
@@ -70,7 +73,8 @@ Game.beginFirstStation = async function (cityId, agency) {
 };
 Game.continueCity = async function (id) {
   const o = Store.load(id); if (!o) { Game.pickAgency(id); return; }
-  try { await Game.showCity(id, o.startSeason); } catch (e) { Game.fail(e, () => Game.continueCity(id)); return; }
+  if (!Game.worlds[id]) UI.showLoading('Laster kart og veinett for ' + CITY_CONFIGS[id].navn + ' …');
+  try { await Game.showCity(id, o.startSeason); } catch (e) { UI.screenCities(); Game.fail(e, () => Game.continueCity(id)); return; }
   S = o; WORLD = Game.world; for (const d of (S.dynLots || [])) if (!WORLD.lotById.get(d.id)) WORLD.addLotDyn(d.x, d.z, d.id); Clock.info(); R.seasonIdx = Clock.cur.season; R.setWorld(WORLD);
   for (const sid in S.stations) { const l = WORLD.lotById.get(S.stations[sid].lotId); if (l) S.occ[l.id] = sid; }
   Net.dirty = true; S.paused = true; S.settings = S.settings || { auto: false, cover: false };
