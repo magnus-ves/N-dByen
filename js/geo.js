@@ -244,6 +244,21 @@ async function loadRoadData(cfg) {
   const why = [];
   try { return { gj: await roadsFromTiles(cfg), kilde: 'kartfliser' }; } catch (e) { why.push('kartfliser: ' + e.message); console.info('[NødByen] veier fra kartfliser feilet:', e.message); }
   try { return { gj: await fetchOverpassLive(cfg), kilde: 'overpass' }; } catch (e) { why.push('Overpass: ' + e.message); }
+  console.warn('[NødByen] ingen veidata tilgjengelig – bruker et generert gatenett', why);
+  return { gj: gridRoads(cfg), kilde: 'generert', why };
+}
+/** Siste utvei når ingen veidata kan hentes: enkelt rutenett rundt sentrum, så spillet alltid kan spilles. */
+function gridRoads(cfg) {
+  const pr = makeProj(cfg.center.lat, cfg.center.lon), R_ = 3000, st = 150, feats = [], ll = (x, z) => { const q = pr.toLL(x, z); return [Math.round(q.lon * 1e6) / 1e6, Math.round(q.lat * 1e6) / 1e6]; };
+  for (let k = -R_; k <= R_; k += st) {
+    const hw = Math.abs(k / st) % 4 === 0 ? 'secondary' : 'residential', a = [], b = [];
+    for (let m = -R_; m <= R_; m += st) { a.push(ll(m, k)); b.push(ll(k, m)); }
+    feats.push({ type: 'Feature', properties: { highway: hw, name: 'Gate ' + (k / st + 21) }, geometry: { type: 'LineString', coordinates: a } });
+    feats.push({ type: 'Feature', properties: { highway: hw, name: 'Allé ' + (k / st + 21) }, geometry: { type: 'LineString', coordinates: b } });
+  }
+  return { type: 'FeatureCollection', features: feats };
+}
+function _unused() {
   throw new Error('fant ingen data/' + cfg.id + '-roads.geojson, og henting fra kartfliser og Overpass feilet (' + why.join('; ') + ')');
 }
 async function loadSites(cfg) {

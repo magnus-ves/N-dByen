@@ -31,6 +31,7 @@ Game.loadWorld = function (id) {
     const t0 = performance.now(), [rd, sites] = await Promise.all([loadRoadData(cfg), loadSites(cfg)]), t1 = performance.now();
     const w = buildWorld(cfg, rd.gj, sites); w.kilde = rd.kilde; Game.worlds[id] = w;
     console.info('[NødByen]', cfg.navn, 'veinett fra', rd.kilde, w.stat, 'henting ' + Math.round(t1 - t0) + ' ms, bygging ' + Math.round(performance.now() - t1) + ' ms');
+    if (rd.kilde === 'generert') setTimeout(() => UI.toast('Fikk ikke hentet ekte veidata – bruker et enkelt gatenett. Kjør npm run data og commit data/ for ekte kart.', 'warn'), 800);
     return w;
   })().then(w => { delete Game.loading[id]; return w; }, e => { delete Game.loading[id]; throw e; });
   return Game.loading[id];
