@@ -744,7 +744,11 @@ R.setEnv = function (e, force) {
   R.hemi.intensity = lerp(0.5, 0.78, dl) * (wet ? 0.9 : 1); R.hemi.color.set(0x8E9CCB).lerp(new THREE.Color(0xFAF3E2), dl); R.hemi.groundColor.set(0x4A5476).lerp(new THREE.Color(0xDADCC8), dl);
   R.sun.intensity = lerp(0.18, 0.5, smooth(0.1, 0.9, dl)) * (wet ? 0.6 : 1); R.sun.color.set(0xA9BAF0).lerp(new THREE.Color(0xFFF1D6), smooth(0.15, 0.8, dl));
   const u = (e.hour - (e.sunrise || 6)) / ((e.sunset || 20) - (e.sunrise || 6));
-  if (u >= 0 && u <= 1) { const a = u * Math.PI; R.sun.position.set(Math.cos(a) * 95, Math.sin(a) * 85 + 12, 45); } else R.sun.position.set(-60, 75, -35);
+  // sola går fra øst (morgen) via sør (midt på dagen) til vest (kveld); høyden følger årstiden, men holdes over ca. 22° så skyggene ikke blir urimelig lange
+  { const a = clamp(u, 0, 1) * Math.PI, maxEl = [40, 52, 30, 20][e.season || 0] * Math.PI / 180, el = Math.max(22 * Math.PI / 180, maxEl * Math.sin(a));
+    const az = Math.PI - a;   // 0 = øst … π = vest (x = øst, z = sør)
+    R.sunDir = (R.sunDir || new THREE.Vector3()).set(Math.cos(az) * Math.cos(el) * -1, Math.sin(el), Math.sin(az) * Math.cos(el)).normalize();
+    R.sun.position.copy(R.sunDir).multiplyScalar(100); }
   const tw = Math.max(0, 1 - Math.abs(dl - 0.42) / 0.34), b = lerp(0.58, 1, smooth(0, 1, dl)) * (wet ? 0.92 : 1);
   R.map.getCanvas().style.filter = 'brightness(' + b.toFixed(3) + ') saturate(' + (lerp(0.75, 1, dl) * (wet ? 0.82 : 1)).toFixed(3) + ') sepia(' + (tw * 0.18).toFixed(3) + ') hue-rotate(' + (night * -12).toFixed(1) + 'deg)';
   const nightPat = night > 0.55 ? '-n' : ''; if (R.nightPat !== nightPat && R.map.getLayer('bld-low-0')) { R.nightPat = nightPat; for (let k = 0; k < 5; k++) for (const t of ['low', 'high']) R.map.setPaintProperty('bld-' + t + '-' + k, 'fill-extrusion-pattern', 'win-' + t + '-' + k + nightPat); }
@@ -778,7 +782,7 @@ R.makePin = function (iconName, bg, size, ring) {
 };
 R.pinAt = (pin, x, y, z, px) => { pin.position.set(x, Math.min(y, 30), z); pin.material.uniforms.uSize.value = px; pin.material.uniforms.uLift.value = px * 0.62; };
 R.addStationView = function (st) {
-  const lot = R.world.lotById.get(st.lotId), T = ST[st.type], grp = new THREE.Group(); const model = stationModel(st.type); grp.add(model); grp.scale.setScalar(SS); grp.rotation.y = lot.face || 0; grp.position.set(lot.x, 0, lot.z); grp.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } }); R.dyn.add(grp);
+  const lot = R.world.lotById.get(st.lotId), T = ST[st.type], grp = new THREE.Group(); const model = stationModel(st.type); grp.add(model); grp.scale.setScalar(SS); grp.rotation.y = lot.face || 0; grp.position.set(lot.x, 0, lot.z); grp.traverse(o => { if (o.isMesh) o.castShadow = true; }); R.dyn.add(grp);
   const pin = R.makePin(T.ikon, T.rolle === 'helse' ? '#8FB59A' : (AGENCIES[T.org] || AGENCIES.bistand).farge, 1); R.dyn.add(pin); R.views.stations[st.id] = { grp, pin, lot, h: (st.type === 'sykehus' ? 24 : 16) };
 };
 R.addMastView = function (m) {

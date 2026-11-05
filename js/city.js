@@ -168,7 +168,7 @@ const City = {
         const d = B[st]; if (!d.p.length) continue; const geo = new THREE.BufferGeometry();
         geo.setAttribute('position', new THREE.Float32BufferAttribute(d.p, 3)); geo.setAttribute('normal', new THREE.Float32BufferAttribute(d.n, 3));
         geo.setAttribute('uv', new THREE.Float32BufferAttribute(d.uv, 2)); geo.setAttribute('color', new THREE.Float32BufferAttribute(d.c, 3));
-        const m = new THREE.Mesh(geo, City.mat(st)); m.frustumCulled = false; m.castShadow = true; m.receiveShadow = st !== 'taksat'; grp.add(m);
+        const m = new THREE.Mesh(geo, City.mat(st)); m.frustumCulled = false; m.castShadow = true; m.receiveShadow = false; grp.add(m);
       }
       City.mesh = grp; R.scene.add(grp); City.lastKey = key; City.setNight(City.night);
       if (R.roofs && R.roofs.mesh) R.roofs.mesh.visible = false;   // saltakene over er nå en del av husene
@@ -211,18 +211,25 @@ const City = {
   shadows() {
     const r = R.renderer; if (!r || City.shadowInit) return; City.shadowInit = true;
     r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap;
-    const L = R.sun; L.castShadow = true; L.shadow.mapSize.set(Game.lowGfx ? 1024 : 2048, Game.lowGfx ? 1024 : 2048); L.shadow.bias = -0.0006; L.shadow.normalBias = 0.6;
+    const L = R.sun, ms = Game.lowGfx ? 1024 : 2048; L.castShadow = true; L.shadow.mapSize.set(ms, ms); L.shadow.bias = -0.0004; L.shadow.normalBias = 1.2; L.shadow.radius = 3;
     R.scene.add(L.target);
-    const g = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShadowMaterial({ opacity: 0.32 })); g.rotation.x = -Math.PI / 2; g.position.y = 0.12; g.receiveShadow = true; g.frustumCulled = false; g.renderOrder = 1; City.ground = g; R.scene.add(g);
+    // bakken som tar imot skygger: skyggen tones mykt ut mot kanten i stedet for å slutte med en skarp firkant
+    const mat = new THREE.ShadowMaterial({ opacity: 0.28 }); mat.depthWrite = false;
+    mat.onBeforeCompile = sh => {
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 vLoc;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvLoc = position.xy;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 vLoc;').replace(/}\s*$/, '  gl_FragColor.a *= 1.0 - smoothstep(0.32, 0.5, length(vLoc));\n}');
+    };
+    const g = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat); g.rotation.x = -Math.PI / 2; g.position.y = 0.12; g.receiveShadow = true; g.frustumCulled = false; g.renderOrder = 1; City.ground = g; R.scene.add(g);
   },
   frame() {
     if (!R.renderer || !R.world) return; City.shadows();
-    const L = R.sun, on = !Game.lowGfx && (R.env.daylight || 0) > 0.3 && R.map.getZoom() > 14.5; L.castShadow = on; City.ground.visible = on; if (!on) return;
-    const span = clamp(R.mpp * Math.max(R.w, R.h) * 0.75, 120, 900), d = _v3.copy(L.position).normalize(), tx = R.cam.tx, tz = R.cam.tz;
-    if (d.y < 0.15) d.y = 0.15; d.normalize();
-    L.target.position.set(tx, 0, tz); L.position.set(tx + d.x * 1200, d.y * 1200, tz + d.z * 1200);
-    const sc = L.shadow.camera; sc.left = -span; sc.right = span; sc.top = span; sc.bottom = -span; sc.near = 10; sc.far = 3000; sc.updateProjectionMatrix();
-    City.ground.position.set(tx, 0.12, tz); City.ground.scale.set(span * 2.4, span * 2.4, 1);
+    const L = R.sun, on = !Game.lowGfx && (R.env.daylight || 0) > 0.3 && R.map.getZoom() > 14.5 && !!R.sunDir; L.castShadow = on; City.ground.visible = on; if (!on) return;
+    const span = clamp(R.mpp * Math.max(R.w, R.h) * 0.75, 120, 900), d = R.sunDir;
+    // lyset følger kameraet i hele skyggepiksler, så skyggene ikke flimrer når kartet flyttes
+    const texel = 2 * span / L.shadow.mapSize.x, tx = Math.round(R.cam.tx / texel) * texel, tz = Math.round(R.cam.tz / texel) * texel;
+    L.target.position.set(tx, 0, tz); L.position.set(tx + d.x * 1500, d.y * 1500, tz + d.z * 1500);
+    const sc = L.shadow.camera; sc.left = -span; sc.right = span; sc.top = span; sc.bottom = -span; sc.near = 10; sc.far = 3500; sc.updateProjectionMatrix();
+    City.ground.position.set(tx, 0.12, tz); City.ground.scale.set(span * 2, span * 2, 1);
   },
   clear() { if (City.mesh) { R.scene.remove(City.mesh); City.mesh.traverse(o => o.geometry && o.geometry.dispose()); City.mesh = null; } City.lastKey = ''; }
 };
