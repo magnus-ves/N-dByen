@@ -52,8 +52,8 @@ R.style = function (offline) {
     // fem fasadevarianter per type, fordelt etter bygningens id (datadrevne mønstre støttes ikke godt, så hver variant er et eget lag)
     const vk = ['%', ['floor', ['to-number', ['coalesce', ['id'], ['*', ['to-number', ['get', 'render_height'], 6], 7]], 0]], 5];
     for (let k = 0; k < 5; k++) {
-      f('bld-low-' + k, 'building', 'fill-extrusion', ['all', ['<', ['coalesce', ['get', 'render_height'], 6], 14], ['==', vk, k]], ex('win-low-' + k), { minzoom: 14 });
-      f('bld-high-' + k, 'building', 'fill-extrusion', ['all', ['>=', ['coalesce', ['get', 'render_height'], 6], 14], ['==', vk, k]], ex('win-high-' + k), { minzoom: 14 });
+      f('bld-low-' + k, 'building', 'fill-extrusion', ['all', ['!=', ['get', 'hide_3d'], true], ['<', ['coalesce', ['get', 'render_height'], 6], 14], ['==', vk, k]], ex('win-low-' + k), { minzoom: 14 });
+      f('bld-high-' + k, 'building', 'fill-extrusion', ['all', ['!=', ['get', 'hide_3d'], true], ['>=', ['coalesce', ['get', 'render_height'], 6], 14], ['==', vk, k]], ex('win-high-' + k), { minzoom: 14 });
     }
     const nm = ['coalesce', ['get', 'name:nb'], ['get', 'name']];
     layers.push({ id: 'water-name', type: 'symbol', source: 'om', 'source-layer': 'water_name', layout: { 'text-field': nm, 'text-font': ['Noto Sans Italic'], 'text-size': 12 }, paint: { 'text-color': '#5F8797', 'text-halo-color': '#F1EBD8', 'text-halo-width': 1 } });
@@ -200,7 +200,7 @@ R.init = function (container, opts) {
     map.on('load', () => { addFacades(); map.addLayer(R.layer); R.ready = true; R.setBase(R.base || 'sat'); R.setSeason(R.seasonIdx); if (!done) { done = true; resolve(true); } });
     map.on('click', e => { if (R.onTap) R.onTap(e.point.x, e.point.y, !!(e.originalEvent && (e.originalEvent.pointerType === 'touch' || e.originalEvent.type === 'touchend'))); });
     map.on('resize', () => R.resize());
-    let rt = 0; const roofSoon = () => { clearTimeout(rt); rt = setTimeout(() => (window.requestIdleCallback ? requestIdleCallback(() => R.updateRoofs(), { timeout: 1500 }) : R.updateRoofs()), 900); }; map.on('moveend', roofSoon);
+    let rt = 0; const roofSoon = () => { clearTimeout(rt); rt = setTimeout(() => (window.requestIdleCallback ? requestIdleCallback(() => City.update(), { timeout: 1500 }) : City.update()), 500); }; map.on('moveend', roofSoon); map.on('idle', () => { if (!City.mesh || City.lastKey === '') roofSoon(); });
     R.resize();
     setTimeout(() => { if (!done) { done = true; resolve(false); } }, 3500);
   });
@@ -216,7 +216,7 @@ R.setPadding = function (right, bottom) {
 
 /* ---------- verden: opprinnelse for lokale meterkoordinater, dekningslag, strender ---------- */
 R.clearWorld = function () {
-  R.clearRoofs();
+  R.clearRoofs(); City.clear();
   if (R.roadDebug) { R.scene.remove(R.roadDebug); R.roadDebug = null; }
   while (R.dyn.children.length) R.dyn.remove(R.dyn.children[0]);
   if (R.coverMesh) { R.scene.remove(R.coverMesh); R.coverMesh = null; }
@@ -700,6 +700,7 @@ R.setEnv = function (e, force) {
   R.map.getCanvas().style.filter = 'brightness(' + b.toFixed(3) + ') saturate(' + (lerp(0.75, 1, dl) * (wet ? 0.82 : 1)).toFixed(3) + ') sepia(' + (tw * 0.18).toFixed(3) + ') hue-rotate(' + (night * -12).toFixed(1) + 'deg)';
   const nightPat = night > 0.55 ? '-n' : ''; if (R.nightPat !== nightPat && R.map.getLayer('bld-low-0')) { R.nightPat = nightPat; for (let k = 0; k < 5; k++) for (const t of ['low', 'high']) R.map.setPaintProperty('bld-' + t + '-' + k, 'fill-extrusion-pattern', 'win-' + t + '-' + k + nightPat); }
   R.wxMode = wet ? (wx === 'storm' ? 'storm' : 'regn') : snow ? 'snø' : '';
+  City.setNight(smooth(0.35, 0.75, night));
 };
 
 /* ---------- overlegg: valgring, rutelinje, plasseringsringer ---------- */
