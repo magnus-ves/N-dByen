@@ -321,7 +321,7 @@ UI.update = function (dt) {
   UI.tick += dt;
   if (Game.mode !== 'play' || !S) return;
   if (UI.tick > 0.45) {
-    UI.tick = 0; UI.updateTop(); UI.alarmBar(); UI.layout();
+    UI.tick = 0; UI.updateTop(); UI.alarmBar(); UI.layout(); Radio.chatter();
     if (UI.mc === 0) UI.renderTab();
     // etiketter i kartet
     const labels = [], sl = UI.selLabel();

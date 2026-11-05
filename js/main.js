@@ -106,7 +106,7 @@ Game.continueCity = async function (id) {
 Game.enterPlay = function (isNew) {
   Game.mode = 'play'; UI.hideScreen(); UI.sel = null; UI.lastHtml = '';
   $('#hud').classList.remove('hidden'); $('#topbar').classList.remove('hidden'); $('#mapTools').classList.remove('hidden'); $('#miniLog').classList.remove('hidden'); $('#miniLog').innerHTML = ''; $('#panel').classList.remove('hidden');
-  UI.setSheet(1); UI.setTab('hendelser'); UI.layout();
+  UI.setSheet(1); UI.setTab('hendelser'); UI.layout(); Radio.defaults();
   UI.toggleCover(!!S.settings.cover);
   Clock.info(); S.ready = Sim.readiness(); UI.updateTop(); UI.alarmBar();
   const st = Object.values(S.stations).find(x => ST[x.type].rolle === 'etat'), l = st && WORLD.lotById.get(st.lotId);

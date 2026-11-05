@@ -12,6 +12,16 @@ const Radio = {
     try { const saved = JSON.parse(localStorage.getItem('nodbyen.radio') || '[]'); saved.forEach(t => Radio.listen.add(t)); } catch (e) { /* ignorer */ }
     if ('speechSynthesis' in window) { const load = () => { Radio.voices = speechSynthesis.getVoices(); }; load(); speechSynthesis.onvoiceschanged = load; }
     Bus.on('log', e => Radio.onLog(e));
+    Bus.on('dispatch', d => Radio.dispatchTalk(d.inc, d.u));
+    Bus.on('arrive', d => Radio.arriveTalk(d.inc, d.u));
+    // nettleseren krever et klikk før lyd og tale kan spilles av
+    window.addEventListener('pointerdown', () => Radio.unlock(), { passive: true });
+  },
+  /** Ny runde: lytt på egne etaters talegrupper (og samvirke) hvis spilleren ikke har valgt noe selv. */
+  defaults() {
+    if (Radio.listen.size) return;
+    for (const a of ETATER) if (S.agencies[a]) Radio.listen.add(AGENCIES[a].tg);
+    Radio.listen.add('REDNING'); for (let k = 1; k <= 6; k++) Radio.listen.add('SAMVIRKE ' + k); Radio.save();
   },
   save() { try { localStorage.setItem('nodbyen.radio', JSON.stringify([...Radio.listen])); } catch (e) { /* ignorer */ } },
   /** Talegrupper som kan avlyttes (VHF har kanaler i stedet for talegrupper). */
@@ -26,8 +36,53 @@ const Radio = {
   toggle(tg) { if (Radio.listen.has(tg)) Radio.listen.delete(tg); else { Radio.listen.add(tg); Radio.unlock(); } Radio.save(); },
   heard(e) { const tg = e.tg; return Radio.listen.has(tg) || (tg.startsWith('SAMVIRKE') && Radio.listen.has('SAMVIRKE*')); },
   onLog(e) {
-    if (!Radio.enabled || Game.mode !== 'play' || !Radio.heard(e)) return;
+    if (!Radio.enabled || Game.mode !== 'play' || !Radio.heard(e) || e.kind === 'quiet') return;
+    if (/^(Utrykning til|Varslet –|Går til skadested)|: (Utrykning til|Varslet|Går til)/.test(e.msg) || e.msg === 'Fremme på stedet') return;   // dekkes av dialogene under
     Radio.say(e.from, e.msg, e.tg, e.kind === 'alarm');
+  },
+  /** Radiodialog: flere replikker etter hverandre med hver sin stemme. Vises også i loggen. */
+  dialog(tg, lines) {
+    if (!S) return;
+    const speak = Radio.enabled && Game.mode === 'play' && Radio.heard({ tg }) && 'speechSynthesis' in window;
+    if (!speak) { lines.forEach(([who, msg], i) => setTimeout(() => { if (S) Log.add(tg, who, msg, 'quiet'); }, i * 400)); return; }
+    Radio.queue.push({ tg, lines: lines.slice() }); if (Radio.queue.length > 8) Radio.queue.splice(0, Radio.queue.length - 8); Radio.next();
+  },
+  centralOf(inc) { const a = AGENCIES[inc.lead] || AGENCIES.brann; return inc.lead === 'ambulanse' ? 'AMK' : inc.lead === 'politi' ? 'Operasjonssentralen' : a.sentral || 'Sentralen'; },
+  priText(inc) { const lab = (PRI_LABEL[inc.lead] || PRI_LABEL.brann)[inc.pri]; return inc.lead === 'politi' ? 'prioritet ' + lab : inc.lead === 'ambulanse' ? lab.toLowerCase() + ' oppdrag' : lab.toLowerCase() + ' prioritet'; },
+  dispatchTalk(inc, u) {
+    const tg = inc.tg || tgOf(u), c = Radio.centralOf(inc), T = UT[u.type];
+    if (T.foot) return Radio.dialog(tg, [[u.name, c + ', ' + u.name + ', vi tar den. Løper ned til vannet.']]);
+    const lines = [[c, u.name + ', ' + c + '.'], [u.name, c + ', ' + u.name + ', kom.'],
+      [c, inc.navn + ', ' + inc.loc.addr + ', ' + Radio.priText(inc) + '.' + (inc.caller ? ' Innringer sier: ' + inc.caller : '')],
+      [u.name, T.mob && !u.bistand ? 'Mottatt, vi varsler mannskapet og rykker ut så fort vi er samlet.' : inc.pri === 1 ? 'Mottatt, rykker ut med blålys.' : 'Mottatt, vi kjører.']];
+    const crew = Staff.needs(u) ? Staff.of(u) : []; if (crew.length >= 2) lines.push([crew[0].navn.split(' ')[0], crew[1].navn.split(' ')[0] + ', du kjører. Jeg tar sambandet.']);
+    if (inc.island && !T.boat && T.model !== 'heli') lines.push([c, 'Merk: stedet ligger på øya. Møt båten på kaia.']);
+    Radio.dialog(tg, lines);
+  },
+  arriveTalk(inc, u) {
+    const tg = inc.tg || tgOf(u), c = Radio.centralOf(inc), crew = Staff.needs(u) ? Staff.of(u).map(p => p.navn.split(' ')[0]) : [];
+    const first = !inc.firstTalk; inc.firstTalk = true;
+    const sit = { brann: ['Røykutvikling fra andre etasje, vi går inn med røykdykkere.', 'Brannen er avgrenset, vi starter slokking.', 'Vi har kontroll på stedet.'],
+      politi: ['Situasjonen er rolig nå, vi snakker med de involverte.', 'Vi sikrer stedet.', 'Vi har kontakt med melder.'],
+      ambulanse: ['Pasienten er våken og puster, vi undersøker.', 'Pasienten er dårlig, vi starter behandling.', 'Vi er hos pasienten.'] }[UT[u.type].org] || ['Vi er på stedet og har oversikt.'];
+    const lines = [[u.name, c + ', ' + u.name + ' er fremme.' + (first ? ' ' + pick(sit) : '')], [c, 'Mottatt.']];
+    if (crew.length >= 2) lines.push([crew[1], crew[0] + ', jeg henter ' + pick({ brann: ['slangen', 'røykdykkerutstyret', 'brekkjernet', 'lykta'], politi: ['sperrebåndet', 'lykta', 'førstehjelpsskrinet'], ambulanse: ['båren', 'sekken', 'hjertestarteren', 'oksygenet'] }[UT[u.type].org] || ['utstyret']) + '.'], [crew[0], 'Bra, jeg går foran.']);
+    Radio.dialog(tg, lines);
+  },
+  /** Mannskap på stedet snakker sammen innimellom (kalles fra UI-løkken). */
+  chatter() {
+    if (!S || !Radio.enabled) return;
+    for (const inc of Sim.active()) {
+      if (!inc.onScene || (inc._chat && S.t - inc._chat < 6)) continue; inc._chat = S.t;
+      const on = Sim.onScene(inc).filter(u => Staff.needs(u) && Staff.of(u).length >= 2); if (!on.length || Math.random() < 0.4) continue;
+      const u = pick(on), n = Staff.of(u).map(p => p.navn.split(' ')[0]), pct = Math.round(100 * inc.progress / Math.max(1, inc.work)), tg = inc.tg || tgOf(u);
+      const org = UT[u.type].org, A = n[0], B = n[1];
+      const talk = { brann: [[A, B + ', hvordan ser det ut inne?'], [B, pct > 60 ? 'Nesten slukket, vi etterslukker.' : 'Fortsatt mye røyk, vi trenger mer vann.']],
+        politi: [[A, B + ', ta personalia på vitnene.'], [B, 'Skal bli. Jeg snakker med dem nå.']],
+        ambulanse: [[A, 'Blodtrykket er ' + (pct > 50 ? 'stabilt nå.' : 'lavt, vi gir væske.')], [B, pct > 50 ? 'Bra, vi gjør klar for transport.' : 'Mottatt, jeg legger inn venekanyle.']] }[org] || [[A, 'Alt under kontroll her.'], [B, 'Mottatt.']];
+      if (pct > 85) talk.push([u.name, Radio.centralOf(inc) + ', ' + u.name + ', vi er snart ferdige her.']);
+      Radio.dialog(tg, talk);
+    }
   },
   /** Lydkontekst må startes av et klikk (nettleserregel). */
   unlock() { try { if (!Radio.ctx) Radio.ctx = new (window.AudioContext || window.webkitAudioContext)(); if (Radio.ctx.state === 'suspended') Radio.ctx.resume(); } catch (e) { /* ingen lyd */ } },
@@ -48,12 +103,21 @@ const Radio = {
   /** Sier en melding på radioen (køes, maks fire ventende). */
   say(who, msg, tg, urgent) {
     if (!('speechSynthesis' in window)) return;
-    Radio.queue.push({ who, msg, tg, urgent }); if (Radio.queue.length > 4) Radio.queue.splice(0, Radio.queue.length - 4);
+    Radio.queue.push({ who, msg, tg, urgent }); if (Radio.queue.length > 8) Radio.queue.splice(0, Radio.queue.length - 8);
     Radio.next();
   },
   next() {
     if (Radio.speaking || !Radio.queue.length) return;
-    const m = Radio.queue.shift(); Radio.speaking = true; Radio.unlock(); Radio.squelch(0.12, m.urgent);
+    const m = Radio.queue[0];
+    if (m.lines) {   // dialog: én replikk om gangen, samlet, og vist i loggen når den sies
+      const [who, msg] = m.lines.shift(); if (!m.lines.length) Radio.queue.shift();
+      if (S) Log.add(m.tg, who, msg, 'quiet');
+      return Radio.speakOne({ who, msg, tg: m.tg, urgent: false });
+    }
+    Radio.queue.shift(); Radio.speakOne(m);
+  },
+  speakOne(m) {
+    Radio.speaking = true; Radio.unlock(); Radio.squelch(0.12, m.urgent);
     const key = Radio.clipKey(m.msg), clip = key && Radio.clips[key];
     const done = () => { Radio.squelch(0.18, false); Radio.speaking = false; setTimeout(Radio.next, 250); };
     if (clip) { const a = new Audio(clip); a.onended = done; a.onerror = done; a.play().catch(done); return; }

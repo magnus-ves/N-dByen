@@ -511,7 +511,7 @@ Sim.onPathEnd = function (u) {
 };
 Sim.arrive = function (u, inc) {
   u.status = 'pastedet'; u.phase = null; u.arrived = S.t; u.path = []; u.pi = 0; u.dest = null; u.walking = false; u.siren = inc.pri === 1 && !UT[u.type].foot;
-  Log.add(tgOf(u), u.name, 'Fremme på stedet', 'info');
+  Log.add(tgOf(u), u.name, 'Fremme på stedet', 'info'); Bus.emit('arrive', { inc, u });
   if (!inc.arrivedAt) { inc.arrivedAt = S.t; inc.rt = S.t - inc.t0; }
   inc.onScene = true;
   // lifeguard: radio i Nødnett-stil
