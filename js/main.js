@@ -94,6 +94,9 @@ Game.continueCity = async function (id) {
     R.seasonIdx = Clock.cur.season; R.setWorld(WORLD);
     Net.dirty = true; S.paused = true; S.settings = S.settings || { auto: false, cover: false };
     for (const u of Object.values(S.units)) { u.path = u.path || []; u._eta = {}; }
+    // eldre lagringer: kø, personell og nye felter
+    S.calls = S.calls || []; S.staff = S.staff || []; S.vol.rs = !!S.vol.rs;
+    for (const u of Object.values(S.units)) if (Staff.needs(u) && !Staff.of(u).length) Staff.crewFor(u, true);
     Vol.seasonSync(); Game.enterPlay(false);
   } catch (e) {
     console.error(e); S = null; Game.mode = 'menu'; UI.screenCities();

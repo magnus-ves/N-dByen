@@ -51,6 +51,7 @@ UI.init = function () {
   Bus.on('incident', inc => { UI.dirty = true; if (Game.mode === 'play') UI.renderTab(true); if (UI.sheet === 0 && window.innerWidth < 900) UI.pulseTab('hendelser'); });
   Bus.on('alarm', al => { UI.dirty = true; UI.alarmBar(); R.focus(S.units[al.unitId].x, S.units[al.unitId].z, 80); });
   Bus.on('incidentDone', () => { UI.dirty = true; });
+  Bus.on('call', c => { UI.dirty = true; if (Game.mode === 'play') { UI.renderTab(true); if (UI.sheet === 0 && window.innerWidth < 900) UI.pulseTab('hendelser'); } });
   UI.layout();
 };
 UI.layout = function () {
@@ -83,7 +84,7 @@ UI.key = function (e) {
   if (e.key === 'Escape') { const m = $('#modalRoot .mback:last-child'); if (m) { m._close && m._close(); return; } if (Game.place) { UI.endPlacement(); return; } if (UI.sel) UI.select(null); return; }
   if (Game.mode !== 'play' || !S || UI.mc) return;
   if (e.key === ' ') { e.preventDefault(); UI.setSpeed(0); }
-  else if (e.key === '1' || e.key === '2' || e.key === '3') UI.setSpeed(+e.key);
+  else if (e.key === '1' || e.key === '2' || e.key === '3') UI.setSpeed(SPEEDS[+e.key - 1]);
   else if (e.key.toLowerCase() === 'm') UI.toggleCover();
   else if (e.key.toLowerCase() === 'h') R.resetCamera(false);
 };
@@ -343,7 +344,7 @@ UI.remaining = function (u) {
 };
 UI.unitState = function (u) {
   switch (u.status) {
-    case 'ledig': return 'Ledig';
+    case 'ledig': return Staff.ready(u) ? 'Ledig' : 'Mangler mannskap';
     case 'varslet': return 'Varslet';
     case 'mobiliserer': return 'Mobiliserer · ca. ' + Math.max(1, Math.ceil(u.wait)) + ' min';
     case 'utrykning': { if (u.phase === 'walk') return 'Fremføring (båt/til fots) · ' + Math.ceil(u.wait) + ' min'; const r = UI.remaining(u); return r == null ? 'Utrykning' : 'Utrykning · fremme om ' + Math.max(1, Math.ceil(r)) + ' min'; }
@@ -386,7 +387,7 @@ UI.incCard = function (inc) {
   const missing = inc.slots.filter(s => s.req && s.units.length < s.n), noneAssigned = missing.filter(s => s.units.length === 0);
   const fresh = !UI.seen.has(inc.id); UI.seen.add(inc.id);
   let h = '<div class="card p' + inc.pri + (late ? ' late' : '') + (sel ? ' sel' : '') + (fresh ? ' fresh' : '') + '" id="incident-' + inc.id + '" data-act="selinc" data-id="' + inc.id + '"><div class="stripe"></div>';
-  h += '<div class="row"><div class="grow"><h4>' + esc(inc.navn) + '</h4><div class="addr">' + icon('pin') + ' ' + esc(inc.loc.addr) + '</div></div>' + priChip(inc) + '</div>';
+  h += '<div class="row"><div class="grow"><h4>' + esc(inc.navn) + '</h4><div class="addr">' + icon('pin') + ' ' + esc(inc.loc.addr) + (inc.island ? ' · øy – trenger båt eller helikopter' : '') + '</div>' + (inc.caller ? '<div class="xs muted" style="margin-top:2px">«' + esc(inc.caller) + '»</div>' : '') + '</div>' + priChip(inc) + '</div>';
   h += '<div class="row wrap" style="margin-top:6px">' + (inc.rt != null ? chip(icon('check') + ' Responstid ' + fmtDur(inc.rt), inc.rt <= inc.target ? 'ok' : 'bad') : chip(icon('clock') + ' ' + fmtDur(age) + ' siden varsling · mål ' + fmtDur(inc.target), late ? 'bad' : 'mute'))
     + (inc.tri ? chip('Trippelvarsling', 'net') : '') + ags.filter(a => a !== 'frivillig').map(a => chip(AGENCIES[a].kort, a)).join('') + (inc.tg ? chip(icon('radio') + ' ' + inc.tg, 'net') : chip(inc.lead === 'brann' ? 'BRANN' : inc.lead === 'politi' ? 'POLITI' : 'HELSE', 'mute')) + (inc.bistand ? chip('Bistand', 'mute') : '') + '</div>';
   if (!inc.onScene) h += '<div style="margin-top:8px">' + barHtml(age / inc.target, col) + '</div>';
@@ -399,13 +400,26 @@ UI.incCard = function (inc) {
     if (ok.length) h += '<button class="btn primary sm" data-act="send" data-id="' + inc.id + '">' + icon('truck') + ' Send enheter · ' + Math.ceil(Math.max(...ok.map(x => x.eta))) + ' min</button><button class="btn sm" data-act="pick" data-id="' + inc.id + '">Velg selv</button>';
     if (sug.some(x => !x.u) || !ok.length) h += '<button class="btn warn sm" data-act="bistand" data-id="' + inc.id + '">Be om bistand</button>';
   } else h += '<div class="actions">';
-  if (ags.length >= 2 && !inc.tg) h += '<button class="btn net sm' + (Sim.canSamvirke(inc) ? '' : ' dis') + '" data-act="samv" data-id="' + inc.id + '">' + icon('radio') + ' Opprett samvirke-talegruppe</button>';
+  if (ags.length >= 2 && !inc.tg) { const free = Net.vhf() ? null : Net.samvFree(); h += '<button class="btn net sm' + (free ? '' : ' dis') + '" data-act="samv" data-id="' + inc.id + '">' + icon('radio') + (Net.vhf() ? ' Samvirke krever Nødnett' : free ? ' Bruk ' + free : ' Alle samvirke-grupper opptatt') + '</button>'; }
   h += '<button class="btn ghost sm" data-act="focusinc" data-id="' + inc.id + '">' + icon('pin') + ' Vis</button></div></div>';
   return h;
 };
+/** Nødsentralene (AMK 113, 110, 112): operatører, kø og innkommende anrop. */
+UI.centrals = function () {
+  let h = '<div class="card central"><div class="row wrap" style="gap:6px">';
+  for (const a of ETATER) if (S.agencies[a]) { const q = S.calls.filter(c => c.ag === a && c.state === 'ringer').length, b = Sim.callsBusy(a); h += chip(icon(AGENCIES[a].ikon) + ' ' + CENTRAL[a] + ' ' + AGENCIES[a].nr + ' · ' + b + '/' + S.ops[a] + ' i samtale' + (q ? ' · ' + q + ' i kø' : ''), q ? 'p2' : 'mute'); }
+  h += '</div>';
+  for (const c of S.calls) {
+    const T = TEMPLATES[c.tpl], ring = c.state === 'ringer', wait = S.t - c.t0;
+    h += '<div class="call' + (ring ? ' ring' : '') + '"><div class="av" style="background:' + AGENCIES[c.ag].farge + '">' + icon(ring ? 'phone' : 'headset') + '</div><div class="grow"><b class="sm">' + (ring ? 'Anrop til ' + CENTRAL[c.ag] + ' · venter ' + fmtDur(wait) : (c.op === 'player' ? 'Du snakker med innringer' : 'Operatør snakker med innringer')) + '</b><div class="xs muted">«' + esc(c.text) + '» · ' + esc(c.place.addr) + '</div></div>'
+      + (ring ? '<button class="btn primary xs" data-act="answer" data-id="' + c.id + '">Svar</button>' : '') + '</div>';
+  }
+  if (!S.calls.length) h += '<div class="xs muted" style="margin-top:6px">Ingen anrop i kø. Flere operatørplasser (Butikk → Nødnett) gir kortere ventetid når det er travelt.</div>';
+  return h + '</div>';
+};
 UI.tabHendelser = function () {
   const act = Sim.active().sort((a, b) => a.pri - b.pri || a.t0 - b.t0);
-  let h = '';
+  let h = UI.centrals();
   if (!act.length) h += '<div class="empty">' + icon('shield') + 'Ingen aktive hendelser akkurat nå.<br>Bruk tiden til å bygge ut beredskapen i butikken.</div>';
   for (const inc of act) h += UI.incCard(inc);
   if (S.done.length) h += '<h3 class="sec">Nylig avsluttet</h3>' + S.done.slice(0, 5).map(d => '<div class="urow"><div class="av" style="background:' + (d.ok ? '#7b9a79' : '#D9695A') + '">' + icon(d.ok ? 'check' : 'x') + '</div><div class="grow"><b class="sm">' + esc(d.navn) + '</b><div class="xs muted">' + esc(d.addr) + ' · ' + esc(d.summary) + '</div></div><span class="price ' + (d.pay < 0 ? 'bad' : '') + '">' + (d.pay >= 0 ? '+' : '') + fmtKr(d.pay) + '</span></div>').join('');
@@ -421,7 +435,7 @@ UI.unitRow = function (u) {
   let h = '<div class="urow' + (sel ? ' sel' : '') + '" id="unit-' + u.id + '" data-act="selunit" data-id="' + u.id + '">' + avatar(org, T.model === 'heli' ? 'heli' : null);
   h += '<div class="grow"><b class="sm">' + esc(u.name) + '</b><div class="xs muted">' + chip(UI.unitState(u), UI.statusCls(u.status)) + (job ? ' ' + job : '') + '</div></div>' + UI.sigHtml(u) + '</div>';
   if (sel) {
-    h += '<div class="card" style="margin:-2px 0 8px"><div class="kv"><span>Stasjon</span><span>' + esc(st) + '</span><span>Nødnett</span><span>' + ({ bra: 'God dekning', svak: 'Svak dekning', ingen: 'Ingen kontakt' }[u.contact || 'bra']) + (u.cong ? ' (overbelastet)' : '') + '</span><span>Terminal</span><span>' + (T.term === 'h' ? 'Håndterminal' : 'Kjøretøyterminal') + ' nivå ' + S.net.termLevel + '</span><span>Mannskap</span><span>' + T.crew + '</span></div>'
+    h += '<div class="card" style="margin:-2px 0 8px"><div class="kv"><span>Stasjon</span><span>' + esc(st) + '</span><span>Nødnett</span><span>' + ({ bra: 'God dekning', svak: 'Svak dekning', ingen: 'Ingen kontakt' }[u.contact || 'bra']) + (u.cong ? ' (overbelastet)' : '') + '</span><span>Samband</span><span>' + (Net.vhf() ? 'VHF-radio' : (T.term === 'h' ? 'Nødnett håndterminal' : 'Nødnett kjøretøyterminal') + ' nivå ' + S.net.termLevel) + '</span><span>Mannskap</span><span>' + (Staff.needs(u) ? Staff.of(u).map(p => esc(p.navn) + (p.k160 ? ' (160)' : '')).join(', ') || 'mangler' : T.crew + ' frivillige') + '</span></div>'
       + '<div class="actions">' + (u.job ? '<button class="btn sm" data-act="recall" data-id="' + u.id + '">Kall tilbake</button>' : '') + '<button class="btn ghost sm" data-act="focusunit" data-id="' + u.id + '">' + icon('pin') + ' Vis på kart</button></div></div>';
   }
   return h;
@@ -479,7 +493,7 @@ UI.mastRow = function (m) {
 };
 UI.tabNodnett = function () {
   const ns = Net.status(), cov = Math.round((S.covFrac || 0) * 100);
-  let h = '<div class="card"><div class="row"><i class="dot ' + (ns === 'g' ? '' : ns) + '"></i><div class="grow"><b>' + (ns === 'g' ? 'Nettet fungerer normalt' : ns === 'y' ? 'Høy belastning eller svak dekning' : 'Utfall eller overbelastning!') + '</b><div class="xs muted">God/svak dekning på ' + cov + ' % av landarealet · terminalnivå ' + S.net.termLevel + '</div></div><button class="btn sm' + (S.settings.cover ? ' net' : '') + '" data-act="cover">' + icon('layers') + ' Dekning</button></div></div>';
+  let h = '<div class="card"><div class="row"><i class="dot ' + (ns === 'g' ? '' : ns) + '"></i><div class="grow"><b>' + (ns === 'g' ? 'Nettet fungerer normalt' : ns === 'y' ? 'Høy belastning eller svak dekning' : 'Utfall eller overbelastning!') + '</b><div class="xs muted">' + Net.techName() + ' · god/svak dekning på ' + cov + ' % av landarealet</div></div><button class="btn sm' + (S.settings.cover ? ' net' : '') + '" data-act="cover">' + icon('layers') + ' Dekning</button></div></div>';
   const alarms = S.net.alarms.filter(a => !a.done);
   for (const al of alarms) { const u = S.units[al.unitId], inc = S.incidents[al.incId]; if (!u) continue; h += '<div class="card" style="background:#f6dcd5;border-color:#d9695a"><div class="row">' + icon('warn') + '<div class="grow"><b>NØDKNAPP: ' + esc(u.name) + '</b><div class="sm">' + esc(inc ? inc.loc.addr : '') + ' · ' + Math.max(0, Math.ceil(al.deadline - S.t)) + ' min igjen</div></div><button class="btn clay sm" data-act="sendhelp" data-id="' + al.id + '">Send hjelp</button></div></div>'; }
   h += '<h3 class="sec">Talegrupper</h3>';
@@ -501,7 +515,7 @@ UI.tabNodnett = function () {
   if (lost.length) h += '<h3 class="sec">Dekningsvarsler</h3>' + lost.slice(0, 6).map(u => '<div class="urow" data-act="selunit" data-id="' + u.id + '">' + UI.sigHtml(u) + '<div class="grow"><b class="sm">' + esc(u.name) + '</b><div class="xs muted">' + (u.contact === 'ingen' ? (u.cong ? 'Mistet kontakt – nettet er overbelastet' : 'Uten dekning – siste kjente posisjon vises i grått') : 'Svak dekning – ordre går tregere') + '</div></div></div>').join('');
   // terminaler
   const un = Object.values(S.units).filter(u => !u.bistand);
-  h += '<h3 class="sec">Terminaler og sentraler</h3><div class="grid2"><div class="tile"><b>' + un.filter(u => UT[u.type].term === 'k').length + '</b><span>Kjøretøyterminaler</span></div><div class="tile"><b>' + un.filter(u => UT[u.type].term === 'h').length + '</b><span>Håndterminaler</span></div><div class="tile"><b>' + ETATER.filter(a => S.agencies[a]).reduce((n, a) => n + S.ops[a], 0) + '</b><span>Operatørplasser</span></div><div class="tile"><b>Nivå ' + S.net.termLevel + '</b><span>Terminaloppgradering</span></div></div>';
+  h += '<h3 class="sec">Terminaler og sentraler</h3><div class="grid2"><div class="tile"><b>' + un.filter(u => UT[u.type].term === 'k').length + '</b><span>Kjøretøyterminaler</span></div><div class="tile"><b>' + un.filter(u => UT[u.type].term === 'h').length + '</b><span>Håndterminaler</span></div><div class="tile"><b>' + ETATER.filter(a => S.agencies[a]).reduce((n, a) => n + S.ops[a], 0) + '</b><span>Operatørplasser</span></div><div class="tile"><b>' + (Net.vhf() ? 'VHF' : 'Nivå ' + S.net.termLevel) + '</b><span>Terminaler</span></div></div>';
   // logg
   const fl = UI.logFilter, flt = ['ALLE', 'BRANN', 'POLITI', 'HELSE', 'REDNING', 'SAMVIRKE', 'NØDNETT'];
   h += '<h3 class="sec">Samband-logg</h3><div class="seg">' + flt.map(f => '<button data-act="logf" data-id="' + f + '" class="' + (fl === f ? 'on' : '') + '">' + (f === 'ALLE' ? 'Alle' : f.charAt(0) + f.slice(1).toLowerCase()) + '</button>').join('') + '</div>';
@@ -520,6 +534,11 @@ UI.tabStasjoner = function () {
     for (const st of list) {
       const T = ST[st.type], lot = WORLD.lotById.get(st.lotId), units = Sim.unitsAt(st.id), cap = Sim.stationCap(st), sel = UI.sel && UI.sel.type === 'station' && UI.sel.id === st.id;
       h += '<div class="card' + (sel ? ' sel' : '') + '" id="station-' + st.id + '" data-act="selst" data-id="' + st.id + '"><div class="row">' + avatar(T.org, T.ikon) + '<div class="grow"><h4>' + esc(st.name) + '</h4><div class="addr">' + esc(lot.addr) + '</div></div>' + (cap ? chip(units.length + '/' + cap + ' plasser', units.length >= cap ? 'bad' : 'mute') : chip(T.navn, 'mute')) + '</div>';
+      if (cap && ETATER.includes(T.org) && st.type !== 'helikopterbase' || st.type === 'helikopterbase') {
+        const staff = Staff.atStation(st.id), k = staff.filter(p => p.k160).length;
+        h += '<div class="xs muted" style="margin-top:6px"><b>Personell:</b> ' + staff.length + ' ansatte, ' + k + ' med kode 160</div><div class="slotline">' + staff.map(p => '<span class="slot ' + (p.state !== 'ok' ? 'miss' : p.unitId ? 'en' : 'ok') + '" title="' + (p.unitId && S.units[p.unitId] ? 'På ' + esc(S.units[p.unitId].name) : 'Reserve') + '">' + esc(p.navn) + (p.k160 ? ' · 160' : p.course ? ' · på kurs' : '') + (p.state !== 'ok' ? ' · skadet' : '') + (!p.k160 && !p.course && p.state === 'ok' ? ' <a data-act="course" data-id="' + p.id + '">kurs</a>' : '') + '</span>').join('') + '</div>'
+          + '<div class="actions"><button class="btn sm" data-act="hire" data-id="' + st.id + '" data-k="1">' + icon('plus') + ' Ansett med kode 160 · ' + fmtKr(Staff.HIRE_K) + '</button><button class="btn ghost sm" data-act="hire" data-id="' + st.id + '" data-k="0">Ansett uten · ' + fmtKr(Staff.HIRE) + '</button></div>';
+      }
       if (cap) {
         h += '<div class="slotline">' + (units.map(u => '<span class="slot ' + (u.status === 'ledig' ? 'ok' : 'en') + '">' + esc(u.name) + '</span>').join('') || '<span class="slot opt">Ingen enheter</span>') + '</div><div class="actions">'
           + '<button class="btn primary sm" data-act="buyunit" data-id="' + st.id + '">' + icon('plus') + ' Kjøp enhet</button>';
@@ -588,6 +607,9 @@ UI.act = function (act, d) {
     case 'addopt': if (inc) { const s = inc.slots.find(x => x.k === d.k); const c = s && Sim.candidates(inc, s)[0]; if (c) { Sim.assign(inc, s, c.u); UI.toast(c.u.name + ' sendt (' + Math.ceil(c.eta) + ' min)', 'good'); } else UI.toast('Ingen ledig enhet – kjøp flere eller sjekk avtaler.', 'warn'); UI.sug = {}; UI.dirty = true; } break;
     case 'bistand': if (inc) UI.openBistand(inc); break;
     case 'samv': if (inc) UI.res(Sim.createSamvirke(inc)); break;
+    case 'answer': { const c = Sim.answerCall(id); if (c) { UI.toast('Du snakker med innringer: «' + c.text + '»', 'info'); UI.dirty = true; } break; }
+    case 'hire': UI.res(Staff.hire(id, d.k === '1')); break;
+    case 'course': UI.res(Staff.course(id)); break;
     case 'recall': if (S.units[id]) { Sim.recall(S.units[id]); UI.dirty = true; } break;
     case 'shopcat': UI.shopCat = id; UI.setTab('butikk'); if (UI.sheet === 0) UI.setSheet(1); break;
     case 'buy': UI.buyItem(id); break;
@@ -639,7 +661,7 @@ UI.openBistand = function (inc) {
 UI.buyUnitAt = function (stId) {
   const st = S.stations[stId], T = ST[st.type];
   const types = Object.keys(UT).filter(t => Sim.canHouse(t, st) && !UT[t].foot);
-  UI.choose({ title: 'Kjøp enhet til ' + esc(st.name), items: types.map(t => { const U = UT[t], full = Sim.unitsAt(stId).length >= Sim.stationCap(st); return { id: t, label: U.navn, sub: U.crew + ' mannskap · drift ' + U.run + ' kr/min' + (U.mob ? ' · mobiliserer ca. ' + U.mob + ' min' : '') + (S.level < U.lvl ? ' · krever nivå ' + U.lvl : ''), ic: AGENCIES[U.org].ikon, color: AGENCIES[U.org].farge, right: fmtKr(U.cost), disabled: S.level < U.lvl || full || S.money < U.cost }; }),
+  UI.choose({ title: 'Kjøp enhet til ' + esc(st.name), items: types.map(t => { const U = UT[t], full = Sim.unitsAt(stId).length >= Sim.stationCap(st); return { id: t, label: U.navn, sub: U.crew + ' mannskap · drift ' + U.run + ' kr/min' + (U.mob ? ' · mobiliserer ca. ' + U.mob + ' min' : '') + (S.level < U.lvl ? ' · krever nivå ' + U.lvl : ''), ic: AGENCIES[U.org].ikon, color: AGENCIES[U.org].farge, right: fmtKr(U.cost + Staff.crewCost(t)), disabled: S.level < U.lvl || full || S.money < U.cost + Staff.crewCost(t) }; }),
     onPick: t => UI.res(Sim.buyUnit(t, stId)) });
 };
 UI.buyItem = function (id) {

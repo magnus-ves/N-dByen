@@ -218,3 +218,11 @@ code{background:rgba(62,74,63,.1);padding:1px 6px;border-radius:8px;font-size:12
 
 .bar>i.indet{width:35%!important;animation:indet 1.2s ease-in-out infinite}
 @keyframes indet{0%{margin-left:-35%}100%{margin-left:100%}}
+
+/* nødsentraler: samtalekø */
+.central{padding:10px 12px}
+.call{display:flex;align-items:center;gap:10px;margin-top:8px;padding:8px 10px;border-radius:14px;background:rgba(255,255,255,.55)}
+.call.ring{background:#fbecd6;animation:ringpulse 1.1s ease-in-out infinite}
+@keyframes ringpulse{0%,100%{box-shadow:0 0 0 0 rgba(228,174,78,.0)}50%{box-shadow:0 0 0 4px rgba(228,174,78,.35)}}
+.slot a{cursor:pointer;text-decoration:underline;margin-left:4px}
+.ic{flex:none}

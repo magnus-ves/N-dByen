@@ -298,17 +298,22 @@ R.setBeachSeason = function (summer) { R.summer = !!summer; };
 R.setGuard = function (id, on) { const v = R.beachViews && R.beachViews[id]; if (v) v.guard.visible = !!on; };
 /* ---------- ikon-sprites (pin) ---------- */
 R.pinCache = {};
+/** Lysere (+) eller mørkere (−) variant av en hex-farge. */
+function shade(hex, f) { const n = parseInt(String(hex).replace('#', ''), 16); if (isNaN(n)) return hex; const c = [n >> 16, (n >> 8) & 255, n & 255].map(v => Math.round(f > 0 ? v + (255 - v) * f : v * (1 + f))); return 'rgb(' + c.join(',') + ')'; }
 R.pinMat = function (iconName, bg, ring) {
   const key = iconName + bg + (ring || '');
   if (R.pinCache[key]) return R.pinCache[key];
   const c = document.createElement('canvas'); c.width = c.height = 128;
   const x = c.getContext('2d'), tex = new THREE.CanvasTexture(c);
-  const draw = img => {
+  const draw = img => {   // nål: myk skygge, fargegradient, hvit kant og ikon
     x.clearRect(0, 0, 128, 128);
-    x.fillStyle = 'rgba(40,50,40,0.28)'; x.beginPath(); x.arc(64, 70, 52, 0, TAU); x.fill();
-    x.fillStyle = bg; x.beginPath(); x.arc(64, 64, 52, 0, TAU); x.fill();
-    x.lineWidth = 8; x.strokeStyle = ring || 'rgba(255,255,255,0.96)'; x.stroke();
-    if (img) x.drawImage(img, 30, 30, 68, 68);
+    x.save(); x.shadowColor = 'rgba(20,30,25,0.45)'; x.shadowBlur = 10; x.shadowOffsetY = 4;
+    x.fillStyle = '#fff'; x.beginPath(); x.arc(64, 60, 54, 0, TAU); x.fill(); x.restore();
+    const g = x.createLinearGradient(0, 14, 0, 110); g.addColorStop(0, shade(bg, 0.18)); g.addColorStop(1, shade(bg, -0.16));
+    x.fillStyle = g; x.beginPath(); x.arc(64, 60, 47, 0, TAU); x.fill();
+    x.fillStyle = 'rgba(255,255,255,0.22)'; x.beginPath(); x.ellipse(64, 40, 34, 18, 0, 0, TAU); x.fill();
+    if (ring) { x.lineWidth = 6; x.strokeStyle = ring; x.beginPath(); x.arc(64, 60, 54, 0, TAU); x.stroke(); }
+    if (img) { x.save(); x.shadowColor = 'rgba(0,0,0,0.25)'; x.shadowBlur = 3; x.drawImage(img, 32, 28, 64, 64); x.restore(); }
     tex.needsUpdate = true;
   };
   draw(null);

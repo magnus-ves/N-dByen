@@ -5,7 +5,7 @@
    ========================================================================== */
 let S = null;        // aktiv spilltilstand – ren JSON, kan lagres direkte
 let WORLD = null;    // generert by (bygges fra seed, lagres ikke)
-const BASE_SPEED = 420;         // meter per spillminutt (ved fartsfaktor 1)
+const BASE_SPEED = 620;         // meter per spillminutt ≈ 37 km/t snitt i by (med blålys ≈ 45 km/t, hovedveier raskere)
 const BISTAND_COST = { brann: 12000, politi: 9000, ambulanse: 10000, frivillig: 6000 };
 
 const Bus = { l: {}, on(n, f) { (this.l[n] = this.l[n] || []).push(f); }, emit(n, d) { (this.l[n] || []).forEach(f => { try { f(d); } catch (e) { console.error(e); } }); } };
@@ -20,9 +20,9 @@ function newState(cityId, first, startSeason) {
     v: 3, city: cityId, t: 0, startSeason: startSeason || 0, startHour: 7, money: cfg.startCash || 650000, xp: 0, level: 1, speed: 1, paused: true, first,
     agencies: { brann: false, politi: false, ambulanse: false }, ops: { brann: 1, politi: 1, ambulanse: 1 }, up: { brann: 0, politi: 0, ambulanse: 0 },
     stations: {}, units: {}, incidents: {}, occ: {}, done: [], nid: 1,
-    vol: { rk: false, nf: false, strand: false, bookings: [] }, beaches: {}, evAct: {},
-    net: { masts: {}, termLevel: 1, alarms: [], tgPrio: { BRANN: 2, POLITI: 2, HELSE: 2, REDNING: 3, SAMVIRKE: 1 }, mobile: 0, samv: 0 },
-    weather: { kind: 'klar', until: 0 }, stats: newStats(), perf: 0.75, volBonus: 0, log: [], nextSpawn: 14, flags: {}, settings: { auto: false, cover: false }, acc: 0, lastDay: -1
+    vol: { rk: false, nf: false, rs: false, strand: false, bookings: [] }, staff: [], calls: [], beaches: {}, evAct: {},
+    net: { masts: {}, termLevel: 0, alarms: [], tgPrio: { BRANN: 2, POLITI: 2, HELSE: 2, REDNING: 3, SAMVIRKE: 1 }, mobile: 0, samv: 0 },
+    weather: { kind: 'klar', until: 0 }, stats: newStats(), perf: 0.75, volBonus: 0, log: [], nextSpawn: 4, flags: {}, settings: { auto: false, cover: false }, acc: 0, lastDay: -1
   };
   s.agencies[first] = true;
   return s;
@@ -67,6 +67,7 @@ function updateWeather() {
 }
 function tplMods(tpl, info) {
   let m = 1;
+  if (tpl.hours && (info.hour < tpl.hours[0] || info.hour >= tpl.hours[1])) return 0;   // f.eks. strandhendelser bare på dagtid
   const sm = tpl.season && tpl.season[info.sid]; if (sm !== undefined) m *= sm;
   const tm = tpl.tod && tpl.tod[Clock.tod(info.hour)]; if (tm !== undefined) m *= tm;
   const wm = tpl.wx && tpl.wx[S.weather.kind]; if (wm !== undefined) m *= wm;
@@ -121,7 +122,7 @@ const Net = {
   quality(s) { return s >= 0.26 ? 'bra' : s >= 0.07 ? 'svak' : 'ingen'; },
   /** Ordre-forsinkelse i minutter avhenger av dekning og terminalnivå. */
   commDelay(u) {
-    const f = [1, 0.75, 0.55][S.net.termLevel - 1] || 1, q = u.bistand ? 'bra' : (u.contact || 'bra');
+    const f = [1.8, 1, 0.75, 0.55][S.net.termLevel] || 1, q = u.bistand ? 'bra' : (u.contact || 'bra');   // nivå 0 = analog VHF
     return f * (q === 'bra' ? 0.25 : q === 'svak' ? 1.1 : 3.4);
   },
   prio(tg) { return S.net.tgPrio[tg.startsWith('SAMVIRKE') ? 'SAMVIRKE' : tg] || 2; },
@@ -132,6 +133,10 @@ const Net = {
   },
   samvMax() { let cap = 0; for (const id in S.net.masts) if (!S.net.masts[id].down) cap += S.net.masts[id].cap; return Math.max(1, Math.floor(cap / 9)); },
   samvActive() { return Object.values(S.incidents).filter(i => i.tg && i.state !== 'ferdig' && i.state !== 'feilet'); },
+  /** Faste samvirke-talegrupper (SAMVIRKE 1 … n). Hendelser låner en ledig gruppe i stedet for å opprette nye. */
+  samvFree() { const used = new Set(this.samvActive().map(i => i.tg)); for (let k = 1; k <= this.samvMax(); k++) if (!used.has('SAMVIRKE ' + k)) return 'SAMVIRKE ' + k; return null; },
+  vhf() { return !S.net.termLevel; },
+  techName() { return S.net.termLevel ? 'Nødnett (terminalnivå ' + S.net.termLevel + ')' : 'Analog VHF'; },
   /** Hovedoppdatering: utfall, kontakt og belastning. */
   update(dt) {
     const info = Clock.cur;
@@ -150,7 +155,7 @@ const Net = {
       const sig = this.signalAt(u.x, u.z); u.sig = sig;
       let q = this.quality(sig);
       if (u.dropUntil && u.dropUntil > S.t) q = 'ingen';
-      else if (q === 'svak' && u.status !== 'ledig' && Math.random() < (S.net.termLevel >= 2 ? 0.003 : 0.011) * dt) { u.dropUntil = S.t + rr(1.5, 4); q = 'ingen'; }
+      else if (q === 'svak' && u.status !== 'ledig' && Math.random() < (S.net.termLevel >= 2 ? 0.003 : S.net.termLevel ? 0.011 : 0.03) * dt) { u.dropUntil = S.t + rr(1.5, 4); q = 'ingen'; }
       u.cong = false;
       u._q = q;
     }
@@ -271,7 +276,7 @@ Sim.buildStation = function (type, lotId, opts) {
   if (!opts.free) {
     if (S.level < T.lvl) return fail_('Krever nivå ' + T.lvl + '.');
     if (['brann', 'politi', 'ambulanse'].includes(T.org) && T.rolle !== 'helse' && !S.agencies[T.org]) return fail_('Du har ikke ' + AGENCIES[T.org].kort.toLowerCase() + 'etaten ennå.');
-    if ((type === 'rk_base' && !S.vol.rk) || (type === 'nf_base' && !S.vol.nf)) return fail_('Krever samarbeidsavtale.');
+    if ((type === 'rk_base' && !S.vol.rk) || (type === 'nf_base' && !S.vol.nf) || (type === 'rs_base' && !S.vol.rs)) return fail_('Krever samarbeidsavtale.');
     if ((T.rolle === 'helse' || type === 'helikopterbase') && !S.agencies.ambulanse) return fail_('Krever ambulanseetaten.');
     if (type === 'arrest' && !S.agencies.politi) return fail_('Krever politietaten.');
     if (!spend(T.cost)) return fail_('Du har ikke nok penger.');
@@ -303,6 +308,8 @@ Sim.addUnit = function (type, stationId, opts) {
   const park = Sim.parkPos(st, seq - 1);
   const u = { id, type, org: T.org, stationId, name: CALL[type] + ' ' + st.no + '-' + seq, status: 'ledig', x: park.x, z: park.z, h: park.h, path: [], pi: 0, job: null, wait: 0, contact: 'bra', lastKnown: { x: park.x, z: park.z }, vis: true, sig: 1, siren: false, alt: 0 };
   if (st.type === 'helikopterbase') u.alt = 0.3;
+  if (T.boat) { const lot = WORLD.lotById.get(st.lotId), d = Sim.nearestPier(lot.x, lot.z); u.dock = { x: d.x + rr(-6, 6), z: d.z + rr(-6, 6) }; u.x = u.dock.x; u.z = u.dock.z; }   // båten ligger ved nærmeste kai
+  if (!opts.noCrew) Staff.crewFor(u, !!opts.freeCrew);
   S.units[id] = u; Bus.emit('unitAdded', u); return u;
 };
 Sim.buyUnit = function (type, stationId) {
@@ -312,12 +319,71 @@ Sim.buyUnit = function (type, stationId) {
   if (!Sim.canHouse(type, st)) return fail_('Denne stasjonen kan ikke huse ' + T.navn.toLowerCase() + '.');
   if (T.org in S.vol && !S.vol[T.org]) return fail_('Krever samarbeidsavtale.');
   if (Sim.unitsAt(stationId).length >= Sim.stationCap(st)) return fail_('Stasjonen er full – utvid garasjen eller bygg ny stasjon.');
-  if (!spend(T.cost)) return fail_('Du har ikke nok penger.');
+  if (T.boat && !(WORLD.piers || []).length) return fail_('Byen har ingen kai for båter.');
+  if (!spend(T.cost + Staff.crewCost(type))) return fail_('Du har ikke nok penger (' + fmtKr(T.cost + Staff.crewCost(type)) + ' inkl. mannskap).');
   const u = Sim.addUnit(type, stationId);
   Log.add((AGENCIES[T.org] || AGENCIES.brann).tg, 'Sentral', u.name + ' er klar med Nødnett-terminal og meldt ledig', 'info');
   return { ok: true, msg: u.name + ' er kjøpt.', u };
 };
 Sim.callsign = u => u.name;
+Sim.nearestPier = function (x, z) { let best = null, bd = 1e18; for (const p of (WORLD.piers || [])) { const d = Math.hypot(p.x - x, p.z - z); if (d < bd) { bd = d; best = p; } } return best || { x, z }; };
+Sim.waterOK = inc => !!(inc.island || (inc.loc && inc.loc.water));   // båter kan bare brukes på sjøen
+
+/* ---------- personell: mannskap på kjøretøyene (utrykningskompetanse kode 160) ----------
+   En enhet kan bare rykke ut når den har nok mannskap (UT.cm) og nok med kode 160 (UT.k160). Ambulansen krever to med kode 160.
+   Reserver på stasjonen tar over hvis noen blir skadet. Frivillige og livreddere har eget mannskap og trenger ikke ansettes. */
+const FORNAVN = ['Ola', 'Kari', 'Lars', 'Ingrid', 'Ahmed', 'Sofie', 'Jonas', 'Maja', 'Erik', 'Nora', 'Henrik', 'Emma', 'Ali', 'Thea', 'Magnus', 'Ida', 'Sindre', 'Hanna', 'Mohammed', 'Silje', 'Anders', 'Ane', 'Kristian', 'Julie', 'Ole', 'Marte', 'Sander', 'Vilde', 'Tobias', 'Amalie', 'Fredrik', 'Linnea', 'Emil', 'Sara', 'Petter', 'Hedda'];
+const ETTERNAVN = ['Hansen', 'Johansen', 'Olsen', 'Larsen', 'Andersen', 'Pedersen', 'Nilsen', 'Kristiansen', 'Jensen', 'Karlsen', 'Berg', 'Haugen', 'Hagen', 'Eriksen', 'Bakken', 'Lie', 'Dahl', 'Lund', 'Moen', 'Strand', 'Solberg', 'Iversen', 'Ali', 'Nguyen', 'Khan', 'Holm', 'Myhre', 'Aas', 'Vik', 'Rød'];
+const Staff = {
+  HIRE: 15000, HIRE_K: 24000, COURSE: 18000, COURSE_T: 240, WAGE: 7, WAGE_K: 8,
+  list() { return S.staff || (S.staff = []); },
+  needs: u => { const T = UT[u.type]; return !u.bistand && !!T.cm; },
+  of: u => Staff.list().filter(p => p.unitId === u.id),
+  atStation: id => Staff.list().filter(p => p.stationId === id),
+  ready(u) { if (!Staff.needs(u)) return true; const T = UT[u.type], c = Staff.of(u).filter(p => p.state === 'ok'); return c.length >= T.cm && c.filter(p => p.k160).length >= T.k160; },
+  missing(u) { const T = UT[u.type], c = Staff.of(u).filter(p => p.state === 'ok'); return { n: Math.max(0, T.cm - c.length), k: Math.max(0, T.k160 - c.filter(p => p.k160).length) }; },
+  make(org, stationId, k160) { const p = { id: 'p' + S.nid++, navn: pick(FORNAVN) + ' ' + pick(ETTERNAVN), org, k160: !!k160, stationId, unitId: null, state: 'ok', until: 0 }; Staff.list().push(p); return p; },
+  crewCost: type => { const T = UT[type]; return T.cm ? T.k160 * Staff.HIRE_K + (T.cm - T.k160) * Staff.HIRE : 0; },
+  /** Ansetter mannskapet en ny enhet trenger (gratis for første stasjon). */
+  crewFor(u, free) { if (!Staff.needs(u)) return; const T = UT[u.type]; for (let i = 0; i < T.cm; i++) { const p = Staff.make(T.org, u.stationId, i < T.k160); p.unitId = u.id; } if (!free) S.stats.capex = (S.stats.capex || 0); },
+  hire(stationId, k160) {
+    const st = S.stations[stationId]; if (!st) return fail_('Ukjent stasjon.'); const c = k160 ? Staff.HIRE_K : Staff.HIRE;
+    if (!spend(c)) return fail_('Du har ikke nok penger (' + fmtKr(c) + ').');
+    const p = Staff.make(ST[st.type].org, stationId, k160); Staff.fill(stationId);
+    Log.add((AGENCIES[ST[st.type].org] || AGENCIES.brann).tg, 'Sentral', p.navn + (k160 ? ' (kode 160)' : '') + ' er ansatt på ' + st.name, 'info');
+    return ok_(p.navn + ' er ansatt' + (p.unitId ? ' og satt på ' + S.units[p.unitId].name : ' som reserve') + '.');
+  },
+  course(pid) {
+    const p = Staff.list().find(x => x.id === pid); if (!p || p.k160 || p.course) return fail_('Ikke mulig.');
+    if (!spend(Staff.COURSE)) return fail_('Du har ikke nok penger (' + fmtKr(Staff.COURSE) + ').');
+    p.course = S.t + Staff.COURSE_T; return ok_(p.navn + ' er påmeldt kode 160-kurs (ferdig om ' + fmtDur(Staff.COURSE_T) + ').');
+  },
+  fire(pid) { const L = Staff.list(), i = L.findIndex(x => x.id === pid); if (i < 0) return fail_('Ikke funnet.'); const p = L[i]; L.splice(i, 1); Staff.fill(p.stationId); return ok_(p.navn + ' har sluttet.'); },
+  /** Fyller opp enhetene på stasjonen med ledige reserver (de med kode 160 først der det trengs). */
+  fill(stationId) {
+    for (const u of Object.values(S.units)) {
+      if (u.stationId !== stationId || !Staff.needs(u)) continue;
+      let guard = 8; while (!Staff.ready(u) && guard--) {
+        const m = Staff.missing(u), res = Staff.atStation(stationId).filter(p => !p.unitId && p.state === 'ok' && p.org === UT[u.type].org);
+        const p = (m.k ? res.find(x => x.k160) : null) || (m.n ? res.find(x => !x.k160) || res[0] : null); if (!p) break;
+        // en uten kode 160 som står i veien for en med kode 160 byttes ut
+        if (m.k && !p.k160) break; p.unitId = u.id;
+      }
+    }
+  },
+  injure(u) {
+    const c = Staff.of(u).filter(p => p.state === 'ok'); if (!c.length) return; const p = pick(c);
+    p.state = 'skadet'; p.until = S.t + 240; p.unitId = null; Staff.fill(u.stationId);
+    Log.add(tgOf(u), u.name, p.navn + ' er skadet og er ute i fire timer' + (Staff.ready(u) ? ' – reserve har tatt over' : ' – enheten mangler mannskap'), 'warn');
+  },
+  tick() {
+    for (const p of Staff.list()) {
+      if (p.state === 'skadet' && S.t >= p.until) { p.state = 'ok'; Staff.fill(p.stationId); }
+      if (p.course && S.t >= p.course) { p.course = 0; p.k160 = true; Log.add('SENTRAL', 'Sentral', p.navn + ' har bestått kode 160-kurset', 'info'); Staff.fill(p.stationId); }
+    }
+  },
+  wages() { let c = 0; for (const p of Staff.list()) c += p.k160 ? Staff.WAGE_K : Staff.WAGE; return c; }
+};
 
 /* ---------- bevegelse og statusmaskin ---------- */
 Sim.unitRP = function (u) {
@@ -332,14 +398,10 @@ Sim.speedOf = function (u) {
   if (u.bistand) sp *= 0.85;
   sp *= SEASONS[c.season].speed * WEATHER[S.weather.kind].spd;
   const tod = Clock.tod(c.hour); sp *= tod === 'rush' ? 0.92 : tod === 'natt' ? 1.06 : 1;
-  if (u.siren) sp *= 1.12;
+  if (u.siren) sp *= 1.2;
   return sp;
 };
-Sim.opDelay = function (ag) {
-  const a = S.ops[ag] ? ag : 'politi';
-  const active = Object.values(S.incidents).filter(i => i.lead === a).length;
-  return 0.2 + Math.min(4, Math.max(0, active - 3 * S.ops[a]) * 0.5);
-};
+Sim.opDelay = () => 0.2;   // køen i nødsentralen (Sim.callTick) står for ventetiden
 Sim.moveUnit = function (u, dt) {
   if (u.hold > 0) { u.hold -= dt; return false; }
   const sp = Sim.speedOf(u); let left = dt;
@@ -389,6 +451,7 @@ Sim.startDrive = function (u) {
     u.path = [{ x: lz.x, z: lz.z, m: 1 }]; u.pi = 0; u.alt = 0.5; return;
   }
   if (T.foot) { u.path = [{ x: inc.loc.x, z: inc.loc.z, m: 1 }]; u.pi = 0; return; }
+  if (T.boat) { u.path = [{ x: inc.loc.x, z: inc.loc.z, m: 1 }]; u.pi = 0; return; }   // rett over vannet
   const r = WORLD.nav.route(Sim.unitRP(u), inc.loc.rp);
   if (!r.ok) { Log.add(tgOf(u), u.name, 'Finner ingen vei til stedet – avbryter', 'warn'); Sim.detach(u); Sim.sendHome(u); return; }
   u.path = r.pts; u.pi = 0;
@@ -396,6 +459,7 @@ Sim.startDrive = function (u) {
 Sim.sendHome = function (u) {
   const T = UT[u.type]; u.siren = false; u.job = null; u.onFerry = false;
   u.status = 'retur'; u.phase = 'drive'; u.dest = 'home'; u.boarded = -1; u.flown = 0;
+  if (u.bistand && T.boat) { u.path = [{ x: u.dock.x, z: u.dock.z, m: 1 }]; u.pi = 0; u.dest = 'port'; return; }
   if (u.bistand) {
     const port = u.port; u.path = [{ x: port.x, z: port.z, m: 1 }]; u.dest = 'port';
     const r = WORLD.nav.route(Sim.unitRP(u), { a: port.id, b: port.id, t: 0 }); if (r.ok) u.path = r.pts; u.pi = 0; return;
@@ -403,6 +467,7 @@ Sim.sendHome = function (u) {
   const st = S.stations[u.stationId];
   if (T.foot) { const b = WORLD.beaches[u.beach]; u.path = [{ x: b.tower.x, z: b.tower.z, m: 1 }]; u.pi = 0; return; }
   if (T.model === 'heli') { const p = Sim.parkPos(st, 0); u.path = [{ x: p.x, z: p.z, m: 1 }]; u.pi = 0; return; }
+  if (T.boat) { u.path = [{ x: u.dock.x, z: u.dock.z, m: 1 }]; u.pi = 0; return; }
   const r = WORLD.nav.route(Sim.unitRP(u), WORLD.lotById.get(st.lotId).rp);
   if (!r.ok) { const p = Sim.parkPos(st, 0); u.x = p.x; u.z = p.z; u.path = []; Sim.park(u); return; }
   u.path = r.pts; u.pi = 0;
@@ -411,6 +476,7 @@ Sim.park = function (u) {
   const st = S.stations[u.stationId], T = UT[u.type];
   u.status = 'ledig'; u.phase = null; u.job = null; u.path = []; u.pi = 0; u.siren = false; u.dest = null; u.onFerry = false;
   if (T.foot) { const b = WORLD.beaches[u.beach]; u.x = b.tower.x; u.z = b.tower.z; u.h = 0; return; }
+  if (T.boat && u.dock) { u.x = u.dock.x; u.z = u.dock.z; return; }
   const k = Sim.unitsAt(u.stationId).sort((a, b) => a.id.localeCompare(b.id)).findIndex(x => x.id === u.id);
   const p = Sim.parkPos(st, Math.max(0, k)); u.x = p.x; u.z = p.z; u.h = p.h; u.alt = st.type === 'helikopterbase' ? 0.3 : 0;
 };
@@ -448,8 +514,12 @@ Sim.arrive = function (u, inc) {
   if (!inc.arrivedAt) { inc.arrivedAt = S.t; inc.rt = S.t - inc.t0; }
   inc.onScene = true;
   // lifeguard: radio i Nødnett-stil
-  if (u.type === 'livredder' && inc.slots.some(s => s.req && !s.accepts.includes('livredder') && s.units.length === 0))
+  if (u.type === 'livredder' && inc.tpl === 'strand_drukning' && !inc.quick && S.t - inc.t0 <= 4) {
+    inc.quick = true; inc.transport = false; for (const s of inc.slots) if (!s.accepts.includes('livredder')) s.req = false;
+    Log.add('REDNING', u.name, 'Personen er hentet opp raskt og puster selv – trenger ikke sykehus', 'info');
+  } else if (u.type === 'livredder' && inc.slots.some(s => s.req && !s.accepts.includes('livredder') && s.units.length === 0))
     Log.add('REDNING', u.name, 'Har pasient, ber om ambulanse', 'warn');
+  if (inc.island && !UT[u.type].boat && UT[u.type].model !== 'heli' && !UT[u.type].foot) Log.add(tgOf(u), u.name, 'Ved kaia – venter på båt fra øya', 'info');
   for (const al of S.net.alarms) if (!al.done && al.incId === inc.id && al.helpers.includes(u.id)) Sim.alarmResolve(al);
   if (inc.tpl === 'brannalarm' && !inc.revealed) Sim.reveal(inc);
 };
@@ -482,7 +552,10 @@ Sim.pickPlace = function (tpl) {
     case 'vann': { const p = pick(w.waterfront); return { x: p.x, z: p.z, rp: p.rp, addr: p.navn + ' (kaikanten)', zone: 'by', floors: 0, water: true, approach: p.approach }; }
     case 'strand': {
       const ids = Object.keys(w.beaches), id = wpick(ids, i => w.beaches[i].crowd * (S.beaches[i] && S.beaches[i].staffed ? 1.1 : 1)), b = w.beaches[id], inWater = Math.random() < 0.6;
-      return { x: inWater ? b.swim.x + rr(-8, 8) : b.x + rr(-14, 14), z: inWater ? b.swim.z + rr(-8, 8) : b.z + rr(-14, 14), rp: b.rp, addr: b.navn, zone: 'strand', beachId: id, floors: 0, water: inWater, approach: b.approach }; }
+      return { x: inWater ? b.swim.x + rr(-8, 8) : b.tower.x + rr(-14, 14), z: inWater ? b.swim.z + rr(-8, 8) : b.tower.z + rr(-14, 14), rp: b.rp, addr: b.navn, zone: 'strand', beachId: id, floors: 0, water: inWater, island: b.island, approach: b.island ? 0 : b.approach }; }
+    case 'oy': {
+      const isl = Object.values(w.beaches).filter(b => b.island), b = pick(isl), a = rr(0, TAU), d = rr(80, 260);
+      return { x: b.swim.x + Math.cos(a) * d, z: b.swim.z + Math.sin(a) * d, rp: b.rp, addr: 'Fjorden ved ' + b.navn, zone: 'strand', floors: 0, water: true, island: true, approach: 0 }; }
     case 'fjell': { const p = pick(w.mountain); return { x: p.x + rr(-60, 60), z: p.z + rr(-60, 60), rp: p.rp, addr: p.navn + ' (turløype)', zone: 'fjell', floors: 0, approach: 6 + p.approach }; }
     case 'arr': break;
   }
@@ -495,11 +568,16 @@ Sim.staffedBeaches = () => Object.keys(S.beaches).filter(id => S.beaches[id].sta
 Sim.makeIncident = function (tplId, place, opts) {
   opts = opts || {};
   const tpl = TEMPLATES[tplId], zm = ZONE_MUL[place.zone] || 1;
-  const inc = { id: 'i' + S.nid++, tpl: tplId, navn: tpl.navn, lead: tpl.lead[0], pri: tpl.pri, ikon: tpl.ikon, fx: tpl.fx, loc: place, t0: S.t, state: 'ny',
+  const lead = tpl.lead.find(a => S.agencies[a]) || tpl.lead[0];
+  const inc = { id: 'i' + S.nid++, tpl: tplId, navn: tpl.navn, lead, pri: tpl.pri, ikon: tpl.ikon, fx: tpl.fx, loc: place, t0: opts.t0 != null ? opts.t0 : S.t, state: 'ny', caller: opts.caller || null,
     slots: tpl.slots.map(s => Object.assign({}, s, { units: [] })), work: tpl.work, progress: 0, target: tpl.target * zm, expire: tpl.expire, danger: tpl.danger || 0,
     floors: place.floors || 0, approach: place.approach || tpl.approach || 0, arrest: Math.random() < (tpl.arrest || 0), transport: Math.random() < (tpl.transportP === undefined ? 1 : tpl.transportP),
     tg: null, bistand: false, escalated: false, rewardMul: 1, onScene: false, rt: null, arrivedAt: null, beachId: place.beachId || null, ev: opts.ev || null, tri: !!tpl.tri, injured: false };
   if (inc.approach === 0 && place.zone === 'fjell') inc.approach = 6;
+  if (place.island) {   // øyene i fjorden: bilene kommer bare til kaia – noen må hente med båt eller helikopter
+    inc.island = true; inc.approach = 0;
+    if (!inc.slots.some(s => s.accepts.includes('redningsbat'))) inc.slots.push(SL('bt', 'Båt eller helikopter (øy)', ACC.boat, 'brann'));
+  }
   if (tpl.prep) tpl.prep(inc);
   if (tpl.inj && Math.random() < tpl.inj) {
     if (!inc.slots.some(s => s.ag === 'ambulanse' && s.req)) inc.slots.push(SL('am', 'Ambulanse', ACC.amb, 'ambulanse', { transport: true }));
@@ -516,12 +594,41 @@ Sim.makeIncident = function (tplId, place, opts) {
   if (S.settings.auto) Sim.dispatchSuggested(inc, true);
   return inc;
 };
+/* ---------- nødsentraler (AMK 113, 110-sentral, operasjonssentral 112): anrop i kø → operatør svarer → hendelse ---------- */
+const CENTRAL = { brann: '110-sentralen', politi: 'Operasjonssentralen', ambulanse: 'AMK' };
+/** Et nytt nødanrop. Det blir en hendelse først når en operatør (eller du) har tatt samtalen. Responstiden regnes fra anropet. */
+Sim.incomingCall = function (tplId, place, opts) {
+  const tpl = TEMPLATES[tplId], ag = tpl.lead.find(a => S.agencies[a]);
+  if (!ag) return Sim.makeIncident(tplId, place, opts);               // f.eks. strandlivreddere som ser hendelsen selv
+  const lines = CALLER[tplId] || ['Jeg trenger hjelp – ' + tpl.navn.toLowerCase() + '.'];
+  const c = { id: 'c' + S.nid++, tpl: tplId, place, ag, t0: S.t, state: 'ringer', op: null, end: 0, talk: rr(0.7, 1.8), wait: rr(0.15, 0.5), text: pick(lines), opts: opts || null };
+  S.calls.push(c); Bus.emit('call', c); return c;
+};
+Sim.callsBusy = ag => S.calls.filter(c => c.ag === ag && c.state === 'samtale' && c.op === 'op').length;
+Sim.callTick = function () {
+  for (const ag of ETATER) {
+    if (!S.agencies[ag]) continue; let free = S.ops[ag] - Sim.callsBusy(ag);
+    for (const c of S.calls) if (c.ag === ag && c.state === 'ringer' && free > 0 && S.t - c.t0 >= c.wait) { c.state = 'samtale'; c.op = 'op'; c.end = S.t + c.talk; free--; }
+  }
+  for (const c of S.calls.slice()) if (c.state === 'samtale' && S.t >= c.end) Sim.closeCall(c);
+};
+Sim.closeCall = function (c) {
+  S.calls = S.calls.filter(x => x !== c);
+  const inc = Sim.makeIncident(c.tpl, c.place, Object.assign({}, c.opts || {}, { t0: c.t0, caller: c.text }));
+  if (c.op === 'player') { inc.rewardMul *= 1.05; }
+  return inc;
+};
+/** Du tar samtalen selv: rask avklaring, hendelsen kommer straks i listen. */
+Sim.answerCall = function (id) { const c = S.calls.find(x => x.id === id); if (!c || c.state === 'samtale' && c.op === 'player') return null; c.state = 'samtale'; c.op = 'player'; c.end = S.t + 0.25; return c; };
+
 /** Frekvens og valg av neste hendelse. */
+/** Hendelser per spillminutt. Øker med etater og antall enheter: fra ca. ett anrop hvert 2.–3. minutt (ekte tid) til rundt to i minuttet for en stor organisasjon. */
 Sim.rate = function () {
-  const base = { brann: 1 / 80, politi: 1 / 62, ambulanse: 1 / 50 }, cfg = WORLD.cfg;
+  const cfg = WORLD.cfg, base = { brann: 0.04, politi: 0.06, ambulanse: 0.07 };
   let lam = 0; for (const a of ETATER) if (S.agencies[a]) lam += base[a];
-  if (!lam && Sim.staffedBeaches().length && isSummer()) lam = 1 / 90;
-  return lam * (cfg.incidentMul.total || 1) * (1 + 0.15 * (S.level - 1)) * (0.8 + 0.2 * cfg.diff);
+  if (lam) lam += 0.035 * Object.values(S.units).filter(u => !u.bistand && u.type !== 'livredder').length;
+  if (!lam && Sim.staffedBeaches().length && isSummer()) lam = 0.05;
+  return Math.min(0.67, lam * (cfg.incidentMul.total || 1) * (0.8 + 0.2 * cfg.diff) * (1 + 0.08 * (S.level - 1)));
 };
 Sim.pickTemplate = function () {
   const info = Clock.cur, groups = {};
@@ -534,6 +641,7 @@ Sim.pickTemplate = function () {
     if (tpl.loc === 'fjell' && !Sim.hasFjell()) continue;
     if (tpl.loc === 'vann' && !Sim.waterfront().length) continue;
     if (tpl.loc === 'park' && !WORLD.parks.length) continue;
+    if (tpl.loc === 'oy' && !Object.values(WORLD.beaches).some(b => b.island)) continue;
     const m = tpl.w * tplMods(tpl, info); if (m <= 0.0001) continue;
     const key = leadOwned ? tpl.lead.find(a => S.agencies[a]) : 'strand';
     (groups[key] = groups[key] || []).push({ id, w: m });
@@ -545,10 +653,10 @@ Sim.pickTemplate = function () {
 Sim.spawnTick = function () {
   if (S.t < S.nextSpawn) return;
   const lam = Sim.rate(); if (lam <= 0) { S.nextSpawn = S.t + 20; return; }
-  const maxActive = 2 + Math.round(S.level * 1.6);
-  if (Sim.active().length >= maxActive) { S.nextSpawn = S.t + 4; return; }
+  const maxActive = 3 + Math.round(S.level * 1.6 + Object.keys(S.units).length * 0.5);
+  if (Sim.active().length + S.calls.length >= maxActive) { S.nextSpawn = S.t + 2; return; }
   const id = Sim.pickTemplate();
-  if (id) { const tpl = TEMPLATES[id]; Sim.makeIncident(id, Sim.pickPlace(tpl)); }
+  if (id) { const tpl = TEMPLATES[id]; Sim.incomingCall(id, Sim.pickPlace(tpl)); }
   S.nextSpawn = S.t + Math.max(2.5, -Math.log(1 - Math.random()) / lam);
 };
 Sim.onScene = inc => inc.slots.flatMap(s => s.units).map(id => S.units[id]).filter(u => u && u.status === 'pastedet' && u.job && u.job.inc === inc.id);
@@ -606,6 +714,7 @@ Sim.updateIncidents = function (dt) {
   }
 };
 Sim.injure = function (u, inc) {
+  Staff.injure(u);
   Sim.detach(u); u.status = 'ute'; u.wait = 18; u.vis = false; u.phase = null; u.siren = false; u.path = [];
   const pen = Math.min(Math.max(0, S.money), 8000); S.money -= pen; S.stats.costs += pen; dayStat('cost', pen); S.perf = lerp(S.perf, 0.25, 0.06); Bus.emit('toast', { msg: u.name + ': mannskap skadet', kind: 'bad' });
   if (inc && inc.state !== 'ferdig') inc.progress = Math.max(0, inc.progress - 2);
@@ -633,7 +742,7 @@ Sim.sendHelp = function (al) {
   Sim.assign(inc, slot, h.u, { urgent: true }); al.helpers.push(h.u.id);
   return ok_(h.u.name + ' sendes som nødhjelp (' + fmtDur(h.eta) + ').');
 };
-Sim.available = u => (u.status === 'ledig' || u.status === 'retur') && u.vis !== false && !u.job && !(u.type === 'livredder' && (!isSummer() || !S.beaches[u.beach].staffed));
+Sim.available = u => (u.status === 'ledig' || u.status === 'retur') && u.vis !== false && !u.job && !(u.type === 'livredder' && (!Vol.onDuty() || !S.beaches[u.beach].staffed)) && Staff.ready(u);
 Sim.eta = function (u, inc) {
   const T = UT[u.type], key = 'e' + inc.id; u._eta = u._eta || {};
   const rt = Math.floor(performance.now() / 1500), ck = u._eta[key]; if (ck && ck.t === rt && ck.s === u.status) return ck.v;
@@ -642,6 +751,7 @@ Sim.eta = function (u, inc) {
   const sm = Sim.speedOf(u) * (u.siren ? 1 : 1.12);
   if (T.foot) v = u.beach === inc.beachId ? pre + Math.hypot(u.x - inc.loc.x, u.z - inc.loc.z) / sm : Infinity;
   else if (T.model === 'heli') { const lz = Sim.landingFor(inc); v = lz ? pre + Math.hypot(u.x - lz.x, u.z - lz.z) / sm + 2 : Infinity; }
+  else if (T.boat) v = Sim.waterOK(inc) ? pre + Math.hypot(u.x - inc.loc.x, u.z - inc.loc.z) / sm : Infinity;
   else { const r = WORLD.nav.route(Sim.unitRP(u), inc.loc.rp); v = r.ok ? pre + r.cost / sm + (inc.approach || 0) * (T.offroad ? 0.5 : 1) : Infinity; }
   u._eta[key] = { t: rt, s: u.status, v }; return v;
 };
@@ -703,6 +813,13 @@ Sim.requestBistand = function (inc, slot) {
   const cost = BISTAND_COST[slot.ag] || 9000; if (!spend(cost)) return fail_('Du har ikke råd til bistand (' + fmtKr(cost) + ').');
   const type = slot.accepts.find(t => UT[t].org === slot.ag) || slot.accepts.find(t => FRIVILLIGE.includes(UT[t].org) && t !== 'livredder') || slot.accepts[0];
   if (type === 'livredder') return fail_('Livredder kan ikke rekvireres fra nabodistriktet.');
+  if (UT[type].boat) {   // båt fra nabodistriktet kommer sjøveien
+    const T = UT[type], pier = Sim.nearestPier(inc.loc.x, inc.loc.z), id = 'u' + S.nid++, sx = pier.x + rr(-400, 400), sz = pier.z + rr(300, 700);
+    const u = { id, type, org: 'bistand', bistand: true, dock: { x: sx, z: sz }, stationId: null, name: 'Bistand ' + CALL[type] + ' (nabodistrikt)', status: 'utrykning', x: sx, z: sz, h: 0, path: [], pi: 0, job: { inc: inc.id, slot: slot.k }, phase: 'await', wait: (WORLD.cfg.bistandDelay || 8) + rr(0, 3), dest: null, contact: 'bra', vis: true, siren: false, alt: 0, lastKnown: { x: sx, z: sz } };
+    S.units[id] = u; slot.units.push(id); inc.bistand = true; S.stats.bistand++; if (inc.state === 'ny') inc.state = 'underveis';
+    Log.add(inc.tg || 'SENTRAL', 'Sentral', 'Rekvirerer ' + T.navn.toLowerCase() + ' fra nabodistriktet til ' + inc.loc.addr + ' (' + fmtKr(cost) + ')', 'warn');
+    return ok_('Bistand er på vei – kommer om ca. ' + fmtDur(u.wait + 4) + '.');
+  }
   const ports = WORLD.ports; let port = ports[0], bd = 1e9;
   for (const p of ports) { const d = Math.hypot(p.x - inc.loc.x, p.z - inc.loc.z); if (d < bd) { bd = d; port = p; } }
   const id = 'u' + S.nid++, T = UT[type];
@@ -715,13 +832,14 @@ Sim.requestBistand = function (inc, slot) {
 };
 /** Samvirke-talegruppe: raskere arbeid og bonus – men tar kapasitet i Nødnett. */
 Sim.createSamvirke = function (inc) {
-  if (inc.tg) return fail_('Hendelsen har allerede en samvirke-talegruppe.');
-  if (Net.samvActive().length >= Net.samvMax()) return fail_('Nødnettet har ikke kapasitet til flere samvirke-talegrupper – bygg ut eller avslutt en annen.');
-  S.net.samv++; inc.tg = 'SAMVIRKE ' + S.net.samv; S.stats.samv++;
-  Log.add(inc.tg, 'Sentral', 'Samvirke-talegruppe opprettet for ' + inc.navn + ' – alle etater til ' + inc.tg, 'info');
-  return ok_('Opprettet ' + inc.tg + '.');
+  if (inc.tg) return fail_('Hendelsen bruker allerede ' + inc.tg + '.');
+  if (Net.vhf()) return fail_('Samvirke-talegrupper krever Nødnett – oppgrader fra VHF under Butikk → Nødnett.');
+  const tg = Net.samvFree(); if (!tg) return fail_('Alle samvirke-talegrupper er i bruk – vent til en hendelse er ferdig, eller bygg ut nettet.');
+  inc.tg = tg; S.stats.samv++;
+  Log.add(inc.tg, 'Sentral', 'Alle etater på ' + inc.navn + ' går over til ' + inc.tg, 'info');
+  return ok_(inc.navn + ' bruker nå ' + inc.tg + '.');
 };
-Sim.canSamvirke = inc => !inc.tg && Net.samvActive().length < Net.samvMax();
+Sim.canSamvirke = inc => !inc.tg && !Net.vhf() && !!Net.samvFree();
 
 /** Avslutter en hendelse: belønning, poengsum, frigjøring av enheter. */
 Sim.finish = function (inc, ok) {
@@ -743,10 +861,10 @@ Sim.finish = function (inc, ok) {
     if (tpl.med) {
       let surv = ratio <= 1 ? 0.92 : ratio <= 1.5 ? 0.72 : ratio <= 2 ? 0.45 : 0.2;
       if (inc.beachId && S.beaches[inc.beachId] && S.beaches[inc.beachId].staffed) surv += 0.04 * (S.beaches[inc.beachId].up.hjerte * 2 + S.beaches[inc.beachId].up.livboye);
-      saved = Math.random() < Math.min(0.98, surv);
+      saved = inc.quick || Math.random() < Math.min(0.98, surv);
       if (saved) S.stats.lives++; else { S.stats.lost++; mult *= 0.5; score *= 0.45; }
     }
-    pay = tpl.reward * inc.rewardMul * mult; if (inc.false) pay = tpl.reward * 0.6;
+    pay = tpl.reward * 0.6 * inc.rewardMul * mult; if (inc.false) pay = tpl.reward * 0.35;
     S.money += pay; S.stats.income += pay; dayStat('income', pay); dayStat('ok', 1); S.stats.solved++;
     const a = S.stats.byAg[agKey]; if (a) { a.n++; a.rt += rt; if (ratio <= 1) a.ok++; }
     if (volShare > 0) { const f = S.stats.byAg.frivillig; f.n++; f.rt += rt; if (ratio <= 1) f.ok++; }
@@ -816,10 +934,12 @@ Sim.sendToArrest = function (u) {
    10. FRIVILLIGE – Røde Kors Hjelpekorps, Norsk Folkehjelp Sanitet, strandlivreddere, arrangementer
    De kalles ut via politiet (søk og redning) eller AMK (sanitet). Lavere kostnad, lengre mobiliseringstid.
    ========================================================================== */
-const ORG_COST = { rk: 120000, nf: 100000, strand: 80000 };
+const ORG_COST = { rk: 120000, nf: 100000, rs: 90000, strand: 80000 };
 const BEACH_UP = { livboye: { navn: 'Livbøye', cost: 6000, tekst: 'Raskere redning av svømmere' }, brett: { navn: 'Redningsbrett', cost: 12000, tekst: 'Raskere innsats i vannet' },
   bat: { navn: 'Redningsbåt', cost: 35000, tekst: 'Når ut til folk langt fra land' }, hjerte: { navn: 'Hjertestarter', cost: 18000, tekst: 'Bedre overlevelse ved hjertestans' } };
 const Vol = {
+  /** Strandlivredderne er på jobb kl. 12–20 om sommeren. */
+  onDuty() { const c = Clock.cur; return !!c && c.season === 1 && c.hour >= 12 && c.hour < 20; },
   mobTime(u) {
     const T = UT[u.type], tod = Clock.tod(Clock.cur.hour);
     return (T.mob || 0) * (tod === 'natt' ? 1.7 : tod === 'kveld' ? 1.2 : 1) * rr(0.85, 1.2);
@@ -854,9 +974,9 @@ const Vol = {
   },
   /** Lifeguard-enheter og tårnfigurer følger årstiden. */
   seasonSync() {
-    const summer = isSummer();
-    for (const id in S.units) { const u = S.units[id]; if (u.type === 'livredder') { const on = summer && S.beaches[u.beach] && S.beaches[u.beach].staffed; if (u.vis !== on && u.status === 'ledig') u.vis = on; if (!summer && u.status !== 'ledig' && u.status !== 'pastedet') {} } }
-    if (R.ready && R.world) for (const id in WORLD.beaches) R.setGuard(id, summer && S.beaches[id] && S.beaches[id].staffed);
+    const summer = isSummer(), duty = Vol.onDuty();
+    for (const id in S.units) { const u = S.units[id]; if (u.type === 'livredder') { const on = !!(duty && S.beaches[u.beach] && S.beaches[u.beach].staffed); if (u.vis !== on && u.status === 'ledig') u.vis = on; } }
+    if (R.ready && R.world) for (const id in WORLD.beaches) R.setGuard(id, !!(duty && S.beaches[id] && S.beaches[id].staffed));
     if (R.ready && R.world && R.summer !== summer) R.setBeachSeason(summer);
   },
   /* ---- arrangementer ---- */
@@ -935,8 +1055,8 @@ const Eco = {
     for (const id in S.stations) { const st = S.stations[id]; if (st.gift) continue; c += ST[st.type].run + st.up.garasje * 4 + st.up.mannskap * 6; }
     for (const id in S.units) { const u = S.units[id]; if (u.bistand) continue; if (u.type === 'livredder' && u.vis === false) continue; c += UT[u.type].run; }
     for (const id in S.net.masts) { const m = S.net.masts[id]; c += (m.mobile ? 22 : 14) + 4 * m.level; }
-    c += (S.net.termLevel - 1) * 10; for (const a of ETATER) c += (S.ops[a] - 1) * 6;
-    return c;
+    c += Math.max(0, S.net.termLevel - 1) * 10; for (const a of ETATER) if (S.agencies[a]) c += S.ops[a] * 9;   // operatører i nødsentralen
+    return c + Staff.wages();
   },
   tick(dt) {
     S.acc += dt;
@@ -997,9 +1117,9 @@ const Shop = {
     if (cat === 'kjoretoy') {
       for (const t in UT) {
         const T = UT[t]; if (!ETATER.includes(T.org)) continue; if (!S.agencies[T.org]) continue;
-        const it = { id: 'unit:' + t, navn: T.navn, ikon: AGENCIES[T.org].ikon, farge: AGENCIES[T.org].farge, cost: T.cost, lvl: T.lvl, kind: 'unit', tekst: 'Inkl. Nødnett-' + (T.term === 'h' ? 'håndterminal' : 'kjøretøyterminal') + ' · drift ' + T.run + ' kr/min · ' + T.crew + ' mannskap' + (T.needs ? ' · krever helikopterbase' : '') };
+        const it = { id: 'unit:' + t, navn: T.navn, ikon: AGENCIES[T.org].ikon, farge: AGENCIES[T.org].farge, cost: T.cost + Staff.crewCost(t), lvl: T.lvl, kind: 'unit', tekst: 'Inkl. ' + (T.cm ? T.cm + ' ansatte' + (T.k160 ? ' (' + T.k160 + ' med kode 160)' : '') : 'mannskap') + ' og radioterminal · drift ' + T.run + ' kr/min' + (T.needs ? ' · krever helikopterbase' : '') + (T.boat ? ' · ligger ved nærmeste kai' : '') };
         const sts = Object.values(S.stations).filter(st => Sim.canHouse(t, st) && Sim.unitsAt(st.id).length < Sim.stationCap(st));
-        if (lv < T.lvl) { it.ok = false; it.reason = 'Krever nivå ' + T.lvl; } else if (!sts.length) { it.ok = false; it.reason = T.needs ? 'Bygg helikopterbase først' : 'Ingen stasjon med ledig plass'; } else if (S.money < T.cost) { it.ok = false; it.reason = 'For lite penger'; }
+        if (lv < T.lvl) { it.ok = false; it.reason = 'Krever nivå ' + T.lvl; } else if (!sts.length) { it.ok = false; it.reason = T.needs ? 'Bygg helikopterbase først' : 'Ingen stasjon med ledig plass'; } else if (S.money < it.cost) { it.ok = false; it.reason = 'For lite penger'; }
         add(it);
       }
     }
@@ -1016,12 +1136,12 @@ const Shop = {
         if (o === 'strand' && !Object.keys(WORLD.beaches).length) continue;
         if (!S.vol[o]) add({ id: 'sign:' + o, navn: 'Samarbeidsavtale – ' + AGENCIES[o].navn, tekst: AGENCIES[o].tekst, ikon: AGENCIES[o].ikon, farge: AGENCIES[o].farge, cost: ORG_COST[o], ok: S.money >= ORG_COST[o], reason: 'For lite penger' });
       }
-      for (const t of ['rk_base', 'nf_base']) {
+      for (const t of ['rk_base', 'nf_base', 'rs_base']) {
         const T = ST[t], o = T.org, it = { id: 'station:' + t, navn: T.navn + ' (' + AGENCIES[o].kort + ')', ikon: 'hand', farge: AGENCIES[o].farge, cost: T.cost, kind: 'place', tekst: 'Base for frivillige på en ledig tomt. Rommer ' + T.cap + ' enheter.' };
         gate(it, S.vol[o], 'Krever samarbeidsavtale'); if (it.ok && S.money < T.cost) { it.ok = false; it.reason = 'For lite penger'; } add(it);
       }
       for (const t in UT) {
-        const T = UT[t]; if (!['rk', 'nf'].includes(T.org) || !S.vol[T.org]) continue;
+        const T = UT[t]; if (!['rk', 'nf', 'rs'].includes(T.org) || !S.vol[T.org]) continue;
         const sts = Object.values(S.stations).filter(st => Sim.canHouse(t, st) && Sim.unitsAt(st.id).length < Sim.stationCap(st));
         const it = { id: 'unit:' + t, navn: T.navn + ' (' + AGENCIES[T.org].kort + ')', ikon: 'hand', farge: AGENCIES[T.org].farge, cost: T.cost, kind: 'unit', lvl: T.lvl, tekst: 'Mobiliseringstid ca. ' + T.mob + ' min · drift ' + T.run + ' kr/min · inkl. terminal' };
         if (lv < T.lvl) { it.ok = false; it.reason = 'Krever nivå ' + T.lvl; } else if (!sts.length) { it.ok = false; it.reason = 'Trenger base med ledig plass'; } else if (S.money < T.cost) { it.ok = false; it.reason = 'For lite penger'; }
@@ -1033,7 +1153,7 @@ const Shop = {
       add({ id: 'mast:new', navn: 'Ny basestasjon (mast)', ikon: 'mast', farge: '#A99BCB', cost: 120000, kind: 'place', tekst: 'Utvider dekningen. Kan stå på ledige tomter, i parker og på øyer.', ok: S.money >= 120000, reason: 'For lite penger' });
       add({ id: 'mast:mobile', navn: 'Mobil basestasjon (' + S.net.mobile + ' på lager)', ikon: 'mast', farge: '#A99BCB', cost: 90000, tekst: 'Transportabel mast for store hendelser og utfall. Settes ut hvor som helst.', ok: S.money >= 90000, reason: 'For lite penger' });
       add({ id: 'mast:cap', navn: 'Kapasitetsoppgradering', ikon: 'signal', farge: '#A99BCB', cost: 45000, kind: 'pickmast', tekst: '+4 samtidige samtaler på en valgt basestasjon.', ok: S.money >= 45000, reason: 'For lite penger' });
-      if (S.net.termLevel < 3) { const c = S.net.termLevel === 1 ? 90000 : 180000; add({ id: 'term', navn: 'Terminaloppgradering → nivå ' + (S.net.termLevel + 1), ikon: 'radio', farge: '#A99BCB', cost: c, tekst: 'Raskere ordremottak og stabilere kontakt i svak dekning for alle terminaler.', ok: S.money >= c, reason: 'For lite penger' }); }
+      if (S.net.termLevel < 3) { const c = Shop.termCost(); add({ id: 'term', navn: S.net.termLevel ? 'Nødnett-terminaler → nivå ' + (S.net.termLevel + 1) : 'Bytt fra VHF til Nødnett-terminaler', ikon: 'radio', farge: '#A99BCB', cost: c, tekst: S.net.termLevel ? 'Raskere ordremottak og stabilere kontakt i svak dekning.' : 'Kryptert digitalt samband: talegrupper per etat, samvirke-grupper, nødknapp med posisjon og mye kortere ordretid.', ok: S.money >= c, reason: 'For lite penger' }); }
       for (const a of ETATER) if (S.agencies[a] && S.ops[a] < 4) add({ id: 'ops:' + a, navn: 'Operatørplass – ' + AGENCIES[a].sentral, ikon: AGENCIES[a].ikon, farge: AGENCIES[a].farge, cost: 40000, tekst: 'Nå ' + S.ops[a] + ' plass(er). Hver plass håndterer tre samtidige hendelser uten kø.', ok: S.money >= 40000, reason: 'For lite penger' });
     }
     return out;
@@ -1052,11 +1172,12 @@ const Shop = {
         if (v === 'mobile') { if (!spend(90000)) return fail_('Du har ikke nok penger.'); S.net.mobile++; return ok_('Mobil basestasjon er på lager. Sett den ut under Nødnett.'); }
         if (v === 'cap') { const m = S.net.masts[arg]; if (!m || m.level >= 3) return fail_('Basestasjonen har maks kapasitet.'); if (!spend(45000)) return fail_('Du har ikke nok penger.'); Net.upgrade(arg); return ok_('Kapasiteten på ' + m.navn + ' er økt.'); }
         break; }
-      case 'term': { const c = S.net.termLevel === 1 ? 90000 : 180000; if (S.net.termLevel >= 3) return fail_('Maks nivå.'); if (!spend(c)) return fail_('Du har ikke nok penger.'); S.net.termLevel++; return ok_('Terminalene er oppgradert til nivå ' + S.net.termLevel + '.'); }
+      case 'term': { const c = Shop.termCost(); if (S.net.termLevel >= 3) return fail_('Maks nivå.'); if (!spend(c)) return fail_('Du har ikke nok penger.'); S.net.termLevel++; Log.add('NØDNETT', 'Driftssentral', S.net.termLevel === 1 ? 'Alle enheter har fått Nødnett-terminaler – VHF er faset ut' : 'Terminalene er oppgradert til nivå ' + S.net.termLevel, 'info'); return ok_(S.net.termLevel === 1 ? 'Dere bruker nå Nødnett!' : 'Terminalene er oppgradert til nivå ' + S.net.termLevel + '.'); }
       case 'ops': if (S.ops[v] >= 4) return fail_('Maks antall operatørplasser.'); if (!spend(40000)) return fail_('Du har ikke nok penger.'); S.ops[v]++; return ok_('Ny operatørplass i ' + AGENCIES[v].sentral + '.');
     }
     return fail_('Ukjent vare.');
   },
+  termCost: () => [140000, 90000, 180000][S.net.termLevel] || 0,
   upgradeStation(stId, key) {
     const st = S.stations[stId]; if (!st) return fail_('Ukjent stasjon.');
     const lvl = st.up[key], max = key === 'garasje' ? 2 : 3, cost = (key === 'garasje' ? 70000 : 55000) * (lvl + 1);
@@ -1076,6 +1197,7 @@ Sim.tick = function (dt) {
   Net.update(dt);
   Sim.spawnTick();
   Vol.update(dt);
+  Sim.callTick(); Staff.tick();
   Sim.updateIncidents(dt);
   for (const id in S.units) { const u = S.units[id]; if (u) Sim.updateUnit(u, dt); }
   Eco.tick(dt);
@@ -1097,7 +1219,7 @@ Sim.firstStation = function (lotId) {
   const type = STATION_FOR_ORG[S.first], r = Sim.buildStation(type, lotId, { free: true });
   if (!r.ok) return r;
   const ut = { brann: 'mannskapsbil', politi: 'patruljebil', ambulanse: 'ambulanse' }[S.first];
-  const u = Sim.addUnit(ut, r.st.id);
+  const u = Sim.addUnit(ut, r.st.id, { freeCrew: true });
   Log.add(AGENCIES[S.first].tg, AGENCIES[S.first].sentral, r.st.name + ' er etablert. ' + u.name + ' er meldt ledig på Nødnett', 'info');
   S.paused = false; return r;
 };

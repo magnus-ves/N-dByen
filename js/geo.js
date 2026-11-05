@@ -487,6 +487,7 @@ function buildWorld(cfg, roadGJ, siteFeats) {
   world.parks = pts(cfg.parks); world.waterfront = pts(cfg.waterfront); world.mountain = pts(cfg.mountain);
   world.venue = ev => { const p = proj.toXZ(ev.lat, ev.lon), r = nav.nearestRP(p.x, p.z, true) || { ...world.randomRoadPlace().rp, dist: 0 }; return { x: p.x, z: p.z, rp: { a: r.a, b: r.b, e: r.e, t: r.t }, addr: ev.navn, zone: 'park', floors: 0, approach: approachFor(r.dist, false) }; };
   world.landing = [...world.parks, ...Object.values(world.beaches), ...world.mountain];
+  world.piers = [...world.waterfront, ...Object.values(world.beaches).filter(b => !b.island)];   // kaier der båtene ligger
   world.weak = (cfg.weakZones || []).map(z => { const p = proj.toXZ(z.lat, z.lon); return { navn: z.navn, x: p.x, z: p.z, r: z.r, mul: z.mul }; });
   /* trekning av tilfeldige adresser og veipunkter (vektet etter tetthet) */
   const addrEdges = main.filter(e => ['residential', 'tertiary', 'secondary', 'primary', 'unclassified', 'living_street'].includes(e.hw) && e.len > 20), roadEdges = main.filter(e => HW_MUL[e.hw] >= 0.9 && e.len > 20);

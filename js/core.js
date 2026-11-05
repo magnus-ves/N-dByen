@@ -70,77 +70,91 @@ const dist2 = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
 const lerpAngle = (a, b, t) => { let d = ((b - a + Math.PI) % TAU + TAU) % TAU - Math.PI; return a + d * t; };
 
 /** Egne enkle symboler (24×24, strek). Ingen ekte logoer brukes. */
+/** Ikoner fra Lucide (lucide.dev, ISC-lisens), 24×24 strek. Ingen ekte logoer brukes. */
 const ICONS = {
-  flame: '<path d="M12 3c.6 3 4.6 4.8 4.6 9.2A4.6 4.6 0 0 1 12 17a4.6 4.6 0 0 1-4.6-4.8c0-1.9.9-3.1 1.9-4 .2 1.4.8 2.2 1.7 2.5C10.8 8.2 10.8 5.2 12 3z"/>',
-  shield: '<path d="M12 3.2l7 2.6v5.4c0 4.2-2.9 7.6-7 9.6-4.1-2-7-5.4-7-9.6V5.8z"/><path d="M12 8.4l1.1 2.2 2.4.3-1.8 1.6.5 2.4-2.2-1.2-2.2 1.2.5-2.4-1.8-1.6 2.4-.3z"/>',
-  pulse: '<path d="M12 20.2s-7.2-4.4-7.2-10A4.1 4.1 0 0 1 12 7.6a4.1 4.1 0 0 1 7.2 2.6c0 5.6-7.2 10-7.2 10z"/><path d="M7.6 12h2.2l1.1-2.2 2 4.2 1.1-2h2.4"/>',
-  hand: '<path d="M12 20s-7-4.2-7-9.6A3.9 3.9 0 0 1 12 8a3.9 3.9 0 0 1 7 2.4C19 15.800 12 20 12 20z"/><path d="M12 11.200v3.400M10.300 12.900h3.400"/>',
-  buoy: '<circle cx="12" cy="12" r="8.200"/><circle cx="12" cy="12" r="3.600"/><path d="M6.200 6.200l3.200 3.200M17.800 6.200l-3.200 3.200M6.200 17.800l3.200-3.200M17.800 17.800l-3.200-3.200"/>',
-  mast: '<path d="M12 11.500v9M8.500 20.500h7"/><circle cx="12" cy="9.200" r="1.700"/><path d="M8 5.600a5.800 5.800 0 0 0 0 7.200M16 5.600a5.800 5.800 0 0 1 0 7.200M5.200 3.400a9.600 9.600 0 0 0 0 11.600M18.800 3.400a9.600 9.600 0 0 1 0 11.600"/>',
-  bell: '<path d="M6.500 16.500V11a5.500 5.500 0 0 1 11 0v5.500l1.500 1.800H5z"/><path d="M10 20.500a2 2 0 0 0 4 0"/>',
-  warn: '<path d="M12 4.500l8.500 14.500h-17z"/><path d="M12 10.200v4M12 16.600v.4"/>',
-  clock: '<circle cx="12" cy="12" r="8.400"/><path d="M12 7.200V12l3.200 2"/>',
-  coin: '<circle cx="12" cy="12" r="8.400"/><path d="M14.600 9.400c-.4-1-1.400-1.500-2.600-1.500-1.500 0-2.600.8-2.600 1.900 0 2.500 5.400 1.200 5.400 3.900 0 1.100-1.200 2-2.800 2-1.300 0-2.400-.6-2.800-1.700M12 6.600v1.300M12 16.100v1.300"/>',
-  truck: '<path d="M3 16.500V7.500h10.500v9M13.500 10.500h3.800l3.200 3.200v2.800h-7"/><circle cx="7.200" cy="17.600" r="1.700"/><circle cx="16.800" cy="17.600" r="1.700"/>',
-  house: '<path d="M4 11.200L12 4.400l8 6.800V20H4z"/><path d="M9.800 20v-5.600h4.400V20"/>',
-  bag: '<path d="M5.200 8.400h13.600l-1 11.600H6.200z"/><path d="M9 8.400a3 3 0 0 1 6 0"/>',
-  chart: '<path d="M5.500 19.500v-8M12 19.500V5M18.500 19.500v-11"/>',
-  pin: '<path d="M12 20.500s-6-5.400-6-10.200a6 6 0 0 1 12 0c0 4.800-6 10.200-6 10.200z"/><circle cx="12" cy="10.200" r="2.200"/>',
-  layers: '<path d="M12 4l8.500 4.600L12 13.200 3.500 8.600z"/><path d="M3.500 12.600L12 17.200l8.500-4.600"/>',
-  plus: '<path d="M12 5.500v13M5.500 12h13"/>',
-  x: '<path d="M6.500 6.500l11 11M17.500 6.500l-11 11"/>',
-  check: '<path d="M5.500 12.500l4.300 4.300L18.500 8"/>',
-  pause: '<path d="M8.500 6.500v11M15.500 6.500v11"/>',
-  play: '<path d="M8 5.800v12.400L18.400 12z"/>',
-  mountain: '<path d="M3 19l6.200-10.500 3.800 6 2.200-3.200L21 19z"/>',
-  wave: '<path d="M3 13c2.500 0 2.500-2.500 5-2.500s2.500 2.500 5 2.500 2.500-2.500 5-2.500M3 18c2.500 0 2.500-2.500 5-2.500s2.500 2.500 5 2.500 2.500-2.500 5-2.500"/>',
-  sun: '<circle cx="12" cy="12" r="3.800"/><path d="M12 3.500v2.200M12 18.300v2.200M3.500 12h2.200M18.300 12h2.200M6 6l1.500 1.500M16.500 16.500L18 18M18 6l-1.500 1.500M7.500 16.500L6 18"/>',
-  leaf: '<path d="M5 19c0-8 4.600-13 14-14 .5 9.400-5 14-12.500 13.400M5 19c2.500-4 5-6.500 8-8"/>',
-  snow: '<path d="M12 3.500v17M4.600 7.800l14.800 8.400M19.400 7.800L4.600 16.200"/>',
-  rain: '<path d="M7.500 14.500a4.200 4.200 0 0 1-.4-8.300 5.300 5.300 0 0 1 10 1.300 3.500 3.500 0 0 1-.1 7M9 17.500l-1 2.500M13 17.500l-1 2.500M17 17.500l-1 2.500"/>',
-  cloud: '<path d="M7.500 18a4.300 4.300 0 0 1-.5-8.600 5.500 5.500 0 0 1 10.500 1.400A3.600 3.600 0 0 1 17 18z"/>',
-  wind: '<path d="M3.500 9.500h10a2.500 2.500 0 1 0-2.400-3M3.500 14h14a2.800 2.800 0 1 1-2.600 3.800M3.500 11.800h7"/>',
-  people: '<circle cx="9" cy="8.500" r="3"/><path d="M3.500 19c.3-3.300 2.600-5.200 5.500-5.200s5.200 1.900 5.500 5.200"/><circle cx="17.200" cy="9.400" r="2.300"/><path d="M16.800 14.200c2.200 0 3.700 1.400 3.900 3.800"/>',
-  radio: '<rect x="8" y="8.500" width="8" height="12" rx="2.400"/><path d="M12 8.500V3.500M10 12.500h4M10 16h4"/>',
-  list: '<path d="M8.500 7h11M8.500 12h11M8.500 17h11M4.600 7h.01M4.600 12h.01M4.600 17h.01"/>',
-  menu: '<path d="M5 7.500h14M5 12h14M5 16.500h14"/>',
-  car: '<path d="M4 15.500v-4l1.800-4.500h12.400L20 11.500v4zM4 15.500v2.500M20 15.500v2.500M4 11.500h16"/>',
-  heli: '<path d="M5 6.500h14M12 6.500v3"/><ellipse cx="11" cy="13" rx="5.500" ry="3.200"/><path d="M16.500 12.500H21M7 18.500h8"/>',
-  calendar: '<rect x="4" y="5.500" width="16" height="14.500" rx="3.200"/><path d="M4 10h16M8.500 3.500v4M15.500 3.500v4"/>',
-  up: '<path d="M6 14.500l6-6 6 6"/>',
-  down: '<path d="M6 9.500l6 6 6-6"/>',
-  lock: '<rect x="5.500" y="10.500" width="13" height="9.500" rx="2.800"/><path d="M8.500 10.500V8a3.500 3.500 0 0 1 7 0v2.500"/>',
-  signal: '<path d="M5.500 19v-3M10.200 19v-6M14.800 19V9.500M19.500 19V5.500"/>',
-  gauge: '<path d="M4.500 16a7.800 7.800 0 1 1 15 0"/><path d="M12 16l3.500-5"/>',
-  bolt: '<path d="M13 3.500L6.500 13H12l-1 7.500L17.500 11H12z"/>',
-  eye: '<path d="M3 12s3.500-6 9-6 9 6 9 6-3.500 6-9 6-9-6-9-6z"/><circle cx="12" cy="12" r="2.600"/>',
-  star: '<path d="M12 4l2.400 5 5.400.7-4 3.800 1 5.400-4.800-2.700-4.800 2.700 1-5.400-4-3.800 5.400-.7z"/>',
-  rotl: '<path d="M5.500 12a6.500 6.500 0 1 0 2-4.700"/><path d="M5 4.500v4h4"/>',
-  rotr: '<path d="M18.500 12a6.500 6.500 0 1 1-2-4.700"/><path d="M19 4.500v4h-4"/>',
-  home: '<circle cx="12" cy="12" r="7.500"/><path d="M12 3.500v3M12 17.500v3M3.500 12h3M17.500 12h3"/><circle cx="12" cy="12" r="1.400"/>',
-  wrench: '<path d="M14.500 5.500a4 4 0 0 0-4.800 5L4.500 15.700a1.800 1.800 0 0 0 2.600 2.600l5.200-5.200a4 4 0 0 0 5-4.800l-2.400 2.400-2.300-.6-.6-2.300z"/>',
-  tower: '<path d="M7 20.500l2-9M17 20.500l-2-9M8 15.500h8M6.500 11.500h11v-3h-11zM12 8.500V5M9.500 5h5"/>',
-  doc: '<path d="M7 3.500h7.500L19 8v12.500H7z"/><path d="M14 3.500V8.500h5M9.800 13h5.500M9.800 16.500h5.500"/>',
-  tools: '<path d="M4.500 19.500l7-7M13 6l5 5M14.500 4.500l5 5-2 2-5-5z"/>',
-  heart: '<path d="M12 20s-7-4.200-7-9.600A3.900 3.900 0 0 1 12 8a3.900 3.900 0 0 1 7 2.400C19 15.800 12 20 12 20z"/>',
-  gas: '<path d="M7.500 18a4.300 4.300 0 0 1-.5-8.600 5.500 5.500 0 0 1 10.500 1.400A3.600 3.600 0 0 1 17 18z"/><path d="M9 21h6"/>',
-  anchor: '<circle cx="12" cy="6" r="2"/><path d="M12 8v12.500M7.500 12.500h9M5 15c.5 3 3.300 5.500 7 5.500s6.500-2.500 7-5.500"/>',
-  bars: '<path d="M6 20V10M12 20V4M18 20v-7"/>'
+  flame: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />',
+  shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />',
+  pulse: '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" /> <path d="M3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27" />',
+  hand: '<path d="M11 14h2a2 2 0 1 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 16" /> <path d="m7 20 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 0 0-2.75-2.91l-4.2 3.9" /> <path d="m2 15 6 6" /> <path d="M19.5 8.5c.7-.7 1.5-1.6 1.5-2.7A2.73 2.73 0 0 0 16 4a2.78 2.78 0 0 0-5 1.8c0 1.2.8 2 1.5 2.8L16 12Z" />',
+  buoy: '<circle cx="12" cy="12" r="10" /> <path d="m4.93 4.93 4.24 4.24" /> <path d="m14.83 9.17 4.24-4.24" /> <path d="m14.83 14.83 4.24 4.24" /> <path d="m9.17 14.83-4.24 4.24" /> <circle cx="12" cy="12" r="4" />',
+  mast: '<path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9" /> <path d="M7.8 4.7a6.14 6.14 0 0 0-.8 7.5" /> <circle cx="12" cy="9" r="2" /> <path d="M16.2 4.8c2 2 2.26 5.11.8 7.47" /> <path d="M19.1 1.9a9.96 9.96 0 0 1 0 14.1" /> <path d="M9.5 18h5" /> <path d="m8 22 4-11 4 11" />',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /> <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />',
+  warn: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /> <path d="M12 9v4" /> <path d="M12 17h.01" />',
+  clock: '<circle cx="12" cy="12" r="10" /> <polyline points="12 6 12 12 16 14" />',
+  coin: '<circle cx="8" cy="8" r="6" /> <path d="M18.09 10.37A6 6 0 1 1 10.34 18" /> <path d="M7 6h1v4" /> <path d="m16.71 13.88.7.71-2.82 2.82" />',
+  truck: '<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2" /> <path d="M15 18H9" /> <path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14" /> <circle cx="17" cy="18" r="2" /> <circle cx="7" cy="18" r="2" />',
+  house: '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" /> <path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />',
+  bag: '<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" /> <path d="M3 6h18" /> <path d="M16 10a4 4 0 0 1-8 0" />',
+  chart: '<path d="M3 3v16a2 2 0 0 0 2 2h16" /> <path d="M18 17V9" /> <path d="M13 17V5" /> <path d="M8 17v-3" />',
+  pin: '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" /> <circle cx="12" cy="10" r="3" />',
+  layers: '<path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" /> <path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65" /> <path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65" />',
+  plus: '<path d="M5 12h14" /> <path d="M12 5v14" />',
+  x: '<path d="M18 6 6 18" /> <path d="m6 6 12 12" />',
+  check: '<path d="M20 6 9 17l-5-5" />',
+  pause: '<rect x="14" y="4" width="4" height="16" rx="1" /> <rect x="6" y="4" width="4" height="16" rx="1" />',
+  play: '<polygon points="6 3 20 12 6 21 6 3" />',
+  mountain: '<path d="m8 3 4 8 5-5 5 15H2L8 3z" />',
+  wave: '<path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" /> <path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" /> <path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" />',
+  sun: '<circle cx="12" cy="12" r="4" /> <path d="M12 2v2" /> <path d="M12 20v2" /> <path d="m4.93 4.93 1.41 1.41" /> <path d="m17.66 17.66 1.41 1.41" /> <path d="M2 12h2" /> <path d="M20 12h2" /> <path d="m6.34 17.66-1.41 1.41" /> <path d="m19.07 4.93-1.41 1.41" />',
+  leaf: '<path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z" /> <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" />',
+  snow: '<line x1="2" x2="22" y1="12" y2="12" /> <line x1="12" x2="12" y1="2" y2="22" /> <path d="m20 16-4-4 4-4" /> <path d="m4 8 4 4-4 4" /> <path d="m16 4-4 4-4-4" /> <path d="m8 20 4-4 4 4" />',
+  rain: '<path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" /> <path d="M16 14v6" /> <path d="M8 14v6" /> <path d="M12 16v6" />',
+  cloud: '<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />',
+  wind: '<path d="M12.8 19.6A2 2 0 1 0 14 16H2" /> <path d="M17.5 8a2.5 2.5 0 1 1 2 4H2" /> <path d="M9.8 4.4A2 2 0 1 1 11 8H2" />',
+  people: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /> <circle cx="9" cy="7" r="4" /> <path d="M22 21v-2a4 4 0 0 0-3-3.87" /> <path d="M16 3.13a4 4 0 0 1 0 7.75" />',
+  radio: '<path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9" /> <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5" /> <circle cx="12" cy="12" r="2" /> <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5" /> <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19" />',
+  list: '<path d="M3 12h.01" /> <path d="M3 18h.01" /> <path d="M3 6h.01" /> <path d="M8 12h13" /> <path d="M8 18h13" /> <path d="M8 6h13" />',
+  menu: '<line x1="4" x2="20" y1="12" y2="12" /> <line x1="4" x2="20" y1="6" y2="6" /> <line x1="4" x2="20" y1="18" y2="18" />',
+  car: '<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2" /> <circle cx="7" cy="17" r="2" /> <path d="M9 17h6" /> <circle cx="17" cy="17" r="2" />',
+  calendar: '<path d="M8 2v4" /> <path d="M16 2v4" /> <rect width="18" height="18" x="3" y="4" rx="2" /> <path d="M3 10h18" />',
+  up: '<path d="m18 15-6-6-6 6" />',
+  down: '<path d="m6 9 6 6 6-6" />',
+  lock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2" /> <path d="M7 11V7a5 5 0 0 1 10 0v4" />',
+  signal: '<path d="M2 20h.01" /> <path d="M7 20v-4" /> <path d="M12 20v-8" /> <path d="M17 20V8" /> <path d="M22 4v16" />',
+  gauge: '<path d="m12 14 4-4" /> <path d="M3.34 19a10 10 0 1 1 17.32 0" />',
+  bolt: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />',
+  eye: '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /> <circle cx="12" cy="12" r="3" />',
+  star: '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />',
+  rotl: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" />',
+  rotr: '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /> <path d="M21 3v5h-5" />',
+  home: '<line x1="2" x2="5" y1="12" y2="12" /> <line x1="19" x2="22" y1="12" y2="12" /> <line x1="12" x2="12" y1="2" y2="5" /> <line x1="12" x2="12" y1="19" y2="22" /> <circle cx="12" cy="12" r="7" /> <circle cx="12" cy="12" r="3" />',
+  wrench: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />',
+  tower: '<path d="M18.2 12.27 20 6H4l1.8 6.27a1 1 0 0 0 .95.73h10.5a1 1 0 0 0 .96-.73Z" /> <path d="M8 13v9" /> <path d="M16 22v-9" /> <path d="m9 6 1 7" /> <path d="m15 6-1 7" /> <path d="M12 6V2" /> <path d="M13 2h-2" />',
+  doc: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /> <path d="M14 2v4a2 2 0 0 0 2 2h4" /> <path d="M10 9H8" /> <path d="M16 13H8" /> <path d="M16 17H8" />',
+  tools: '<path d="m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9" /> <path d="m18 15 4-4" /> <path d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5" />',
+  heart: '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />',
+  gas: '<path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" /> <path d="M16 17H7" /> <path d="M17 21H9" />',
+  anchor: '<path d="M12 22V8" /> <path d="M5 12H2a10 10 0 0 0 20 0h-3" /> <circle cx="12" cy="5" r="3" />',
+  bars: '<line x1="18" x2="18" y1="20" y2="10" /> <line x1="12" x2="12" y1="20" y2="4" /> <line x1="6" x2="6" y1="20" y2="14" />',
+  phone: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />',
+  headset: '<path d="M3 11h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5Zm0 0a9 9 0 1 1 18 0m0 0v5a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3Z" /> <path d="M21 16v2a4 4 0 0 1-4 4h-5" />',
+  ambulance: '<path d="M10 10H6" /> <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2" /> <path d="M19 18h2a1 1 0 0 0 1-1v-3.28a1 1 0 0 0-.684-.948l-1.923-.641a1 1 0 0 1-.578-.502l-1.539-3.076A1 1 0 0 0 16.382 8H14" /> <path d="M8 8v4" /> <path d="M9 18h6" /> <circle cx="17" cy="18" r="2" /> <circle cx="7" cy="18" r="2" />',
+  siren: '<path d="M7 18v-6a5 5 0 1 1 10 0v6" /> <path d="M5 21a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2z" /> <path d="M21 12h1" /> <path d="M18.5 4.5 18 5" /> <path d="M2 12h1" /> <path d="M12 2v1" /> <path d="m4.929 4.929.707.707" /> <path d="M12 12v6" />',
+  ship: '<path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1 .6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" /> <path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.9.94 5.34 2.81 7.76" /> <path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6" /> <path d="M12 10v4" /> <path d="M12 2v3" />',
+  mic: '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /> <path d="M19 10v2a7 7 0 0 1-14 0v-2" /> <line x1="12" x2="12" y1="19" y2="22" />',
+  user: '<circle cx="12" cy="8" r="5" /> <path d="M20 21a8 8 0 0 0-16 0" />',
+  bike: '<circle cx="18.5" cy="17.5" r="3.5" /> <circle cx="5.5" cy="17.5" r="3.5" /> <circle cx="15" cy="5" r="1" /> <path d="M12 17.5V14l-3-3 4-3 2 3h2" />',
+  flask: '<path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2" /> <path d="M8.5 2h7" /> <path d="M7 16h10" />',
+  baby: '<path d="M9 12h.01" /> <path d="M15 12h.01" /> <path d="M10 16c.5.3 1.2.5 2 .5s1.5-.2 2-.5" /> <path d="M19 6.3a9 9 0 0 1 1.8 3.9 2 2 0 0 1 0 3.6 9 9 0 0 1-17.6 0 2 2 0 0 1 0-3.6A9 9 0 0 1 12 3c2 0 3.5 1.1 3.5 2.5s-.9 2.5-2 2.5c-.8 0-1.5-.4-1.5-1" />',
+  brain: '<path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" /> <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" /> <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4" /> <path d="M17.599 6.5a3 3 0 0 0 .399-1.375" /> <path d="M6.003 5.125A3 3 0 0 0 6.401 6.5" /> <path d="M3.477 10.896a4 4 0 0 1 .585-.396" /> <path d="M19.938 10.5a4 4 0 0 1 .585.396" /> <path d="M6 18a4 4 0 0 1-1.967-.516" /> <path d="M19.967 17.484A4 4 0 0 1 18 18" />',
+  pill: '<path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z" /> <path d="m8.5 8.5 7 7" />',
+  heli: '<path d="M5 6.500h14M12 6.500v3"/><ellipse cx="11" cy="13" rx="5.500" ry="3.200"/><path d="M16.500 12.500H21M7 18.500h8"/>'
 };
 /** Lager en inline SVG med eget symbol. */
 function icon(name, cls) {
-  return '<svg class="ic ' + (cls || '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICONS[name] || '') + '</svg>';
+  return '<svg class="ic ' + (cls || '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICONS[name] || '') + '</svg>';
 }
 /** Frittstående SVG-streng for bruk som bilde (3D-sprites). */
 function iconSvgString(name, color, size) {
-  return '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="' + color + '" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">' + (ICONS[name] || '') + '</svg>';
+  return '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="' + color + '" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' + (ICONS[name] || '') + '</svg>';
 }
 
 /* ==========================================================================
    2. SPILLDATA
    ========================================================================== */
 const SEA = 0;                   // havnivå (kartet er flatt; høyder tegnes av MapLibre)
-const MIN_PER_SEC = 1;           // 1 sekund virkelig tid = 1 spillminutt ved 1×
+const MIN_PER_SEC = 1 / 20;      // ekte tid: ett spillminutt varer 20 sekunder ved 1× (5× og 20× kan velges i toppen)
+const SPEEDS = [1, 5, 20];
 const DPS = 3;                   // dager per årstid
 const MIN_DAY = 1440;
 
@@ -155,30 +169,32 @@ const SEASONS = [
 const AGENCIES = {
   brann:     { id: 'brann',     navn: 'Brann og redning', kort: 'Brann',     nr: '110', sentral: '110-sentral',            tg: 'BRANN',   farge: '#C9785D', ikon: 'flame',  tekst: 'Slukk branner, redd folk ut av vrakbiler og håndter gasslekkasjer.' },
   politi:    { id: 'politi',    navn: 'Politi',           kort: 'Politi',    nr: '112', sentral: 'Operasjonssentral 112',   tg: 'POLITI',  farge: '#6F8FB5', ikon: 'shield', tekst: 'Prioriter P1–P4, håndter innbrudd, slagsmål og savnede, og led søk og redning.' },
-  ambulanse: { id: 'ambulanse', navn: 'Ambulanse',        kort: 'Ambulanse', nr: '113', sentral: 'AMK-sentral 113',         tg: 'HELSE',   farge: '#B3BE68', ikon: 'pulse',  tekst: 'Akutt, haster, vanlig: hjertestans, fall, fødsel og drukningsulykker.' },
+  ambulanse: { id: 'ambulanse', navn: 'Ambulanse',        kort: 'Ambulanse', nr: '113', sentral: 'AMK-sentral 113',         tg: 'HELSE',   farge: '#B3BE68', ikon: 'ambulance',  tekst: 'Akutt, haster, vanlig: hjertestans, fall, fødsel og drukningsulykker.', cm: 2, k160: 2 },
   rk:        { id: 'rk',        navn: 'Røde Kors Hjelpekorps',  kort: 'Hjelpekorps', nr: '', sentral: '', tg: 'REDNING', farge: '#D98A82', ikon: 'hand', tekst: 'Søk etter savnede, førstehjelp, sanitetsvakt og fjellredning.' },
   nf:        { id: 'nf',        navn: 'Norsk Folkehjelp Sanitet', kort: 'Folkehjelp', nr: '', sentral: '', tg: 'REDNING', farge: '#C97C74', ikon: 'hand', tekst: 'Sanitetsvakt, søk og redning, støtte ved store ulykker.' },
+  rs:        { id: 'rs',        navn: 'Redningsselskapet',      kort: 'RS', nr: '', sentral: '', tg: 'REDNING', farge: '#E0874A', ikon: 'anchor', tekst: 'Redningsskøyter i Oslofjorden – henter folk på øyene og på sjøen.' },
   strand:    { id: 'strand',    navn: 'Strandlivreddere',       kort: 'Livredder', nr: '', sentral: '', tg: 'REDNING', farge: '#E5A267', ikon: 'buoy', tekst: 'Faste livreddere på badestrendene i Oslo – om sommeren.' },
   bistand:   { id: 'bistand',   navn: 'Nabodistrikt (bistand)', kort: 'Bistand',   nr: '', sentral: '', tg: 'SENTRAL', farge: '#9AA5A0', ikon: 'people', tekst: '' }
 };
 const ETATER = ['brann', 'politi', 'ambulanse'];
-const FRIVILLIGE = ['rk', 'nf', 'strand'];
+const FRIVILLIGE = ['rk', 'nf', 'rs', 'strand'];
 
 /** Enhetstyper. model = 3D-modell. cost/run i kr, spd = fartsfaktor, turnout = utrykningstid (min), mob = mobiliseringstid for frivillige (min). */
 const UT = {
-  mannskapsbil:    { navn: 'Mannskapsbil',          org: 'brann',     model: 'truck',    cost: 130000, run: 10, spd: 1.00, crew: 6, lvl: 1, turnout: 1.3, term: 'k' },
-  tankbil:         { navn: 'Tankbil',               org: 'brann',     model: 'tanker',   cost: 150000, run: 11, spd: 0.92, crew: 3, lvl: 1, turnout: 1.4, term: 'k' },
-  hoyderedskap:    { navn: 'Høyderedskap',          org: 'brann',     model: 'ladder',   cost: 380000, run: 18, spd: 0.85, crew: 3, lvl: 3, turnout: 1.6, term: 'k' },
-  redningsbil:     { navn: 'Redningsbil',           org: 'brann',     model: 'rescue',   cost: 210000, run: 13, spd: 0.95, crew: 4, lvl: 2, turnout: 1.4, term: 'k' },
-  rokdykker:       { navn: 'Røykdykkerlag',         org: 'brann',     model: 'van',      cost: 90000,  run: 8,  spd: 1.00, crew: 4, lvl: 2, turnout: 1.2, term: 'h' },
-  patruljebil:     { navn: 'Patruljebil',           org: 'politi',    model: 'car',      cost: 70000,  run: 6,  spd: 1.15, crew: 2, lvl: 1, turnout: 0.6, term: 'k' },
-  up:              { navn: 'UP-bil (trafikk)',      org: 'politi',    model: 'car',      cost: 85000,  run: 7,  spd: 1.25, crew: 2, lvl: 2, turnout: 0.6, term: 'k', stripe: '#E4C94E' },
-  hundepatrulje:   { navn: 'Hundepatrulje',         org: 'politi',    model: 'van',      cost: 110000, run: 8,  spd: 1.05, crew: 2, lvl: 3, turnout: 0.9, term: 'k' },
-  innsatsleder:    { navn: 'Innsatsleder politi',   org: 'politi',    model: 'suv',      cost: 120000, run: 9,  spd: 1.15, crew: 1, lvl: 4, turnout: 0.7, term: 'k' },
-  beredskapstropp: { navn: 'Beredskapstropp (Delta)', org: 'politi',  model: 'armored',  cost: 600000, run: 30, spd: 1.05, crew: 6, lvl: 8, turnout: 1.0, term: 'k' },
+  mannskapsbil:    { navn: 'Mannskapsbil',          org: 'brann',     model: 'truck',    cost: 130000, run: 10, spd: 1.00, crew: 6, lvl: 1, turnout: 1.3, term: 'k', cm: 4, k160: 1 },
+  tankbil:         { navn: 'Tankbil',               org: 'brann',     model: 'tanker',   cost: 150000, run: 11, spd: 0.92, crew: 3, lvl: 1, turnout: 1.4, term: 'k', cm: 2, k160: 1 },
+  hoyderedskap:    { navn: 'Høyderedskap',          org: 'brann',     model: 'ladder',   cost: 380000, run: 18, spd: 0.85, crew: 3, lvl: 3, turnout: 1.6, term: 'k', cm: 2, k160: 1 },
+  redningsbil:     { navn: 'Redningsbil',           org: 'brann',     model: 'rescue',   cost: 210000, run: 13, spd: 0.95, crew: 4, lvl: 2, turnout: 1.4, term: 'k', cm: 3, k160: 1 },
+  rokdykker:       { navn: 'Røykdykkerlag',         org: 'brann',     model: 'van',      cost: 90000,  run: 8,  spd: 1.00, crew: 4, lvl: 2, turnout: 1.2, term: 'h', cm: 4, k160: 1 },
+  patruljebil:     { navn: 'Patruljebil',           org: 'politi',    model: 'car',      cost: 70000,  run: 6,  spd: 1.15, crew: 2, lvl: 1, turnout: 0.6, term: 'k', cm: 2, k160: 1 },
+  up:              { navn: 'UP-bil (trafikk)',      org: 'politi',    model: 'car',      cost: 85000,  run: 7,  spd: 1.25, crew: 2, lvl: 2, turnout: 0.6, term: 'k', stripe: '#E4C94E', cm: 2, k160: 1 },
+  hundepatrulje:   { navn: 'Hundepatrulje',         org: 'politi',    model: 'van',      cost: 110000, run: 8,  spd: 1.05, crew: 2, lvl: 3, turnout: 0.9, term: 'k', cm: 1, k160: 1 },
+  innsatsleder:    { navn: 'Innsatsleder politi',   org: 'politi',    model: 'suv',      cost: 120000, run: 9,  spd: 1.15, crew: 1, lvl: 4, turnout: 0.7, term: 'k', cm: 1, k160: 1 },
+  beredskapstropp: { navn: 'Beredskapstropp (Delta)', org: 'politi',  model: 'armored',  cost: 600000, run: 30, spd: 1.05, crew: 6, lvl: 8, turnout: 1.0, term: 'k', cm: 4, k160: 1 },
   ambulanse:       { navn: 'Ambulanse',             org: 'ambulanse', model: 'ambulance', cost: 120000, run: 9, spd: 1.10, crew: 2, lvl: 1, turnout: 0.8, term: 'k' },
-  legebil:         { navn: 'Legebil',               org: 'ambulanse', model: 'suv',      cost: 180000, run: 12, spd: 1.20, crew: 2, lvl: 3, turnout: 0.8, term: 'k' },
-  luftambulanse:   { navn: 'Luftambulanse',         org: 'ambulanse', model: 'heli',     cost: 900000, run: 60, spd: 3.00, crew: 3, lvl: 6, turnout: 2.0, term: 'k', needs: 'helikopterbase' },
+  legebil:         { navn: 'Legebil',               org: 'ambulanse', model: 'suv',      cost: 180000, run: 12, spd: 1.20, crew: 2, lvl: 3, turnout: 0.8, term: 'k', cm: 2, k160: 1 },
+  luftambulanse:   { navn: 'Luftambulanse',         org: 'ambulanse', model: 'heli',     cost: 900000, run: 60, spd: 3.00, crew: 3, lvl: 6, turnout: 2.0, term: 'k', needs: 'helikopterbase', cm: 3, k160: 0 },
+  redningsbat:     { navn: 'Redningsbåt (brann)',  org: 'brann',     model: 'boat',     cost: 160000, run: 12, spd: 1.25, crew: 3, lvl: 1, turnout: 1.5, term: 'k', boat: true, cm: 2, k160: 0 },
   hjelpekorpsbil:  { navn: 'Hjelpekorpsbil',        org: 'rk',        model: 'van',      cost: 55000,  run: 4,  spd: 0.95, crew: 4, lvl: 1, mob: 8,  term: 'k' },
   atv:             { navn: 'ATV / snøscooter',      org: 'rk',        model: 'atv',      cost: 40000,  run: 3,  spd: 0.85, crew: 2, lvl: 1, mob: 6,  term: 'k', offroad: true },
   sanitetslag_rk:  { navn: 'Sanitetslag',           org: 'rk',        model: 'van',      cost: 25000,  run: 2,  spd: 0.95, crew: 4, lvl: 1, mob: 10, term: 'h' },
@@ -186,27 +202,29 @@ const UT = {
   sanitetsbil:     { navn: 'Sanitetsbil',           org: 'nf',        model: 'ambulance', cost: 55000, run: 4,  spd: 0.95, crew: 3, lvl: 1, mob: 8,  term: 'k' },
   sokelag_nf:      { navn: 'Søkelag (Folkehjelp)',  org: 'nf',        model: 'van',      cost: 20000,  run: 2,  spd: 0.95, crew: 6, lvl: 1, mob: 12, term: 'h' },
   forstehjelpspost: { navn: 'Førstehjelpspost',     org: 'nf',        model: 'trailer',  cost: 30000,  run: 2,  spd: 0.70, crew: 4, lvl: 2, mob: 12, term: 'h' },
+  rs_skoyte:       { navn: 'Redningsskøyte',       org: 'rs',        model: 'boat',     cost: 70000,  run: 5,  spd: 1.15, crew: 4, lvl: 1, mob: 7,  term: 'k', boat: true },
   livredder:       { navn: 'Livredder',             org: 'strand',    model: 'foot',     cost: 0,      run: 3,  spd: 0.8, crew: 1, lvl: 1, mob: 0,  term: 'h', foot: true }
 };
 /** Kort navn til kallesignal. */
-const CALL = { mannskapsbil: 'Mannskapsbil', tankbil: 'Tankbil', hoyderedskap: 'Høyderedskap', redningsbil: 'Redningsbil', rokdykker: 'Røykdykkerlag',
-  patruljebil: 'Patrulje', up: 'UP', hundepatrulje: 'Hundepatrulje', innsatsleder: 'Innsatsleder politi', beredskapstropp: 'Beredskapstropp',
-  ambulanse: 'Ambulanse', legebil: 'Legebil', luftambulanse: 'Luftambulanse', hjelpekorpsbil: 'Hjelpekorps', atv: 'ATV', sanitetslag_rk: 'Sanitetslag',
-  sokelag_rk: 'Søkelag', sanitetsbil: 'Sanitet', sokelag_nf: 'Søkelag NF', forstehjelpspost: 'Førstehjelpspost', livredder: 'Livredder' };
+const CALL = { mannskapsbil: 'Brann', tankbil: 'Tank', hoyderedskap: 'Stige', redningsbil: 'Redning', rokdykker: 'Røyk', redningsbat: 'Brannbåt',
+  patruljebil: 'Patrulje', up: 'UP', hundepatrulje: 'Hund', innsatsleder: 'Innsatsleder', beredskapstropp: 'Delta',
+  ambulanse: 'Ambulanse', legebil: 'Legebil', luftambulanse: 'Luftambulanse', hjelpekorpsbil: 'Hjelpekorps', atv: 'ATV', sanitetslag_rk: 'Sanitet',
+  sokelag_rk: 'Søk', sanitetsbil: 'NF Sanitet', sokelag_nf: 'NF Søk', forstehjelpspost: 'NF Post', rs_skoyte: 'RS', livredder: 'Livredder' };
 
 /** Stasjonstyper (bygg på ledige tomter). */
 const ST = {
   brannstasjon:     { navn: 'Brannstasjon',     org: 'brann',     cost: 200000, run: 25, cap: 3, lvl: 1, ikon: 'flame',  farge: '#C9785D', rolle: 'etat' },
   politistasjon:    { navn: 'Politistasjon',    org: 'politi',    cost: 190000, run: 24, cap: 3, lvl: 1, ikon: 'shield', farge: '#6F8FB5', rolle: 'etat' },
-  ambulansestasjon: { navn: 'Ambulansestasjon', org: 'ambulanse', cost: 170000, run: 22, cap: 3, lvl: 1, ikon: 'pulse',  farge: '#B3BE68', rolle: 'etat' },
+  ambulansestasjon: { navn: 'Ambulansestasjon', org: 'ambulanse', cost: 170000, run: 22, cap: 3, lvl: 1, ikon: 'ambulance',  farge: '#B3BE68', rolle: 'etat' },
   sykehus:          { navn: 'Sykehus',          org: 'ambulanse', cost: 600000, run: 45, cap: 0, lvl: 4, ikon: 'plus',   farge: '#F2EEE3', rolle: 'helse' },
   legevakt:         { navn: 'Legevakt',         org: 'ambulanse', cost: 220000, run: 20, cap: 0, lvl: 2, ikon: 'plus',   farge: '#DCE8D2', rolle: 'helse' },
   arrest:           { navn: 'Arrest',           org: 'politi',    cost: 150000, run: 15, cap: 0, lvl: 2, ikon: 'lock',   farge: '#9AA5B5', rolle: 'arrest' },
   helikopterbase:   { navn: 'Helikopterbase',   org: 'ambulanse', cost: 450000, run: 35, cap: 2, lvl: 5, ikon: 'heli',   farge: '#C9CF8A', rolle: 'etat' },
   rk_base:          { navn: 'Hjelpekorpsbase',  org: 'rk',        cost: 90000,  run: 8,  cap: 3, lvl: 1, ikon: 'hand',   farge: '#D98A82', rolle: 'frivillig' },
+  rs_base:          { navn: 'Redningsstasjon',  org: 'rs',        cost: 85000,  run: 7,  cap: 2, lvl: 1, ikon: 'anchor', farge: '#E0874A', rolle: 'frivillig' },
   nf_base:          { navn: 'Sanitetsbase',     org: 'nf',        cost: 80000,  run: 7,  cap: 3, lvl: 1, ikon: 'hand',   farge: '#C97C74', rolle: 'frivillig' }
 };
-const STATION_FOR_ORG = { brann: 'brannstasjon', politi: 'politistasjon', ambulanse: 'ambulansestasjon', rk: 'rk_base', nf: 'nf_base' };
+const STATION_FOR_ORG = { brann: 'brannstasjon', politi: 'politistasjon', ambulanse: 'ambulansestasjon', rk: 'rk_base', nf: 'nf_base', rs: 'rs_base' };
 
 /** Rangstige (nivåer). */
 const RANKS = [
@@ -230,7 +248,7 @@ const ACC = {
   sok: ['sokelag_rk', 'sokelag_nf', 'hundepatrulje'], fjell: ['atv', 'hjelpekorpsbil', 'sokelag_rk'],
   stotte: ['sanitetsbil', 'hjelpekorpsbil', 'sanitetslag_rk', 'forstehjelpspost'], livr: ['livredder'],
   strandAmb: ['livredder', 'ambulanse', 'sanitetsbil', 'hjelpekorpsbil'], finn: ['livredder', 'patruljebil', 'up', 'hundepatrulje'],
-  san: ['sanitetslag_rk', 'sanitetsbil', 'forstehjelpspost', 'hjelpekorpsbil']
+  san: ['sanitetslag_rk', 'sanitetsbil', 'forstehjelpspost', 'hjelpekorpsbil'], boat: ['redningsbat', 'rs_skoyte', 'luftambulanse'], baat: ['redningsbat', 'rs_skoyte']
 };
 /** Roller i en hendelse: SL(id, etikett, aksepterte typer, etat for bistand, valg). */
 const SL = (k, label, accepts, ag, o) => Object.assign({ k, label, accepts, ag, n: 1, req: true, units: [] }, o || {});
@@ -278,7 +296,7 @@ const TEMPLATES = {
     work: 12, target: 10, reward: 14500, expire: 30, danger: 0.6, xp: 26, season: { vinter: 1.4 } },
   vannredning: { navn: 'Vannredning', lead: ['brann'], tags: ['vann'], pri: 1, w: 0.4, lvl: 2, loc: 'vann', ikon: 'wave', fx: 'water',
     slots: [SL('rb', 'Redningsbil (vannredning)', ACC.redn, 'brann'), SL('am', 'Ambulanse', ACC.amb, 'ambulanse', { transport: true }),
-            SL('lv', 'Livredder', ACC.livr, 'frivillig', { req: false })],
+            SL('lv', 'Livredder', ACC.livr, 'frivillig', { req: false }), SL('bt', 'Redningsbåt', ACC.baat, 'brann', { req: false })],
     work: 10, target: 10, reward: 17000, expire: 26, danger: 0.1, xp: 32, med: true, season: { sommer: 2.6, var: 1.0, host: 0.7, vinter: 0.3 } },
 
   /* ---------------------------- POLITI (112) --------------------------- */
@@ -317,7 +335,7 @@ const TEMPLATES = {
   pustebesvar: { navn: 'Pustebesvær', lead: ['ambulanse'], tags: [], pri: 2, w: 1.0, lvl: 1, loc: 'hjem', ikon: 'pulse', fx: 'none',
     slots: [SL('am', 'Ambulanse', ACC.amb, 'ambulanse', { transport: true })], work: 6, target: 30, reward: 7000, expire: 65, danger: 0, xp: 12, transportP: 0.85,
     season: { vinter: 1.3, var: 1.2 } },
-  fodsel: { navn: 'Fødsel', lead: ['ambulanse'], tags: [], pri: 2, w: 0.5, lvl: 2, loc: 'hjem', ikon: 'heart', fx: 'none',
+  fodsel: { navn: 'Fødsel', lead: ['ambulanse'], tags: [], pri: 2, w: 0.5, lvl: 2, loc: 'hjem', ikon: 'baby', fx: 'none',
     slots: [SL('am', 'Ambulanse', ACC.amb, 'ambulanse', { transport: true }), SL('lg', 'Legebil', ACC.lege, 'ambulanse', { req: false })],
     work: 10, target: 30, reward: 9500, expire: 65, danger: 0, xp: 16, transportP: 1 },
   trafikkskade: { navn: 'Trafikkskade', lead: ['ambulanse'], tags: ['trafikk'], pri: 2, w: 0.9, lvl: 2, loc: 'vei', ikon: 'car', fx: 'none',
@@ -328,16 +346,16 @@ const TEMPLATES = {
   strand_drukning: { navn: 'Drukningsulykke', lead: ['ambulanse'], volLead: true, tags: ['strand'], pri: 1, w: 1.2, lvl: 1, loc: 'strand', ikon: 'buoy', fx: 'water',
     slots: [SL('am', 'Ambulanse', ACC.amb, 'ambulanse', { transport: true }), SL('lv', 'Strandlivredder', ACC.livr, 'frivillig', { req: false }),
             SL('rb', 'Vannredning (brann)', ACC.redn, 'brann', { req: false })],
-    work: 9, target: 12, reward: 20000, expire: 26, danger: 0, xp: 34, med: true, transportP: 1, beach: true, season: { sommer: 4.5, var: 0.25, host: 0.1, vinter: 0 } },
+    work: 9, target: 12, reward: 20000, expire: 26, danger: 0, xp: 34, med: true, transportP: 1, beach: true, hours: [10, 21], wx: { klar: 1.3, regn: 0.25, storm: 0.05, 'snø': 0 },  season: { sommer: 4.5, var: 0.25, host: 0.1, vinter: 0 } },
   strand_barn: { navn: 'Savnet barn på stranden', lead: ['politi'], volLead: true, tags: ['strand'], pri: 2, w: 1.0, lvl: 1, loc: 'strand', ikon: 'buoy', fx: 'none',
     slots: [SL('fi', 'Livredder eller patrulje', ACC.finn, 'politi'), SL('hu', 'Hundepatrulje', ACC.hund, 'politi', { req: false })],
-    work: 10, target: 15, reward: 7500, expire: 42, danger: 0, xp: 14, beach: true, season: { sommer: 3.2, var: 0.2, host: 0, vinter: 0 } },
+    work: 10, target: 15, reward: 7500, expire: 42, danger: 0, xp: 14, beach: true, hours: [10, 21], wx: { klar: 1.3, regn: 0.25, storm: 0.05, 'snø': 0 },  season: { sommer: 3.2, var: 0.2, host: 0, vinter: 0 } },
   strand_skade: { navn: 'Skade på stranden', lead: ['ambulanse'], volLead: true, tags: ['strand'], pri: 3, w: 1.3, lvl: 1, loc: 'strand', ikon: 'buoy', fx: 'none',
     slots: [SL('am', 'Livredder / sanitet / ambulanse', ACC.strandAmb, 'ambulanse', { transport: true })],
-    work: 5, target: 30, reward: 3800, expire: 75, danger: 0, xp: 7, transportP: 0.4, beach: true, season: { sommer: 4.0, var: 0.2, host: 0, vinter: 0 } },
+    work: 5, target: 30, reward: 3800, expire: 75, danger: 0, xp: 7, transportP: 0.4, beach: true, hours: [10, 21], wx: { klar: 1.3, regn: 0.25, storm: 0.05, 'snø': 0 },  season: { sommer: 4.0, var: 0.2, host: 0, vinter: 0 } },
   strand_heteslag: { navn: 'Heteslag', lead: ['ambulanse'], volLead: true, tags: ['strand'], pri: 2, w: 0.8, lvl: 1, loc: 'strand', ikon: 'sun', fx: 'none',
     slots: [SL('am', 'Livredder / sanitet / ambulanse', ACC.strandAmb, 'ambulanse', { transport: true })],
-    work: 6, target: 20, reward: 5500, expire: 55, danger: 0, xp: 10, transportP: 0.6, beach: true, season: { sommer: 3.0, var: 0, host: 0, vinter: 0 }, wx: { klar: 1.6, regn: 0.2 } },
+    work: 6, target: 20, reward: 5500, expire: 55, danger: 0, xp: 10, transportP: 0.6, beach: true, hours: [11, 19], season: { sommer: 3.0, var: 0, host: 0, vinter: 0 }, wx: { klar: 1.6, regn: 0.1, storm: 0, 'snø': 0 } },
 
   /* ------------------------------ FJELL (Bergen) ------------------------ */
   fjell_savnet: { navn: 'Savnet turgåer i fjellet', lead: ['politi'], tags: ['fjell'], pri: 2, w: 0.9, lvl: 2, loc: 'fjell', ikon: 'mountain', fx: 'none',
@@ -347,6 +365,53 @@ const TEMPLATES = {
     slots: [SL('am', 'Ambulanse', ACC.amb, 'ambulanse', { transport: true }), SL('fj', 'Fjellredning (frivillige)', ACC.fjell, 'frivillig'), SL('lg', 'Luftambulanse', ['luftambulanse'], 'ambulanse', { req: false })],
     work: 20, target: 40, reward: 15000, expire: 100, danger: 0.04, xp: 26, approach: 6, transportP: 1, med: true, season: { sommer: 1.4, host: 1.3, vinter: 0.7 } },
 
+  /* ------------------------- FLERE OPPDRAG (alle etater) ------------------------- */
+  gressbrann: { navn: 'Gress- og krattbrann', lead: ['brann'], tags: [], pri: 2, w: 0.6, lvl: 1, loc: 'park', ikon: 'flame', fx: 'smoke',
+    slots: [SL('mb', 'Slokkeenhet', ACC.slokk, 'brann'), SL('tb', 'Tankbil', ACC.tank, 'brann', { req: false })], work: 12, target: 15, reward: 8000, expire: 45, danger: 0.04, xp: 14,
+    season: { var: 1.6, sommer: 2.2, host: 0.4, vinter: 0 }, wx: { klar: 1.5, regn: 0.2, 'snø': 0 } },
+  pipebrann: { navn: 'Pipebrann', lead: ['brann'], tags: ['brann_bygg'], pri: 2, w: 0.5, lvl: 1, loc: 'hjem', ikon: 'flame', fx: 'smoke',
+    slots: [SL('mb', 'Mannskapsbil', ACC.mb, 'brann'), SL('hr', 'Høyderedskap', ACC.stige, 'brann', { req: false })], work: 10, target: 15, reward: 7000, expire: 45, danger: 0.08, xp: 12,
+    season: { var: 0.6, sommer: 0.1, host: 1.3, vinter: 2.4 }, tod: { kveld: 1.6 } },
+  container: { navn: 'Brann i søppelcontainer', lead: ['brann'], tags: [], pri: 3, w: 0.8, lvl: 1, loc: 'natt', ikon: 'flame', fx: 'fire',
+    slots: [SL('mb', 'Slokkeenhet', ACC.slokk, 'brann')], work: 5, target: 20, reward: 3500, expire: 60, danger: 0.02, xp: 6, tod: { natt: 2.2, kveld: 1.3 } },
+  heis: { navn: 'Personer fast i heis', lead: ['brann'], tags: [], pri: 3, w: 0.6, lvl: 1, loc: 'bygg', ikon: 'people', fx: 'none',
+    slots: [SL('mb', 'Mannskapsbil', ACC.mb, 'brann')], work: 9, target: 25, reward: 4200, expire: 70, danger: 0, xp: 8, tod: { dag: 1.4, rush: 1.4 } },
+  kjemikalie: { navn: 'Kjemikalieutslipp', lead: ['brann'], tags: [], pri: 1, w: 0.2, lvl: 4, loc: 'vei', ikon: 'flask', fx: 'gas',
+    slots: [SL('mb', 'Mannskapsbil', ACC.mb, 'brann'), SL('rd', 'Røykdykkerlag (kjemikaliedrakt)', ACC.rok, 'brann'), SL('po', 'Politi (sperring)', ACC.pol, 'politi'), SL('am', 'Ambulanse', ACC.amb, 'ambulanse', { req: false })],
+    work: 22, target: 12, reward: 30000, expire: 40, danger: 0.4, xp: 50, tri: true },
+  bat_brann: { navn: 'Brann i båt ved kai', lead: ['brann'], tags: ['vann'], pri: 1, w: 0.25, lvl: 2, loc: 'vann', ikon: 'flame', fx: 'fire',
+    slots: [SL('mb', 'Mannskapsbil', ACC.mb, 'brann'), SL('bt', 'Brannbåt', ACC.baat, 'brann', { req: false })], work: 14, target: 12, reward: 16000, expire: 40, danger: 0.3, xp: 26,
+    season: { sommer: 1.8, var: 1.0, host: 0.8, vinter: 0.3 } },
+  butikktyveri: { navn: 'Butikktyveri', lead: ['politi'], tags: [], pri: 4, w: 1.4, lvl: 1, loc: 'bygg', ikon: 'shield', fx: 'none',
+    slots: [SL('pa', 'Patruljebil', ACC.patr, 'politi')], work: 7, target: 60, reward: 3000, expire: 130, danger: 0.02, xp: 5, arrest: 0.7, tod: { dag: 1.5, rush: 1.3, natt: 0.1 } },
+  ruskjoring: { navn: 'Mistanke om ruspåvirket fører', lead: ['politi'], tags: ['trafikk'], pri: 2, w: 0.7, lvl: 1, loc: 'vei', ikon: 'car', fx: 'none',
+    slots: [SL('pa', 'Patrulje / UP', ACC.patr, 'politi')], work: 9, target: 15, reward: 7000, expire: 30, danger: 0.08, xp: 12, arrest: 0.8, tod: { natt: 2.0, kveld: 1.3 } },
+  husbrak: { navn: 'Husbråk – vold i nære relasjoner', lead: ['politi'], tags: [], pri: 1, w: 0.6, lvl: 1, loc: 'hjem', ikon: 'shield', fx: 'none',
+    slots: [SL('pa', 'Patruljebil', ACC.patr, 'politi', { n: 2 }), SL('am', 'Ambulanse', ACC.amb, 'ambulanse', { req: false, transport: true })], work: 12, target: 10, reward: 11000, expire: 35, danger: 0.3, xp: 20, arrest: 0.6, inj: 0.3,
+    tod: { kveld: 1.8, natt: 1.6, dag: 0.5 } },
+  demonstrasjon: { navn: 'Demonstrasjon blokkerer vei', lead: ['politi'], tags: [], pri: 3, w: 0.3, lvl: 3, loc: 'vei', ikon: 'people', fx: 'none',
+    slots: [SL('pa', 'Patruljebil', ACC.patr, 'politi', { n: 2 }), SL('il', 'Innsatsleder', ACC.il, 'politi')], work: 30, target: 30, reward: 13000, expire: 90, danger: 0.06, xp: 22, tod: { dag: 1.5, natt: 0.1 } },
+  savnet_barn: { navn: 'Savnet barn', lead: ['politi'], tags: [], pri: 1, w: 0.35, lvl: 2, loc: 'park', ikon: 'people', fx: 'none',
+    slots: [SL('pa', 'Patruljebil', ACC.patr, 'politi', { n: 2 }), SL('hu', 'Hundepatrulje', ACC.hund, 'politi', { req: false }), SL('sk', 'Søkelag', ACC.sok, 'frivillig', { req: false })],
+    work: 18, target: 10, reward: 15000, expire: 70, danger: 0, xp: 28, search: true, tod: { kveld: 1.4 } },
+  hjerneslag: { navn: 'Hjerneslag', lead: ['ambulanse'], tags: [], pri: 1, w: 0.7, lvl: 1, loc: 'hjem', ikon: 'brain', fx: 'none',
+    slots: [SL('am', 'Ambulanse', ACC.amb, 'ambulanse', { transport: true }), SL('lg', 'Legebil', ACC.lege, 'ambulanse', { req: false })], work: 7, target: 12, reward: 15000, expire: 28, danger: 0, xp: 26, med: true, transportP: 1 },
+  brystsmerter: { navn: 'Brystsmerter', lead: ['ambulanse'], tags: [], pri: 1, w: 1.1, lvl: 1, loc: 'hjem', ikon: 'heart', fx: 'none',
+    slots: [SL('am', 'Ambulanse', ACC.amb, 'ambulanse', { transport: true })], work: 7, target: 12, reward: 11000, expire: 30, danger: 0, xp: 18, med: true, transportP: 0.9 },
+  overdose: { navn: 'Overdose', lead: ['ambulanse'], tags: ['natteliv'], pri: 1, w: 0.6, lvl: 1, loc: 'natt', ikon: 'pill', fx: 'none',
+    slots: [SL('am', 'Ambulanse', ACC.amb, 'ambulanse', { transport: true }), SL('pa', 'Politi', ACC.patr, 'politi', { req: false })], work: 6, target: 12, reward: 12000, expire: 26, danger: 0.05, xp: 20, med: true, transportP: 0.8, tod: { natt: 1.8, kveld: 1.3 } },
+  allergi: { navn: 'Alvorlig allergisk reaksjon', lead: ['ambulanse'], tags: [], pri: 1, w: 0.4, lvl: 1, loc: 'bygg', ikon: 'pulse', fx: 'none',
+    slots: [SL('am', 'Ambulanse', ACC.amb, 'ambulanse', { transport: true })], work: 5, target: 12, reward: 10000, expire: 24, danger: 0, xp: 16, med: true, transportP: 1, season: { var: 1.6, sommer: 1.3 } },
+  diabetes: { navn: 'Føling (diabetes)', lead: ['ambulanse'], tags: [], pri: 2, w: 0.7, lvl: 1, loc: 'hjem', ikon: 'pulse', fx: 'none',
+    slots: [SL('am', 'Ambulanse eller sanitet', ACC.ambV, 'ambulanse', { transport: true })], work: 6, target: 30, reward: 5000, expire: 70, danger: 0, xp: 9, transportP: 0.3 },
+  psykisk: { navn: 'Person i psykisk krise', lead: ['ambulanse'], tags: [], pri: 2, w: 0.5, lvl: 2, loc: 'hjem', ikon: 'heart', fx: 'none', tri: false,
+    slots: [SL('am', 'Ambulanse', ACC.amb, 'ambulanse', { transport: true }), SL('pa', 'Politi (bistand)', ACC.patr, 'politi')], work: 18, target: 25, reward: 9500, expire: 70, danger: 0.12, xp: 18, transportP: 0.8 },
+  sykkel: { navn: 'Sykkelulykke', lead: ['ambulanse'], tags: ['trafikk'], pri: 2, w: 0.7, lvl: 1, loc: 'vei', ikon: 'bike', fx: 'none',
+    slots: [SL('am', 'Ambulanse', ACC.amb, 'ambulanse', { transport: true })], work: 7, target: 20, reward: 6500, expire: 50, danger: 0.02, xp: 11, transportP: 0.8, season: { var: 1.3, sommer: 1.6, vinter: 0.3 }, tod: { rush: 1.8 } },
+  bat_nod: { navn: 'Båt i nød i fjorden', lead: ['brann', 'ambulanse'], tags: ['vann', 'strand'], pri: 1, w: 0.35, lvl: 2, loc: 'oy', ikon: 'anchor', fx: 'water',
+    slots: [SL('bt', 'Båt eller helikopter', ACC.boat, 'brann'), SL('am', 'Ambulanse (møter på kaia)', ACC.amb, 'ambulanse', { req: false, transport: true })],
+    work: 12, target: 20, reward: 19000, expire: 50, danger: 0.08, xp: 30, med: true, season: { sommer: 2.2, var: 0.8, host: 1.0, vinter: 0.3 }, wx: { storm: 3.0, regn: 1.3 } },
+
   /* --------------------------- ARRANGEMENTER --------------------------- */
   arr_skade: { navn: 'Skade på arrangement', lead: ['ambulanse'], tags: [], pri: 3, w: 0, lvl: 1, loc: 'arr', ikon: 'pulse', fx: 'none',
     slots: [SL('am', 'Ambulanse eller sanitet', ACC.ambV, 'ambulanse', { transport: true })], work: 5, target: 25, reward: 3600, expire: 60, danger: 0, xp: 6, transportP: 0.4, ev: true },
@@ -354,6 +419,27 @@ const TEMPLATES = {
     slots: [SL('am', 'Ambulanse eller sanitet', ACC.ambV, 'ambulanse', { transport: true })], work: 6, target: 20, reward: 5000, expire: 50, danger: 0, xp: 9, transportP: 0.6, ev: true },
   arr_rus: { navn: 'Ordensforstyrrelse', lead: ['politi'], tags: ['natteliv'], pri: 3, w: 0, lvl: 1, loc: 'arr', ikon: 'shield', fx: 'none',
     slots: [SL('pa', 'Patruljebil', ACC.patr, 'politi')], work: 6, target: 25, reward: 4500, expire: 60, danger: 0.12, xp: 8, arrest: 0.4, ev: true }
+};
+
+/** Hva innringeren sier når nødsentralen svarer (brukes i samtalekøen og på radio). */
+const CALLER = {
+  brann_bygning: ['Det brenner i leiligheten over meg – det kommer røyk ut av vinduene!', 'Det står flammer ut av et vindu her, folk er fortsatt inne!'],
+  bilbrann: ['En bil står i full fyr i veien!'], brannalarm: ['Brannalarmen går i bygget, vi vet ikke om det brenner.'],
+  fastklemt: ['Det har vært et kraftig sammenstøt, sjåføren sitter fastklemt!'], gasslekkasje: ['Det lukter sterkt gass i oppgangen!'],
+  vannredning: ['Noen har falt i vannet fra kaia og klarer ikke komme opp!'], innbrudd: ['Jeg hører noen bryte seg inn hos naboen.'],
+  slagsmal: ['Det er et stort slagsmål utenfor utestedet, noen ligger nede!'], trafikk_pol: ['Det har vært en trafikkulykke, bilene sperrer veien.'],
+  savnet: ['Moren min har ikke kommet hjem, hun er dement.'], ran: ['Vi er nettopp blitt ranet i butikken, han hadde kniv!'],
+  trusler: ['En mann truer folk på gata.'], plivo: ['Det skytes! Folk løper!'], hjertestans: ['Mannen min har falt om og puster ikke!'],
+  fall: ['Moren min har falt og får ikke reist seg.'], pustebesvar: ['Jeg får ikke puste ordentlig.'], fodsel: ['Kona mi skal føde – det går fort nå!'],
+  trafikkskade: ['En fotgjenger er påkjørt!'], strand_drukning: ['Noen er dratt opp av vannet og er livløs!'], strand_barn: ['Jeg finner ikke barnet mitt på stranden!'],
+  strand_skade: ['En gutt har kuttet foten på stranden.'], strand_heteslag: ['En kvinne har svimt av i varmen.'], fjell_savnet: ['Vennen min kom aldri ned fra fjellet.'],
+  fjell_skade: ['Jeg har falt og skadet foten på stien.'], gressbrann: ['Det brenner i gresset, det sprer seg mot husene!'], pipebrann: ['Det står gnister og flammer ut av pipa!'],
+  container: ['En container brenner i bakgården.'], heis: ['Vi sitter fast i heisen.'], kjemikalie: ['En tankbil lekker noe som lukter stikkende!'],
+  bat_brann: ['En båt brenner ved kaia!'], butikktyveri: ['Vi har holdt igjen en butikktyv.'], ruskjoring: ['Bilen foran meg kjører i sikksakk.'],
+  husbrak: ['Jeg hører skriking og slag fra leiligheten ved siden av!'], demonstrasjon: ['Demonstranter har satt seg i veibanen.'], savnet_barn: ['Datteren min på seks er borte!'],
+  hjerneslag: ['Far snakker rart og den ene armen henger!'], brystsmerter: ['Jeg har sterke smerter i brystet.'], overdose: ['En mann ligger bevisstløs i portrommet, det ligger sprøyter der.'],
+  allergi: ['Hun hovner opp i ansiktet etter å ha spist nøtter!'], diabetes: ['Mannen min er diabetiker og helt forvirret.'], psykisk: ['Broren min snakker om å ta livet sitt.'],
+  sykkel: ['En syklist har kjørt over styret og blør fra hodet.'], bat_nod: ['En båt har kantret ute i fjorden, folk ligger i vannet!']
 };
 
 /** Vær (vises i toppen og påvirker fart og hendelser). */
