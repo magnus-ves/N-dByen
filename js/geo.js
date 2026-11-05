@@ -57,7 +57,8 @@ async function roadsFromTiles(cfg) {
 }
 async function loadRoadData(cfg) {
   try { const r = await fetch(cfg.roads, { cache: 'force-cache' }); if (r.ok) { const j = await r.json(); if (j.features && j.features.length) return { gj: j, kilde: 'fil' }; } } catch (e) { /* prøv Overpass */ }
-  try { return { gj: await fetchOverpassLive(cfg), kilde: 'overpass' }; } catch (e) { return { gj: await roadsFromTiles(cfg), kilde: 'kartfliser' }; }
+  try { return { gj: await roadsFromTiles(cfg), kilde: 'kartfliser' }; } catch (e) { console.info('[NødByen] kartfliser ikke brukbare:', e.message); }   // raskest: veiene er allerede lastet i kartet
+  return { gj: await fetchOverpassLive(cfg), kilde: 'overpass' };
 }
 async function loadSites(cfg) {
   try { const r = await fetch(cfg.sitesFile); if (r.ok) return (await r.json()).features || []; } catch (e) { /* bruker config */ }
