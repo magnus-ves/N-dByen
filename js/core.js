@@ -369,7 +369,7 @@ const CITY_CONFIGS = {
     id: 'oslo', navn: 'Oslo', tagline: 'Hovedstaden ved fjorden', vanskelighet: 'Middels', diff: 1.0, seed: 1814,
     beskrivelse: 'Ekte Oslo i 3D: tett sentrum, travle netter og mye trafikk. Oslofjorden med badestrender og øyer gir sommerjobb for strandlivredderne.',
     egenskaper: ['Flere hendelser', 'Strandlivreddere', 'Øyer med svak dekning'],
-    center: { lat: 59.912686, lon: 10.7442011 }, zoom: 16.2, pitch: 52, bearing: 12.9,   // utsnitt som i f4map-lenken (zoom 17 i spillet ligger tettere enn dette startbildet)
+    center: { lat: 59.91333, lon: 10.73897 }, zoom: 14.9, pitch: 45, bearing: 0,   // utsnitt fra streets.gl-lenken (avstand 1500 m ≈ zoom 14,9)
     bbox: [10.665, 59.872, 10.800, 59.940],             // [vest, sør, øst, nord]
     downtownR: 2600, innerR: 3200,                      // meter fra sentrum (tetthet / detaljert veinett)
     roads: 'data/oslo-roads.geojson', sitesFile: 'data/oslo-sites.geojson',
