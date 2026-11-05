@@ -1,0 +1,17 @@
+name: Hent veidata fra OpenStreetMap
+on:
+  workflow_dispatch:
+  schedule: [{ cron: '17 3 1 * *' }]       # den 1. hver måned
+permissions: { contents: write }
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: node scripts/fetch-data.mjs
+      - name: Commit data
+        run: |
+          git config user.name "github-actions"; git config user.email "actions@users.noreply.github.com"
+          git add data && (git diff --cached --quiet || git commit -m "Oppdater OSM-data (veier og stasjoner)") && git push || true

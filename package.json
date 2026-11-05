@@ -1,0 +1,12 @@
+{
+  "name": "nodbyen",
+  "version": "2.0.0",
+  "private": true,
+  "description": "NødByen – beredskapsspill i ekte 3D-kart (MapLibre GL JS + Three.js)",
+  "type": "module",
+  "scripts": {
+    "data": "node scripts/fetch-data.mjs",
+    "start": "npx --yes serve -l 8080 ."
+  },
+  "engines": { "node": ">=18" }
+}
