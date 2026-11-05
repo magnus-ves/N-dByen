@@ -587,17 +587,7 @@ function vehicleBase(type, org, modelOverride) {
     const tr = new THREE.Group(); tr.position.set(.1, 1.25, -3.15); tr.add(R.box(.02, .6, .08, 0x3b3f42, 0, 0, 0)); tr.name = 'rotor2'; g.add(tr);
     bar(0, 1.6, -.6, .2); return { g, lights };
   }
-  if (model === 'boat') {   // redningsbåt: skrog, dekk, styrhus med vinduer, rekkverk, mast med radar
-    const sh = new THREE.Shape(); sh.moveTo(-.55, -1.35); sh.lineTo(.55, -1.35); sh.lineTo(.62, .55); sh.quadraticCurveTo(.42, 1.35, 0, 1.7); sh.quadraticCurveTo(-.42, 1.35, -.62, .55); sh.closePath();
-    const hull = new THREE.Mesh(R.geo('hull2', () => { const h = new THREE.ExtrudeGeometry(sh, { depth: .55, bevelEnabled: true, bevelSize: .07, bevelThickness: .08, bevelSegments: 3 }); h.rotateX(Math.PI / 2); h.translate(0, .6, 0); return h; }), R.mat(parseInt(P.base.slice(1), 16)));
-    g.add(hull); g.add(R.box(1.22, .05, 2.9, 0xD9D6CE, 0, .62, .1)); g.add(R.box(1.26, .12, .1, 0x1E2124, 0, .12, -1.36));
-    g.add(R.box(.95, .62, 1.05, 0xF4F1EC, 0, .95, -.25));
-    for (const sd of [-1, 1]) { const w = new THREE.Mesh(R.geo('box', () => new THREE.BoxGeometry(1, 1, 1)), glassM); w.scale.set(.02, .22, .8); w.position.set(sd * .48, 1.08, -.25); g.add(w); }
-    const fw = new THREE.Mesh(R.geo('box'), glassM); fw.scale.set(.85, .24, .02); fw.position.set(0, 1.08, .28); g.add(fw);
-    for (const sd of [-1, 1]) { g.add(R.box(.03, .03, 2.4, 0xD0D0D0, sd * .58, .95, .2)); for (let k = 0; k < 6; k++) g.add(R.box(.025, .3, .025, 0xD0D0D0, sd * .58, .8, -1.0 + k * .45)); g.add(R.box(.06, .18, .3, 0x1E2124, sd * .66, .55, .3)); }
-    g.add(R.box(.05, .9, .05, 0xD0D0D0, 0, 1.7, -.4)); g.add(R.box(.6, .05, .1, 0xD0D0D0, 0, 1.95, -.4)); g.add(R.box(.5, .06, .12, 0x2F3335, 0, 2.2, -.4));
-    bar(0, 1.32, -.25, .22); return { g, lights };
-  }
+  if (model === 'boat') return boatModel(org, glassM, lights);
   if (model === 'foot') {   // livredder: rød trøye, gule shorts, solhatt og redningsbøye
     const skin = R.mat(0xE3B48F); g.add(R.box(.38, .48, .22, 0xE2452F, 0, .86, 0)); g.add(R.box(.36, .22, .22, 0xF2D21B, 0, .55, 0));
     for (const sd of [-1, 1]) { g.add(R.box(.13, .46, .14, 0xE3B48F, sd * .1, .22, 0)); g.add(R.box(.1, .42, .1, 0xE3B48F, sd * .25, .82, 0)); g.add(R.box(.13, .05, .2, 0x2F3335, sd * .1, .02, .03)); }
@@ -643,6 +633,71 @@ function vehicleBase(type, org, modelOverride) {
     g.add(R.box(.5, .08, 2.2, 0xD8D6D0, -pr.w * .2, H + .16, -.6)); for (const s of [-1, 1]) g.add(R.box(.1, .1, .1, 0x3d7dff, s * (pr.w / 2 + .02), H - .1, -L / 2 + .1, true)); }   // stige på taket og blålys bak
   if (model === 'armored') g.add(R.box(.5, .25, .5, 0x3b4450, 0, H + .12, -.2));
   if (!civ && org !== 'strand') { const top = pr.cab ? Math.max(...pr.p.filter(q => q[0] >= pr.cab[0] - .05 && q[0] <= pr.cab[1] + .05).map(q => q[1])) : H, zc = pr.cab ? (pr.cab[0] + pr.cab[1]) / 2 - L / 2 : 0; bar(0, top + .06, zc, model === 'car' || model === 'suv' ? .22 : .3); if (model === 'ambulance' || model === 'van') for (const s of [-1, 1]) { const m = new THREE.Mesh(R.geo('box'), blue()); m.scale.set(.12, .1, .12); m.position.set(s * .45, H + .02, -L / 2 + .1); g.add(m); lights.push(m); } }
+  return { g, lights };
+}
+/* ---------- redningsbåt (RS-skøyte / brannbåt): skrog med V-bunn bygget av spant, lakk som tekstur, konsoll, hardtak, mast og påhengsmotor ---------- */
+const BOAT = { L: 3.8, B: 1.22, D: .78, N: 16 };
+function boatHullGeo() {
+  const { L, B, D, N } = BOAT, pos = [], uv = [], groups = [];
+  const hb = t => Math.max(.015, B / 2 * (t < .58 ? 1 - .06 * (1 - t / .58) : Math.sqrt(Math.max(0, 1 - Math.pow((t - .58) / .42, 2)))));
+  const deck = t => D + .14 * t * t, keel = t => (t < .52 ? 0 : (t - .52) / .48 * .62);
+  const sec = t => { const h = hb(t), k = keel(t), d = deck(t), c = k + (d - k) * .36; return [[h, d], [h * .9, c], [0, k], [-h * .9, c], [-h, d]]; };
+  const st = []; for (let i = 0; i <= N; i++) { const t = i / N; st.push({ t, z: -L / 2 + t * L, p: sec(t) }); }
+  const tri = (a, b, c, ua, ub, uc) => { pos.push(...a, ...b, ...c); uv.push(...ua, ...ub, ...uc); };
+  const P3 = (s, j) => [s.p[j][0], s.p[j][1], s.z], UV = (s, j) => [s.t, (s.p[j][1]) / (D + .14)];
+  const side = (j0, j1) => { for (let i = 0; i < N; i++) { const A = st[i], Bn = st[i + 1]; tri(P3(A, j0), P3(Bn, j0), P3(Bn, j1), UV(A, j0), UV(Bn, j0), UV(Bn, j1)); tri(P3(A, j0), P3(Bn, j1), P3(A, j1), UV(A, j0), UV(Bn, j1), UV(A, j1)); } };
+  let n0 = 0; const grp = mi => { groups.push([n0, pos.length / 3 - n0, mi]); n0 = pos.length / 3; };
+  side(0, 1); side(1, 2); grp(0);          // styrbord (x > 0)
+  side(2, 3); side(3, 4); grp(1);          // babord
+  for (let i = 0; i < N; i++) { const A = st[i], Bn = st[i + 1]; tri(P3(A, 0), P3(A, 4), P3(Bn, 4), [0, 0], [1, 0], [1, 1]); tri(P3(A, 0), P3(Bn, 4), P3(Bn, 0), [0, 0], [1, 1], [0, 1]); }
+  const s0 = st[0]; tri(P3(s0, 0), P3(s0, 1), P3(s0, 2), [0, 0], [0, 0], [0, 0]); tri(P3(s0, 0), P3(s0, 2), P3(s0, 4), [0, 0], [0, 0], [0, 0]); tri(P3(s0, 2), P3(s0, 3), P3(s0, 4), [0, 0], [0, 0], [0, 0]); grp(2);   // dekk og akterspeil
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.computeVertexNormals();
+  for (const [st0, cnt, mi] of groups) g.addGroup(st0, cnt, mi); return g;
+}
+/** Skroglakk for én side. mirrorText: styrbord vises speilvendt, så teksten tegnes speilvendt der for å leses riktig. */
+R.hullMat = function (org, mirrorText) {
+  const key = 'hull' + org + mirrorText; if (R.mats[key]) return R.mats[key];
+  const W = 1024, Hh = 256, c = document.createElement('canvas'); c.width = W; c.height = Hh; const x = c.getContext('2d'), rs = org !== 'brann';
+  const base = rs ? '#F6F6F4' : '#C4241B', accent = rs ? '#E3352B' : '#F4F1E8', V = v => (1 - v) * Hh, U = u => u * W;
+  x.fillStyle = base; x.fillRect(0, 0, W, Hh);
+  x.fillStyle = '#2B2E31'; x.fillRect(0, V(.2), W, Hh);                                       // bunnstoff
+  x.fillStyle = '#1E2124'; x.fillRect(0, V(.95), W, V(.83) - V(.95));                         // svart skvettlist
+  x.fillStyle = accent; x.beginPath(); x.moveTo(U(.93), V(1.05)); x.lineTo(U(1.01), V(1.05)); x.lineTo(U(1.01), V(.25)); x.lineTo(U(.965), V(.25)); x.closePath(); x.fill();   // fender i baugen
+  x.beginPath(); x.moveTo(0, V(.83)); x.lineTo(U(.46), V(.83)); x.lineTo(U(.5), V(.74)); x.lineTo(0, V(.74)); x.closePath(); x.fill();   // stripe akter
+  x.beginPath(); x.moveTo(U(.1), V(.62)); x.lineTo(U(.28), V(.62)); x.lineTo(U(.33), V(.48)); x.lineTo(U(.28), V(.4)); x.lineTo(U(.24), V(.4)); x.lineTo(U(.27), V(.5)); x.lineTo(U(.13), V(.5)); x.closePath(); x.fill();
+  x.save(); if (mirrorText) { x.translate(W, 0); x.scale(-1, 1); }
+  const tx = mirrorText ? W - U(.66) : U(.66); x.fillStyle = rs ? '#1F3A8A' : '#F4F1E8'; x.font = '900 112px Arial Black, Arial, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(rs ? 'RS' : 'BRANN', tx, V(.5));
+  x.restore();
+  for (let i = 0; i < 4; i++) { x.fillStyle = '#2B2E31'; x.beginPath(); x.arc(U(.36 + i * .02), V(.36), 4, 0, TAU); x.fill(); }
+  const t = new THREE.CanvasTexture(c); t.anisotropy = 8; return (R.mats[key] = new THREE.MeshLambertMaterial({ map: t, side: THREE.DoubleSide }));
+};
+function boatModel(org, glassM, lights) {
+  const g = new THREE.Group(), rs = org !== 'brann', { L, D } = BOAT, top = rs ? 0xE3352B : 0xC4241B, deckY = D + .02;
+  const hull = new THREE.Mesh(R.geo('hullV', boatHullGeo), [R.hullMat(org, true), R.hullMat(org, false), R.mat(0xE8E6E1)]); hull.position.y = -.22; g.add(hull);
+  const y0 = deckY - .2;
+  // styrekonsoll med vinduer
+  g.add(R.box(1.0, .62, 1.1, 0xF4F4F2, 0, y0 + .31, .05));
+  const ws = new THREE.Mesh(R.geo('box', () => new THREE.BoxGeometry(1, 1, 1)), glassM); ws.scale.set(.96, .5, .03); ws.position.set(0, y0 + .85, .6); ws.rotation.x = -.45; g.add(ws);
+  for (const sd of [-1, 1]) { const w = new THREE.Mesh(R.geo('box'), glassM); w.scale.set(.02, .42, .95); w.position.set(sd * .5, y0 + .86, .02); g.add(w); }
+  // hardtak: rødt over, hvitt under, svart kant, båret av stolper
+  const ht = y0 + 1.13; g.add(R.box(1.18, .06, 1.75, top, 0, ht + .05, -.15)); g.add(R.box(1.16, .04, 1.72, 0xF4F4F2, 0, ht, -.15)); g.add(R.box(1.2, .03, .06, 0x1E2124, 0, ht + .05, .72));
+  for (const sd of [-1, 1]) { g.add(R.box(.05, .6, .05, 0x1E2124, sd * .5, y0 + .85, .55)); g.add(R.box(.05, 1.1, .05, 0x1E2124, sd * .5, y0 + .6, -.9)); }
+  g.add(R.box(.5, .1, .2, 0xF4F4F2, 0, ht + .13, -.35)); g.add(R.box(.36, .12, .26, 0xFFFFFF, -.25, ht + .14, .2));   // redningsflåte og søkelys
+  // mast med radar, antenner og lys
+  g.add(R.box(.07, .9, .07, 0x1E2124, 0, ht + .5, -.75)); g.add(R.box(.7, .05, .06, 0x1E2124, 0, ht + .78, -.75));
+  g.add(R.box(.8, .07, .16, 0xF4F4F2, 0, ht + .98, -.75)); const dome = new THREE.Mesh(R.geo('ico', () => new THREE.SphereGeometry(1, 16, 12)), R.mat(0xF4F4F2)); dome.scale.set(.14, .1, .14); dome.position.set(.25, ht + .86, -.75); g.add(dome);
+  for (const [xx, hh] of [[-.32, .55], [-.22, .4], [.32, .5]]) g.add(R.box(.02, hh, .02, 0xF4F4F2, xx, ht + .8 + hh / 2, -.75));
+  const blue = R.mats.blueL || (R.mats.blueL = new THREE.MeshBasicMaterial({ color: 0x3d7dff })); for (const sd of [-1, 1]) { const m = new THREE.Mesh(R.geo('box'), blue); m.scale.set(.12, .08, .1); m.position.set(sd * .4, ht + .12, .66); g.add(m); lights.push(m); }
+  // rekkverk på fordekket
+  const rail = (a, b) => beam(g, a, b, .03, 0x2A2E31);
+  for (const sd of [-1, 1]) { rail([sd * .5, deckY + .32, .7], [sd * .3, deckY + .38, 1.6]); for (const zz of [.75, 1.15, 1.5]) rail([sd * (zz > 1.4 ? .32 : .5), deckY - .18, zz], [sd * (zz > 1.4 ? .32 : .5), deckY + .34, zz]); }
+  rail([-.3, deckY + .38, 1.6], [.3, deckY + .38, 1.6]);
+  // påhengsmotor med rød kappe, vannscooter og flagg akter
+  g.add(R.box(.42, .55, .4, 0x1E2124, 0, y0 + .2, -L / 2 - .2)); g.add(R.box(.44, .25, .42, 0xE3352B, 0, y0 + .52, -L / 2 - .2)); g.add(R.box(.14, .5, .14, 0x2B2E31, 0, y0 - .25, -L / 2 - .25));
+  if (rs) { g.add(R.box(.42, .14, .9, 0x1E2124, .1, y0 + .05, -L / 2 + .55)); g.add(R.box(.36, .16, .7, 0xE3352B, .1, y0 + .19, -L / 2 + .5)); g.add(R.box(.3, .08, .3, 0x2B2E31, .1, y0 + .32, -L / 2 + .6)); }
+  g.add(R.box(.02, .7, .02, 0xE8E8E8, -.4, y0 + .55, -L / 2 + .1)); g.add(R.box(.02, .22, .32, 0xC8102E, -.4, y0 + .8, -L / 2 - .07)); g.add(R.box(.021, .05, .32, 0xFFFFFF, -.4, y0 + .8, -L / 2 - .07)); g.add(R.box(.022, .022, .32, 0x00205B, -.4, y0 + .8, -L / 2 - .07));
+  // SAR / BRANN på konsollen (egne flater, alltid riktig vei)
+  for (const sd of [-1, 1]) { const p = new THREE.Mesh(R.geo('signq', () => new THREE.PlaneGeometry(1, 1)), R.signMat(rs ? 'SAR' : '110', '#F4F4F2', rs ? '#E3352B' : '#C4241B')); p.scale.set(.6, .14, 1); p.rotation.y = sd * Math.PI / 2; p.position.set(sd * .505, y0 + .45, -.25); g.add(p); }
   return { g, lights };
 }
 R._vcache = {};

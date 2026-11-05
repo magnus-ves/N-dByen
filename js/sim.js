@@ -309,7 +309,7 @@ Sim.addUnit = function (type, stationId, opts) {
   const park = Sim.parkPos(st, seq - 1);
   const u = { id, type, org: T.org, stationId, name: CALL[type] + ' ' + st.no + '-' + seq, status: 'ledig', x: park.x, z: park.z, h: park.h, path: [], pi: 0, job: null, wait: 0, contact: 'bra', lastKnown: { x: park.x, z: park.z }, vis: true, sig: 1, siren: false, alt: 0 };
   if (st.type === 'helikopterbase') u.alt = 0.3;
-  if (T.boat) { const lot = WORLD.lotById.get(st.lotId), d = Sim.nearestPier(lot.x, lot.z); u.dock = { x: d.x + rr(-6, 6), z: d.z + rr(-6, 6) }; u.x = u.dock.x; u.z = u.dock.z; }   // båten ligger ved nærmeste kai
+  if (T.boat) { const lot = WORLD.lotById.get(st.lotId), d = Sim.nearestPier(lot.x, lot.z), k = Object.values(S.units).filter(o => o.dock && Math.hypot(o.dock.x - d.x, o.dock.z - d.z) < 60).length; u.dock = { x: d.x + (k % 3) * 14, z: d.z + Math.floor(k / 3) * 8 }; u.x = u.dock.x; u.z = u.dock.z; }   // båtene ligger side om side ved nærmeste kai
   if (!opts.noCrew) Staff.crewFor(u, !!opts.freeCrew);
   S.units[id] = u; Bus.emit('unitAdded', u); return u;
 };
