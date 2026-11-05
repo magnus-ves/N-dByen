@@ -17,12 +17,13 @@ concurrency: { group: pages, cancel-in-progress: true }
 jobs:
   bygg:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       pages: ${{ steps.pages.outputs.on }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22 }
+      - name: Node (forhåndsinstallert på GitHub sine maskiner)
+        run: node --version
 
       - name: Sjekk JavaScript for syntaksfeil
         run: |
@@ -92,6 +93,7 @@ jobs:
 
   publiser:
     needs: bygg
+    timeout-minutes: 15
     if: needs.bygg.outputs.pages == 'true'
     runs-on: ubuntu-latest
     environment: { name: github-pages, url: '${{ steps.d.outputs.page_url }}' }

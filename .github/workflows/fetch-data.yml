@@ -2,6 +2,7 @@ name: Hent veidata fra OpenStreetMap
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     paths: ['scripts/fetch-data.mjs', '.github/workflows/fetch-data.yml']   # kjører av seg selv når denne endres
   schedule: [{ cron: '17 3 1 * *' }]       # den 1. hver måned
 permissions: { contents: write }
