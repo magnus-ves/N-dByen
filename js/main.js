@@ -145,11 +145,14 @@ function loop(now) {
       if (Net.dirty) { Net.dirty = false; R.updateCoverage(Net.signalAt.bind(Net)); }
     }
     R.frame(rdt, simDt, live ? S : null);
+    Sound.sirenFrame(live ? S : null, rdt); Game.sndT = (Game.sndT || 0) + rdt; if (Game.sndT > .5 && R.map) { Game.sndT = 0; Sound.bed(clamp((R.map.getZoom() - 14) / 4, 0, 1), S && (S.weather.kind === 'regn' || S.weather.kind === 'storm'), (R.env.daylight || 1) < .4); }
     UI.update(rdt);
     if (Game.mode === 'play') { Game.saveTimer += rdt; if (Game.saveTimer > 20) { Game.saveTimer = 0; Store.save(); } }
   } catch (e) { console.error(e); Game.errors = (Game.errors || 0) + 1; if (Game.errors > 50) { S && (S.paused = true); } }
   // enkel adaptiv kvalitet
-  if (raw < 0.5) { Game.fpsT += raw; Game.fpsN++; if (Game.fpsT > 3) { const avg = Game.fpsT / Game.fpsN; if (avg > 0.045 && R.dpr > 1 && !Game.lowGfx) { Game.lowGfx = true; R.setQuality(1); UI.toast('Grafikken er senket for jevnere spilling', 'info'); } Game.fpsT = 0; Game.fpsN = 0; } }
+  if (raw < 0.5) { Game.fpsT += raw; Game.fpsN++; if (Game.fpsT > 3) { const avg = Game.fpsT / Game.fpsN; if (avg > 0.05 && Game.mode === 'play') { Game.slow = (Game.slow || 0) + 1;   // trinnvis: lavere oppløsning/skygger/trafikk, deretter færre bygningsdetaljer
+            if (!Game.lowGfx) { Game.lowGfx = true; R.setQuality(1); R.initTraffic(); City.lastKey = ''; UI.toast('Grafikken er senket for jevnere spilling (kan endres i menyen)', 'info'); }
+            else if (Game.slow === 3) { City.lite = true; City.lastKey = ''; UI.toast('Færre detaljer langt unna for jevnere spilling', 'info'); } } Game.fpsT = 0; Game.fpsN = 0; } }
 }
 R.onTap = function (x, y, touch) {
   if (Game.mode === 'place0' || Game.place) { UI.placeTap(x, y, touch); return; }

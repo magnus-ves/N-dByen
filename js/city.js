@@ -184,7 +184,7 @@ const City = {
     const map = R.map, w = R.world; if (!map || !w || !R.ready || City.busy || !map.getSource('om')) return;
     let fps = []; try { fps = City.removalPass(map.querySourceFeatures('om', { sourceLayer: 'building' }), w); } catch (e) { /* ignorer */ }
     const z = map.getZoom(); if (z < 14.3) { City.clear(); return; }
-    const c = map.getCenter(), cp = w.proj.toXZ(c.lat, c.lng), rad = clamp(R.mpp * Math.max(R.w, R.h) * 1.1, 400, 1700);
+    const c = map.getCenter(), cp = w.proj.toXZ(c.lat, c.lng), rad = clamp(R.mpp * Math.max(R.w, R.h) * 1.1, 400, City.lite ? 800 : Game.lowGfx ? 1200 : 1700);
     const key = Math.round(cp.x / 60) + ',' + Math.round(cp.z / 60) + ',' + Math.round(rad / 100) + '|' + fps.map(f => Math.round(f.x) + ':' + Math.round(f.z)).join(';');
     if (key === City.lastKey && City.mesh) return; City.busy = true;
     try {
@@ -264,7 +264,7 @@ const City = {
       }
       City.clear();
       const grp = new THREE.Group();
-      City.trees(grp, w, cp, rad);
+      City.trees(grp, w, cp, rad); City.streetLamps(grp, w, cp, rad);
       // balkonger (betongplate + glassrekkverk) og takbokser som instanser
       const boxG = R.geo('box', () => new THREE.BoxGeometry(1, 1, 1)), addInst = (list, mat, sx, sy, sz) => {
         if (!list.length) return; const m = new THREE.InstancedMesh(boxG, mat, list.length), cc = new THREE.Color();
@@ -316,6 +316,16 @@ const City = {
     }
     crown.count = nd; cone.count = nc; trunk.count = Math.min(N, nd + nc);
     for (const m of [trunk, crown, cone]) { m.frustumCulled = false; m.castShadow = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; grp.add(m); }
+  },
+  /** Gatelys langs veiene (stolpe med arm); lyset tegnes som glød om natten (R.glowFrame). */
+  streetLamps(grp, w, cp, rad) {
+    const R2 = Math.min(rad, Game.lowGfx ? 600 : 1100), out = [];
+    for (const e of w.edges) { if (out.length >= 1600) break; if (w.comp[e.a] !== w.mainComp || e.len < 20) continue; const m = e.geom[e.geom.length >> 1]; if (Math.abs(m[0] - cp.x) > R2 || Math.abs(m[1] - cp.z) > R2) continue;
+      const step = HW_MUL[e.hw] >= 1.05 ? 32 : 40; for (let s0 = 10, k = 0; s0 < e.len - 5; s0 += step, k++) { const p = w.nav.pointAt(e, s0), q = w.nav.pointAt(e, Math.min(e.len, s0 + 2)), dx = q[0] - p[0], dz = q[1] - p[1], d = Math.hypot(dx, dz) || 1, sd = k % 2 ? 1 : -1, off = HW_MUL[e.hw] >= 1.05 ? 9 : 7; out.push([p[0] - dz / d * off * sd, p[1] + dx / d * off * sd, Math.atan2(dx, dz) + (sd > 0 ? Math.PI / 2 : -Math.PI / 2)]); } }
+    City.lamps = out.map(o => [o[0] + Math.sin(o[2]) * 1.2, o[1] + Math.cos(o[2]) * 1.2]); if (!out.length) return;
+    const pole = new THREE.InstancedMesh(R.geo('box', () => new THREE.BoxGeometry(1, 1, 1)), R.mat(0x4E5356), out.length * 2);
+    out.forEach((o, i) => { _q.setFromAxisAngle(_up, o[2]); _v3.set(o[0], 3.4, o[1]); _s3.set(.16, 6.8, .16); _m4.compose(_v3, _q, _s3); pole.setMatrixAt(i * 2, _m4); _v3.set(o[0] + Math.sin(o[2]) * .7, 6.75, o[1] + Math.cos(o[2]) * .7); _s3.set(.12, .1, 1.5); _m4.compose(_v3, _q, _s3); pole.setMatrixAt(i * 2 + 1, _m4); });
+    pole.frustumCulled = false; pole.castShadow = true; grp.add(pole);
   },
   /** Skygger fra sola: lyset følger kameraet, bakken under byen tar imot skygger. */
   shadows() {

@@ -207,7 +207,7 @@ R.init = function (container, opts) {
     map.on('load', () => { addFacades(); map.addLayer(R.layer); R.ready = true; R.setBase(R.base || 'sat'); R.setSeason(R.seasonIdx); if (!done) { done = true; resolve(true); } });
     map.on('click', e => { if (R.onTap) R.onTap(e.point.x, e.point.y, !!(e.originalEvent && (e.originalEvent.pointerType === 'touch' || e.originalEvent.type === 'touchend'))); });
     map.on('resize', () => R.resize());
-    let rt = 0; const roofSoon = () => { clearTimeout(rt); rt = setTimeout(() => (window.requestIdleCallback ? requestIdleCallback(() => City.update(), { timeout: 1500 }) : City.update()), 500); }; map.on('moveend', roofSoon); map.on('idle', () => { if (!City.mesh || City.lastKey === '') roofSoon(); R.fixBeaches(); });
+    let rt = 0, rLast = 0; const roofSoon = () => { clearTimeout(rt); const wait = performance.now() - rLast > 1500 ? 60 : 500; rt = setTimeout(() => { rLast = performance.now(); (window.requestIdleCallback ? requestIdleCallback(() => City.update(), { timeout: 1500 }) : City.update()); }, wait); }; map.on('moveend', roofSoon); ['dragstart', 'wheel', 'touchstart'].forEach(ev => map.on(ev, () => { R.follow = null; })); map.on('idle', () => { if (!City.mesh || City.lastKey === '') roofSoon(); R.fixBeaches(); });
     R.resize();
     setTimeout(() => { if (!done) { done = true; resolve(false); } }, 3500);
   });
@@ -235,7 +235,7 @@ R.setWorld = function (world, opts) {
   const o = maplibregl.MercatorCoordinate.fromLngLat([c.lon, c.lat], 0), s = o.meterInMercatorCoordinateUnits();
   R.origin = o; R.metersToMerc = s;
   R.L.makeTranslation(o.x, o.y, o.z).scale(new THREE.Vector3(s, -s, s)).multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2));
-  buildCoverage(); buildBeaches(); R.fxInit(); R.ensureOverlay(); R.initTraffic();
+  buildCoverage(); buildBeaches(); R.fxInit(); R.ensureOverlay(); R.initTraffic(); if (R.glowPts) { R.scene.remove(R.glowPts); R.glow = null; }
   if (R.offline) { // testvisning uten fliser: tegn veinettet som linjer
     const pts = []; for (const e of world.edges) for (let i = 1; i < e.geom.length; i++) pts.push(e.geom[i - 1][0], 0.3, e.geom[i - 1][1], e.geom[i][0], 0.3, e.geom[i][1]);
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)); R.roadDebug = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xb9ad90 })); R.scene.add(R.roadDebug);
@@ -757,7 +757,7 @@ R.updateTraffic = function (dtGame) {
     const p = nav.pointAt(c.e, c.s), q = nav.pointAt(c.e, clamp(c.s + c.dir * 3, 0, c.e.len)), dx = q[0] - p[0], dz = q[1] - p[1], d = Math.hypot(dx, dz) || 1;
     const ux = dx / d, uz = dz / d, px = p[0] - uz * 1.9, pz = p[1] + ux * 1.9;   // høyre kjørefelt
     if (Math.hypot(px - cx, pz - cz) > rad) { c.e = null; R.spawnCar(c); }
-    const h = Math.atan2(ux, uz);
+    const h = Math.atan2(ux, uz); c.px = px; c.pz = pz; c.h = h;
     _q.setFromAxisAngle(_up, h); _v3.set(px, 0, pz); _s3.set(VS * 0.95, VS * 0.95, VS * 0.95); _m4.compose(_v3, _q, _s3); T.models[c.mi].mesh.setMatrixAt(c.k, _m4);
   }
   for (const md of T.models) if (md.mesh) md.mesh.instanceMatrix.needsUpdate = true;
@@ -792,6 +792,37 @@ R.fixBeaches = function () {
     const v = R.beachViews && R.beachViews[id]; if (v) { v.grp.position.set(b.tower.x, 0, b.tower.z); v.grp.rotation.y = Math.atan2(dx, dz); }
     if (typeof S !== 'undefined' && S) for (const u of Object.values(S.units)) if (u.type === 'livredder' && u.beach === id && u.status === 'ledig') { u.x = b.tower.x; u.z = b.tower.z; }
   }
+};
+
+/* ---------- lys om natten: frontlykter, baklys, blålys som lyser opp, gatelys (additive lyspunkter i meter) ---------- */
+R.glowInit = function () {
+  const N = 4000, g = new THREE.BufferGeometry(); R.glow = { N, pos: new Float32Array(N * 3), col: new Float32Array(N * 3), size: new Float32Array(N) };
+  g.setAttribute('position', new THREE.BufferAttribute(R.glow.pos, 3)); g.setAttribute('aColor', new THREE.BufferAttribute(R.glow.col, 3)); g.setAttribute('aSize', new THREE.BufferAttribute(R.glow.size, 1));
+  R.glowMat = new THREE.ShaderMaterial({ uniforms: { uK: { value: 1 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: 'attribute float aSize; attribute vec3 aColor; uniform float uK; varying vec3 vC; void main(){ vC = aColor; gl_PointSize = clamp(aSize * uK, 2.0, 220.0); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: 'varying vec3 vC; void main(){ float r = length(gl_PointCoord - 0.5) * 2.0; if (r > 1.0) discard; float a = exp(-r * r * 4.0) + 0.6 * max(0.0, 1.0 - r * 6.0); gl_FragColor = vec4(vC * a, a); }' });
+  const pts = new THREE.Points(g, R.glowMat); pts.frustumCulled = false; pts.renderOrder = 9; R.glowPts = pts; R.scene.add(pts);
+};
+R.glowFrame = function (S) {
+  if (!R.glow) R.glowInit(); const G = R.glow, night = smooth(0.35, 0.8, 1 - (R.env.daylight == null ? 1 : R.env.daylight)); let n = 0;
+  const add = (x, y, z, r, g, b, s) => { if (n >= G.N) return; G.pos[n * 3] = x; G.pos[n * 3 + 1] = y; G.pos[n * 3 + 2] = z; G.col[n * 3] = r; G.col[n * 3 + 1] = g; G.col[n * 3 + 2] = b; G.size[n] = s; n++; };
+  const car = (x, z, h, L, W, k) => { const sx = Math.sin(h), sz = Math.cos(h), px = sz, pz = -sx;   // lykter foran (varmt hvitt) og bak (rødt)
+    for (const sd of [-1, 1]) { add(x + sx * L + px * W * sd, 1.6, z + sz * L + pz * W * sd, .9 * night * k, .82 * night * k, .62 * night * k, 7); add(x - sx * L + px * W * sd, 1.6, z - sz * L + pz * W * sd, .6 * night * k, .05, .04, 3.5); } };
+  if (S && R.views) for (const id in R.views.units) {
+    const v = R.views.units[id], u = S.units[id]; if (!u || !v.grp.visible) continue; const T = UT[u.type];
+    if (night > .02 && !T.foot && T.model !== 'heli') { const pr = VPROF[T.model] || VPROF.car, L = (pr.p ? Math.max(...pr.p.map(q => q[0])) : 2.5) / 2 * VS; car(v.grp.position.x, v.grp.position.z, v.h, L, .32 * VS, 1); }
+    if (u.siren) for (const m of v.lights) if (m.visible) { m.getWorldPosition(_v3); add(_v3.x, _v3.y + .3, _v3.z, .15, .35, 1, 5 + 12 * night); }
+  }
+  if (night > .02) {
+    const T = R.traffic; if (T && T.cars) for (const c of T.cars) if (c.px != null) car(c.px, c.pz, c.h, (CIV_MODELS[c.mi][0] === 'bus' ? 2.3 : 1.05) * VS, .3 * VS, .8);
+    if (City.lamps) for (const l of City.lamps) { add(l[0], 6.6, l[1], 1 * night, .78 * night, .5 * night, 16); add(l[0], .5, l[1], .25 * night, .19 * night, .12 * night, 22); }
+  }
+  R.glowMat.uniforms.uK.value = R.dpr / R.mpp; const a = R.glowPts.geometry.attributes; a.position.needsUpdate = a.aColor.needsUpdate = a.aSize.needsUpdate = true; R.glowPts.geometry.setDrawRange(0, n);
+};
+/** Kameraet følger valgt enhet (stopper når spilleren drar i kartet). */
+R.followFrame = function (S, dt) {
+  if (!R.follow || !S) return; const u = S.units[R.follow]; if (!u || u.vis === false) { R.follow = null; return; }
+  const c = R.map.getCenter(), t = R.toLL(u.x, u.z), k = Math.min(1, dt * 3); R.map.jumpTo({ center: [c.lng + (t[0] - c.lng) * k, c.lat + (t[1] - c.lat) * k] });
 };
 
 /* ---------- partikler: ild, røyk, gass, vannsprut (alt i meter) ---------- */
@@ -1044,9 +1075,9 @@ R.updateLabels = function () {
 R.frame = function (dt, simDt, S) {
   if (!R.ready || !R.world) return;
   R.time += dt; R.updateCam();
-  R.waterTick(dt); R.updateTraffic(S ? simDt : dt * MIN_PER_SEC); City.frame();
+  R.waterTick(dt); R.updateTraffic(S ? simDt : dt * MIN_PER_SEC); City.frame(); R.followFrame(S, dt);
   R._bfx = (R._bfx || 0) + dt; if (R._bfx > 2) { R._bfx = 0; R.fixBeaches(); }
   if (S) R.sync(S, dt);
-  R.fxUpdate(dt, S); R.updateLabels();
+  R.fxUpdate(dt, S); R.glowFrame(S); R.updateLabels();
   R.map.triggerRepaint();
 };

@@ -48,7 +48,7 @@ UI.init = function () {
   Bus.on('toast', m => UI.toast(m.msg, m.kind));
   Bus.on('log', e => UI.pushMini(e));
   Bus.on('levelup', d => UI.levelUp(d));
-  Radio.init(); $('#btnRadio').classList.toggle('on', Radio.enabled);
+  Radio.init(); Sound.init(); Bus.on('dayReport', r => { if (Game.mode === 'play') Goals.report(r); }); $('#btnRadio').classList.toggle('on', Radio.enabled);
   $('#btnRadio').addEventListener('click', () => { Radio.enabled = !Radio.enabled; Radio.unlock(); if (!Radio.enabled && 'speechSynthesis' in window) speechSynthesis.cancel(); Radio.queue = []; $('#btnRadio').classList.toggle('on', Radio.enabled); UI.toast(Radio.enabled ? (Radio.listen.size ? 'Radio på' : 'Radio på – velg talegrupper å lytte på under Nødnett') : 'Radio av', 'info'); });
   Bus.on('incident', inc => { UI.dirty = true; if (Game.mode === 'play') UI.renderTab(true); if (UI.sheet === 0 && window.innerWidth < 900) UI.pulseTab('hendelser'); });
   Bus.on('alarm', al => { UI.dirty = true; UI.alarmBar(); R.focus(S.units[al.unitId].x, S.units[al.unitId].z, 80); });
@@ -161,7 +161,7 @@ UI.menu = function () {
   const cfg = WORLD.cfg;
   UI.modal({ title: 'Meny · ' + cfg.navn, html:
     '<div class="seg" style="flex-wrap:wrap"><button data-m="help">' + icon('doc') + ' Hjelp</button><button data-m="save">' + icon('check') + ' Lagre nå</button><button data-m="auto" class="' + (S.settings.auto ? 'on' : '') + '">Autodisponering: ' + (S.settings.auto ? 'på' : 'av') + '</button></div>'
-    + '<div class="seg" style="flex-wrap:wrap"><button data-m="base">Bunnkart: ' + (R.base === 'kart' ? 'tegnet kart' : 'satellitt') + '</button><button data-m="gfx">Grafikk: ' + (Game.lowGfx ? 'lav' : 'høy') + '</button><button data-m="city">Bytt by</button><button data-m="new">Ny runde i ' + esc(cfg.navn) + '</button></div>'
+    + '<div class="seg" style="flex-wrap:wrap"><button data-m="base">Bunnkart: ' + (R.base === 'kart' ? 'tegnet kart' : 'satellitt') + '</button><button data-m="gfx">Grafikk: ' + (Game.lowGfx ? 'lav' : 'høy') + '</button><button data-m="lyd">Lyd: ' + (Sound.on ? 'på' : 'av') + '</button><button data-m="city">Bytt by</button><button data-m="new">Ny runde i ' + esc(cfg.navn) + '</button></div>'
     + '<p class="muted sm">Spillet lagres automatisk i nettleseren (egen lagring per by).</p>', buttons: [{ label: 'Fortsett', cls: 'primary' }],
     init: h => { $$('[data-m]', h.body).forEach(b => b.addEventListener('click', async () => {
       const m = b.dataset.m;
@@ -169,7 +169,8 @@ UI.menu = function () {
       else if (m === 'save') { Store.save(true); UI.toast('Spillet er lagret', 'good'); }
       else if (m === 'auto') { S.settings.auto = !S.settings.auto; h.close(); UI.toast('Autodisponering ' + (S.settings.auto ? 'påslått – nærmeste enheter sendes automatisk' : 'avslått'), 'info'); }
       else if (m === 'base') { R.setBase(R.base === 'kart' ? 'sat' : 'kart'); h.close(); }
-      else if (m === 'gfx') { Game.lowGfx = !Game.lowGfx; R.setQuality(Game.lowGfx ? 1 : 2); h.close(); UI.toast('Grafikk: ' + (Game.lowGfx ? 'lav (sparer batteri)' : 'høy'), 'info'); }
+      else if (m === 'lyd') { const on = Sound.toggle(); h.close(); UI.toast('Lyd ' + (on ? 'på' : 'av'), 'info'); }
+      else if (m === 'gfx') { Game.lowGfx = !Game.lowGfx; City.lite = false; Game.slow = 0; R.setQuality(Game.lowGfx ? 1 : 2); R.initTraffic(); City.lastKey = ''; h.close(); UI.toast('Grafikk: ' + (Game.lowGfx ? 'lav (sparer batteri)' : 'høy'), 'info'); }
       else if (m === 'city') { h.close(); Store.save(true); Game.toMenu(); }
       else if (m === 'new') { h.close(); if (await UI.ask('Ny runde?', 'Dette starter på nytt i ' + esc(cfg.navn) + ' og overskriver lagringen.', 'Start på nytt', 'Avbryt', true)) { Store.clear(S.city); Game.toMenu(S.city); } }
     })); } });
@@ -422,7 +423,7 @@ UI.centrals = function () {
 };
 UI.tabHendelser = function () {
   const act = Sim.active().sort((a, b) => a.pri - b.pri || a.t0 - b.t0);
-  let h = UI.centrals();
+  let h = UI.centrals() + Goals.card();
   if (!act.length) h += '<div class="empty">' + icon('shield') + 'Ingen aktive hendelser akkurat nå.<br>Bruk tiden til å bygge ut beredskapen i butikken.</div>';
   for (const inc of act) h += UI.incCard(inc);
   if (S.done.length) h += '<h3 class="sec">Nylig avsluttet</h3>' + S.done.slice(0, 5).map(d => '<div class="urow"><div class="av" style="background:' + (d.ok ? '#7b9a79' : '#D9695A') + '">' + icon(d.ok ? 'check' : 'x') + '</div><div class="grow"><b class="sm">' + esc(d.navn) + '</b><div class="xs muted">' + esc(d.addr) + ' · ' + esc(d.summary) + '</div></div><span class="price ' + (d.pay < 0 ? 'bad' : '') + '">' + (d.pay >= 0 ? '+' : '') + fmtKr(d.pay) + '</span></div>').join('');
@@ -439,7 +440,7 @@ UI.unitRow = function (u) {
   h += '<div class="grow"><b class="sm">' + esc(u.name) + '</b><div class="xs muted">' + chip(UI.unitState(u), UI.statusCls(u.status)) + (job ? ' ' + job : '') + '</div></div>' + UI.sigHtml(u) + '</div>';
   if (sel) {
     h += '<div class="card" style="margin:-2px 0 8px"><div class="kv"><span>Stasjon</span><span>' + esc(st) + '</span><span>Nødnett</span><span>' + ({ bra: 'God dekning', svak: 'Svak dekning', ingen: 'Ingen kontakt' }[u.contact || 'bra']) + (u.cong ? ' (overbelastet)' : '') + '</span><span>Samband</span><span>' + (Net.vhf() ? 'VHF-radio' : (T.term === 'h' ? 'Nødnett håndterminal' : 'Nødnett kjøretøyterminal') + ' nivå ' + S.net.termLevel) + '</span><span>Mannskap</span><span>' + (Staff.needs(u) ? Staff.of(u).map(p => esc(p.navn) + (p.k160 ? ' (160)' : '')).join(', ') || 'mangler' : T.crew + ' frivillige') + '</span></div>'
-      + '<div class="actions"><button class="btn net sm" data-act="talk" data-id="' + u.id + '">' + icon('radio') + ' Snakk</button>' + (u.job ? '<button class="btn sm" data-act="recall" data-id="' + u.id + '">Kall tilbake</button>' : '') + '<button class="btn ghost sm" data-act="focusunit" data-id="' + u.id + '">' + icon('pin') + ' Vis på kart</button></div></div>';
+      + '<div class="actions"><button class="btn net sm" data-act="talk" data-id="' + u.id + '">' + icon('radio') + ' Snakk</button><button class="btn sm" data-act="follow" data-id="' + u.id + '">' + icon('eye') + (R.follow === u.id ? ' Følger' : ' Følg') + '</button>' + (u.job ? '<button class="btn sm" data-act="recall" data-id="' + u.id + '">Kall tilbake</button>' : '') + '<button class="btn ghost sm" data-act="focusunit" data-id="' + u.id + '">' + icon('pin') + ' Vis på kart</button></div></div>';
   }
   return h;
 };
@@ -582,6 +583,7 @@ UI.tabStatistikk = function () {
   h += '<div class="grid2" style="margin-top:8px"><div class="tile"><b>' + st.bistand + '</b><span>Bistand fra nabodistrikt</span></div><div class="tile"><b>' + st.samv + '</b><span>Samvirke-talegrupper</span></div><div class="tile"><b>' + st.falseAlarms + '</b><span>Falske alarmer</span></div><div class="tile"><b>' + st.alarmsOk + ' / ' + (st.alarmsOk + st.alarmsFail) + '</b><span>Nødknapper løst</span></div></div>';
   if (days.length) h += '<h3 class="sec">Økonomi per døgn</h3><div class="card"><div class="bars">' + days.map(d => '<div class="col"><div class="pair"><i style="height:' + Math.max(3, 100 * st.days[d].income / mx) + '%"></i><i class="neg" style="height:' + Math.max(3, 100 * st.days[d].cost / mx) + '%"></i></div><small>d' + d + '</small></div>').join('') + '</div><div class="xs muted">' + chip('Inntekt', 'ok') + ' ' + chip('Kostnad', 'bad') + '</div></div>';
   if (st.readyHist.length > 2) { const pts = st.readyHist.map((v, i) => (i / (st.readyHist.length - 1) * 100).toFixed(1) + ',' + (40 - v * 0.4).toFixed(1)).join(' '); h += '<h3 class="sec">Beredskapsnivå over tid</h3><div class="card"><svg viewBox="0 0 100 40" style="width:100%;height:70px" preserveAspectRatio="none"><polyline fill="none" stroke="#7b9a79" stroke-width="1.4" points="' + pts + '"/></svg></div>'; }
+  h += Goals.list();
   h += '<div class="actions" style="margin-top:10px"><button class="btn sm" data-act="menu">' + icon('menu') + ' Meny</button><button class="btn sm" data-act="showhelp">' + icon('doc') + ' Hjelp</button></div>';
   return h;
 };
@@ -613,6 +615,7 @@ UI.act = function (act, d) {
     case 'bistand': if (inc) UI.openBistand(inc); break;
     case 'samv': if (inc) UI.res(Sim.createSamvirke(inc)); break;
     case 'listen': Radio.toggle(id); UI.dirty = true; break;
+    case 'follow': if (R.follow === id) { R.follow = null; UI.toast('Slutter å følge', 'info'); } else { R.follow = id; UI.toast('Følger ' + S.units[id].name + ' – dra i kartet for å stoppe', 'info'); } UI.dirty = true; break;
     case 'talk': UI.mc || Radio.talk(id); break;
     case 'answer': { const c = Sim.answerCall(id); if (c) { UI.toast('Du snakker med innringer: «' + c.text + '»', 'info'); UI.dirty = true; } break; }
     case 'hire': UI.res(Staff.hire(id, d.k === '1')); break;

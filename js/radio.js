@@ -33,7 +33,7 @@ const Radio = {
     if (!vhf) for (let k = 1; k <= Net.samvMax(); k++) list.push({ id: 'SAMVIRKE ' + k, navn: 'SAMVIRKE ' + k + (Net.samvActive().some(i => i.tg === 'SAMVIRKE ' + k) ? ' – i bruk' : ' – ledig') });
     return list;
   },
-  toggle(tg) { if (Radio.listen.has(tg)) Radio.listen.delete(tg); else { Radio.listen.add(tg); Radio.unlock(); } Radio.save(); },
+  toggle(tg) { if (Radio.listen.has(tg)) Radio.listen.delete(tg); else { Radio.listen.add(tg); Radio.unlock(); if (S) S.flags.listened = 1; } Radio.save(); },
   heard(e) { const tg = e.tg; return Radio.listen.has(tg) || (tg.startsWith('SAMVIRKE') && Radio.listen.has('SAMVIRKE*')); },
   onLog(e) {
     if (!Radio.enabled || Game.mode !== 'play' || !Radio.heard(e) || e.kind === 'quiet') return;
@@ -135,7 +135,7 @@ const Radio = {
   /** Svar fra en enhet på et spørsmål eller en ordre. Enkle nøkkelord forstås (status, hvor, tid, avbryt, blålys …). */
   command(u, text) {
     const t = text.toLowerCase(), tg = tgOf(u), inc = u.job && u.job.inc && S.incidents[u.job.inc];
-    Log.add(tg, 'Sentral', u.name + ', ' + text, 'info');
+    Log.add(tg, 'Sentral', u.name + ', ' + text, 'info'); S.flags.talked = 1;
     const street = () => { try { return WORLD.streetOf(Sim.unitRP(u)); } catch (e) { return 'ukjent sted'; } };
     let reply, delay = Net.commDelay(u);
     if (u.contact === 'ingen') { Bus.emit('toast', { msg: u.name + ' svarer ikke – ingen dekning', kind: 'warn' }); return; }

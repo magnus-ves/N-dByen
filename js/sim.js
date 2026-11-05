@@ -322,7 +322,7 @@ Sim.buyUnit = function (type, stationId) {
   if (Sim.unitsAt(stationId).length >= Sim.stationCap(st)) return fail_('Stasjonen er full – utvid garasjen eller bygg ny stasjon.');
   if (T.boat && !(WORLD.piers || []).length) return fail_('Byen har ingen kai for båter.');
   if (!spend(T.cost + Staff.crewCost(type))) return fail_('Du har ikke nok penger (' + fmtKr(T.cost + Staff.crewCost(type)) + ' inkl. mannskap).');
-  const u = Sim.addUnit(type, stationId);
+  const u = Sim.addUnit(type, stationId); S.flags.bought = 1;
   Log.add((AGENCIES[T.org] || AGENCIES.brann).tg, 'Sentral', u.name + ' er klar med Nødnett-terminal og meldt ledig', 'info');
   return { ok: true, msg: u.name + ' er kjøpt.', u };
 };
@@ -350,7 +350,7 @@ const Staff = {
   hire(stationId, k160) {
     const st = S.stations[stationId]; if (!st) return fail_('Ukjent stasjon.'); const c = k160 ? Staff.HIRE_K : Staff.HIRE;
     if (!spend(c)) return fail_('Du har ikke nok penger (' + fmtKr(c) + ').');
-    const p = Staff.make(ST[st.type].org, stationId, k160); Staff.fill(stationId);
+    const p = Staff.make(ST[st.type].org, stationId, k160); Staff.fill(stationId); if (k160) S.flags.hired160 = 1;
     Log.add((AGENCIES[ST[st.type].org] || AGENCIES.brann).tg, 'Sentral', p.navn + (k160 ? ' (kode 160)' : '') + ' er ansatt på ' + st.name, 'info');
     return ok_(p.navn + ' er ansatt' + (p.unitId ? ' og satt på ' + S.units[p.unitId].name : ' som reserve') + '.');
   },
@@ -620,7 +620,7 @@ Sim.closeCall = function (c) {
   return inc;
 };
 /** Du tar samtalen selv: rask avklaring, hendelsen kommer straks i listen. */
-Sim.answerCall = function (id) { const c = S.calls.find(x => x.id === id); if (!c || c.state === 'samtale' && c.op === 'player') return null; c.state = 'samtale'; c.op = 'player'; c.end = S.t + 0.25; return c; };
+Sim.answerCall = function (id) { const c = S.calls.find(x => x.id === id); if (!c || c.state === 'samtale' && c.op === 'player') return null; S.flags.answered = 1; c.state = 'samtale'; c.op = 'player'; c.end = S.t + 0.25; return c; };
 
 /** Frekvens og valg av neste hendelse. */
 /** Hendelser per spillminutt. Øker med etater og antall enheter: fra ca. ett anrop hvert 2.–3. minutt (ekte tid) til rundt to i minuttet for en stor organisasjon. */
@@ -781,7 +781,7 @@ Sim.suggest = function (inc, includeOptional) {
 Sim.assign = function (inc, slot, u, opts) {
   opts = opts || {};
   if (u.job) Sim.detach(u);
-  slot.units.push(u.id); u.job = { inc: inc.id, slot: slot.k };
+  slot.units.push(u.id); u.job = { inc: inc.id, slot: slot.k }; if (!u.bistand) S.flags.dispatched = (S.flags.dispatched || 0) + 1;
   const T = UT[u.type], comm = Net.commDelay(u) + (u.bistand ? 0 : Sim.opDelay(inc.lead));
   u.path = []; u.pi = 0; u.arrived = null; u.walked = false; u.dest = null;
   if (T.foot) { u.status = 'utrykning'; u.phase = 'await'; u.wait = comm * 0.6 + 0.15; }
@@ -874,7 +874,7 @@ Sim.finish = function (inc, ok) {
     summary = (inc.false ? 'Falsk alarm' : saved === false ? 'Pasienten døde' : saved ? 'Pasienten reddet' : 'Løst') + ' · responstid ' + fmtDur(rt) + ' (mål ' + fmtDur(inc.target) + ')';
     Log.add(inc.tg || 'SENTRAL', 'Sentral', inc.navn + ' ved ' + inc.loc.addr + ' avsluttet. ' + summary + ' · +' + fmtKr(pay), 'info');
     Bus.emit('toast', { msg: inc.navn + ' løst: +' + fmtKr(pay), kind: saved === false ? 'warn' : 'good' });
-    inc.saved = saved;
+    inc.saved = saved; if (inc.tri) S.flags.triSolved = 1;
   } else {
     pay = -tpl.reward * 0.3; S.money += pay; S.stats.costs -= pay; dayStat('cost', -pay); dayStat('fail', 1); S.stats.failed++;
     S.perf = lerp(S.perf, 0, 0.17); const a = S.stats.byAg[agKey]; if (a) a.n++;
@@ -1198,7 +1198,7 @@ Sim.tick = function (dt) {
   Net.update(dt);
   Sim.spawnTick();
   Vol.update(dt);
-  Sim.callTick(); Staff.tick();
+  Sim.callTick(); Staff.tick(); Goals.tick();
   Sim.updateIncidents(dt);
   for (const id in S.units) { const u = S.units[id]; if (u) Sim.updateUnit(u, dt); }
   Eco.tick(dt);

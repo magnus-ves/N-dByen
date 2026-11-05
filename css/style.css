@@ -230,3 +230,5 @@ code{background:rgba(62,74,63,.1);padding:1px 6px;border-radius:8px;font-size:12
 .inp{border:1px solid rgba(80,90,80,.25);border-radius:12px;padding:9px 12px;font:inherit;background:rgba(255,255,255,.8);min-width:0}
 #rMic.on{background:#D9695A;color:#fff}
 .btn.net{background:#E8E2F4}
+
+.goals .goal{display:flex;gap:10px;align-items:center;margin-top:8px}
