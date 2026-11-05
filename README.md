@@ -42,3 +42,9 @@ Ny by: legg til et objekt i `CITY_CONFIGS` (`js/core.js`) med senter, bbox, mast
 ## Kreditering
 
 Kartdata © [OpenStreetMap-bidragsytere](https://www.openstreetmap.org/copyright) (ODbL), fliser fra [OpenFreeMap](https://openfreemap.org) / [OpenMapTiles](https://openmaptiles.org). Krediteringen vises nederst til venstre i spillet.
+
+## Ikoner
+Ikonene er fra [Lucide](https://lucide.dev) (ISC-lisens).
+
+## Radiostemmer
+Stemmene på sambandet lages med nettleserens talesyntese. Ferdiginnspilte lydfiler (f.eks. fra ElevenLabs) kan legges i `audio/radio/<nøkkel>.mp3` – se `js/radio.js`.

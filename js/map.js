@@ -37,6 +37,7 @@ R.style = function (offline) {
     f('landuse-com', 'landuse', 'fill', ['in', 'class', 'commercial', 'retail', 'industrial'], { 'fill-color': '#E7DAC0', 'fill-opacity': 0.7 });
     f('landuse-pitch', 'landuse', 'fill', ['in', 'class', 'pitch', 'playground', 'cemetery'], { 'fill-color': '#CFE0BC' });
     f('water', 'water', 'fill', null, { 'fill-color': P.water });
+    f('water-fx', 'water', 'fill', null, { 'fill-pattern': 'water-anim', 'fill-opacity': 0.5 });   // animerte bølger oppå satellitt og kart
     f('waterway', 'waterway', 'line', null, { 'line-color': P.water, 'line-width': 1.4 });
     const road = (id, cls, w, col, casing) => { if (casing) f(id + '-c', 'transportation', 'line', ['all', ['in', 'class'].concat(cls), ['!=', 'brunnel', 'tunnel']], { 'line-color': '#CDBF9F', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 12, w * 0.6, 15, w * 1.9, 18, w * 5.2] }, { layout: { 'line-cap': 'round', 'line-join': 'round' } });
       f(id, 'transportation', 'line', ['all', ['in', 'class'].concat(cls), ['!=', 'brunnel', 'tunnel']], { 'line-color': col, 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 12, w * 0.4, 15, w * 1.4, 18, w * 4.2] }, { layout: { 'line-cap': 'round', 'line-join': 'round' } }); };
@@ -48,8 +49,12 @@ R.style = function (offline) {
     f('r-rail', 'transportation', 'line', ['==', 'class', 'rail'], { 'line-color': '#C9BFA8', 'line-width': 1.2, 'line-dasharray': [3, 2] });
     // 3D-bygg: vindusmønster på veggene (lages i kode, se R.makeWindows). Lave hus og høyhus får hvert sitt mønster.
     const ex = pat => ({ 'fill-extrusion-pattern': pat, 'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 6], 'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0], 'fill-extrusion-opacity': 0.97, 'fill-extrusion-vertical-gradient': true });
-    f('bld-low', 'building', 'fill-extrusion', ['<', ['coalesce', ['get', 'render_height'], 6], 14], ex('win-low'), { minzoom: 14 });
-    f('bld-high', 'building', 'fill-extrusion', ['>=', ['coalesce', ['get', 'render_height'], 6], 14], ex('win-high'), { minzoom: 14 });
+    // fem fasadevarianter per type, fordelt etter bygningens id (datadrevne mønstre støttes ikke godt, så hver variant er et eget lag)
+    const vk = ['%', ['floor', ['to-number', ['coalesce', ['id'], ['*', ['to-number', ['get', 'render_height'], 6], 7]], 0]], 5];
+    for (let k = 0; k < 5; k++) {
+      f('bld-low-' + k, 'building', 'fill-extrusion', ['all', ['<', ['coalesce', ['get', 'render_height'], 6], 14], ['==', vk, k]], ex('win-low-' + k), { minzoom: 14 });
+      f('bld-high-' + k, 'building', 'fill-extrusion', ['all', ['>=', ['coalesce', ['get', 'render_height'], 6], 14], ['==', vk, k]], ex('win-high-' + k), { minzoom: 14 });
+    }
     const nm = ['coalesce', ['get', 'name:nb'], ['get', 'name']];
     layers.push({ id: 'water-name', type: 'symbol', source: 'om', 'source-layer': 'water_name', layout: { 'text-field': nm, 'text-font': ['Noto Sans Italic'], 'text-size': 12 }, paint: { 'text-color': '#5F8797', 'text-halo-color': '#F1EBD8', 'text-halo-width': 1 } });
     layers.push({ id: 'place', type: 'symbol', source: 'om', 'source-layer': 'place', filter: ['in', 'class', 'suburb', 'neighbourhood', 'quarter'], layout: { 'text-field': nm, 'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-transform': 'uppercase', 'text-letter-spacing': 0.08 }, paint: { 'text-color': '#7A8776', 'text-halo-color': '#F6F0E0', 'text-halo-width': 1.4 } });
@@ -73,18 +78,47 @@ R.setBase = function (mode) {
   const cr = $('#credit'); if (cr) { const x = cr.querySelector('.satc'); if (x) x.style.display = sat ? '' : 'none'; }
 };
 /** Vindusmønster for 3D-bygg (tegnes på canvas). hoy = høyhus med glass, natt = opplyste vinduer. */
+/** Mønster per bygning: variant velges ut fra bygningens id, natt gir opplyste vinduer. */
+const FACADE = {
+  low: [{ wall: '#B4583F', mortar: true, win: '#40525E', frame: '#F1ECE2' }, { wall: '#E6CF9E', win: '#3E5260', frame: '#FAF6EC' }, { wall: '#F1ECE1', win: '#425765', frame: '#B9B2A5' },
+    { wall: '#C9B496', win: '#3B4B57', frame: '#F4EFE4' }, { wall: '#9FB0AA', win: '#33434E', frame: '#EFF2EF' }],
+  high: [{ wall: '#7FA3B8', glass: true, win: '#5D8299' }, { wall: '#93A79F', glass: true, win: '#6E8B84' }, { wall: '#CFCBC2', win: '#46596A', band: true },
+    { wall: '#A9644B', mortar: true, win: '#3A4A56', frame: '#E8E2D6' }, { wall: '#E7E4DD', win: '#4A6070', band: true }]
+};
 R.makeWindows = function (name) {
-  const hoy = name.indexOf('high') > 0, natt = /-n$/.test(name), S_ = 64, c = document.createElement('canvas'); c.width = c.height = S_; const x = c.getContext('2d');
-  x.fillStyle = hoy ? '#CFD6D9' : natt ? '#CBB9A0' : '#EADBC1'; x.fillRect(0, 0, S_, S_);
-  const cols = hoy ? 3 : 2, rows = hoy ? 4 : 2, cw = S_ / cols, rh = S_ / rows;
-  for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
-    const lit = natt && ((i * 7 + j * 5 + name.length) % 3 !== 0), px = i * cw + cw * 0.18, py = j * rh + rh * 0.2, w = cw * 0.64, h = rh * (hoy ? 0.56 : 0.6);
-    x.fillStyle = lit ? '#FFD58A' : hoy ? '#6F8FA6' : '#7C93A3'; x.fillRect(px, py, w, h);
-    x.fillStyle = lit ? 'rgba(255,240,200,.7)' : 'rgba(255,255,255,.28)'; x.fillRect(px, py, w, h * 0.3);
-    x.fillStyle = 'rgba(80,70,60,.35)'; x.fillRect(px, py + h, w, 2);
+  const hoy = name.indexOf('high') > 0, natt = /-n$/.test(name), k = (+(name.match(/-(\d)/) || [0, 0])[1]) % 5, F = (hoy ? FACADE.high : FACADE.low)[k];
+  const S_ = 128, c = document.createElement('canvas'); c.width = c.height = S_; const x = c.getContext('2d');
+  x.fillStyle = F.wall; x.fillRect(0, 0, S_, S_);
+  if (F.mortar) { x.fillStyle = 'rgba(0,0,0,.08)'; for (let y = 0; y < S_; y += 6) { x.fillRect(0, y, S_, 1); for (let xx = (y / 6) % 2 ? 0 : 7; xx < S_; xx += 14) x.fillRect(xx, y, 1, 6); } }
+  if (F.glass) {   // glassfasade med spiler
+    const g = x.createLinearGradient(0, 0, S_, S_); g.addColorStop(0, shade(F.win, 0.25)); g.addColorStop(1, shade(F.win, -0.2)); x.fillStyle = g; x.fillRect(0, 0, S_, S_);
+    x.fillStyle = 'rgba(230,240,245,.55)'; for (let i = 0; i <= 4; i++) x.fillRect(i * 32 - 1, 0, 3, S_); for (let j = 0; j <= 4; j++) x.fillRect(0, j * 32 - 1, S_, 3);
+    if (natt) for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) if ((i * 5 + j * 3 + k) % 3) { x.fillStyle = 'rgba(255,214,140,.85)'; x.fillRect(i * 32 + 3, j * 32 + 3, 27, 27); }
+  } else {
+    const cols = hoy ? 4 : 3, rows = hoy ? 4 : 3, cw = S_ / cols, rh = S_ / rows;
+    if (F.band) { x.fillStyle = 'rgba(0,0,0,.07)'; for (let j = 0; j < rows; j++) x.fillRect(0, j * rh + rh * .78, S_, rh * .1); }
+    for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
+      const lit = natt && ((i * 7 + j * 5 + k) % 3 !== 0), px = i * cw + cw * (F.band ? .08 : .22), py = j * rh + rh * .2, w = cw * (F.band ? .84 : .56), h = rh * .52;
+      if (F.frame) { x.fillStyle = F.frame; x.fillRect(px - 2, py - 2, w + 4, h + 4); }
+      const g = x.createLinearGradient(0, py, 0, py + h); g.addColorStop(0, lit ? '#FFE3A6' : shade(F.win, 0.3)); g.addColorStop(1, lit ? '#F2B65C' : F.win); x.fillStyle = g; x.fillRect(px, py, w, h);
+      x.fillStyle = F.frame || 'rgba(255,255,255,.4)'; x.fillRect(px + w / 2 - 1, py, 2, h); x.fillRect(px, py + h * .38, w, 2);
+      x.fillStyle = 'rgba(0,0,0,.18)'; x.fillRect(px - 2, py + h + 2, w + 4, 3);
+    }
   }
   const d = x.getImageData(0, 0, S_, S_); return { width: S_, height: S_, data: new Uint8Array(d.data.buffer) };
 };
+/** Bølgemønster for vannet (tegnes på nytt noen ganger i sekundet). */
+R.makeWater = function (t) {
+  const S_ = 64, c = R._wc || (R._wc = document.createElement('canvas')); c.width = c.height = S_; const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, S_, S_); g.addColorStop(0, '#2F6F8A'); g.addColorStop(1, '#245C78'); x.fillStyle = g; x.fillRect(0, 0, S_, S_);
+  for (let i = 0; i < 9; i++) {
+    const y0 = (i * 7.1 + t * 6) % S_, ph = i * 1.7 + t * 1.3; x.strokeStyle = 'rgba(210,235,245,' + (0.18 + 0.12 * Math.sin(ph)) + ')'; x.lineWidth = 1.2; x.beginPath();
+    for (let xx = 0; xx <= S_; xx += 4) { const y = y0 + Math.sin((xx / S_) * TAU * 2 + ph) * 1.6; xx ? x.lineTo(xx, y) : x.moveTo(xx, y); } x.stroke();
+  }
+  const d = x.getImageData(0, 0, S_, S_); return { width: S_, height: S_, data: new Uint8Array(d.data.buffer) };
+};
+R.waterT = 0;
+R.waterTick = function (dt) { const m = R.map; if (!m || !R.ready || !m.hasImage('water-anim')) return; R.waterT += dt; R._wAcc = (R._wAcc || 0) + dt; if (R._wAcc < 0.12) return; R._wAcc = 0; try { m.updateImage('water-anim', R.makeWater(R.waterT)); } catch (e) { /* ignorer */ } };
 
 
 /* ---------- tak: saltak oppå lave hus, bygget fra byggeomrisset i vektorflisene ---------- */
@@ -158,10 +192,12 @@ R.init = function (container, opts) {
         R.renderer.resetState(); R.renderer.render(R.scene, R.camera);
       }
     };
-    map.on('styleimagemissing', e => { if (/^win-/.test(e.id) && !map.hasImage(e.id)) map.addImage(e.id, R.makeWindows(e.id), { pixelRatio: 2 }); });
+    map.on('styleimagemissing', e => { if (map.hasImage(e.id)) return; if (/^win-/.test(e.id)) map.addImage(e.id, R.makeWindows(e.id), { pixelRatio: 2 }); else if (e.id === 'water-anim') map.addImage(e.id, R.makeWater(0), { pixelRatio: 1 }); });
     let done = false, errShown = false;
     map.on('error', e => { if (!errShown && e && e.error && /tile|fetch|Failed|NetworkError|AJAX/i.test(String(e.error.message || e.error))) { errShown = true; R.tileError = true; if (R.onTileError) R.onTileError(e.error); } });
-    map.on('load', () => { map.addLayer(R.layer); R.ready = true; R.setBase(R.base || 'sat'); R.setSeason(R.seasonIdx); if (!done) { done = true; resolve(true); } });
+    const addFacades = () => { for (const k of ['low', 'high']) for (let i = 0; i < 5; i++) for (const n of ['', '-n']) { const id = 'win-' + k + '-' + i + n; if (!map.hasImage(id)) map.addImage(id, R.makeWindows(id), { pixelRatio: 2 }); } if (!map.hasImage('water-anim')) map.addImage('water-anim', R.makeWater(0)); };
+    map.on('style.load', addFacades);
+    map.on('load', () => { addFacades(); map.addLayer(R.layer); R.ready = true; R.setBase(R.base || 'sat'); R.setSeason(R.seasonIdx); if (!done) { done = true; resolve(true); } });
     map.on('click', e => { if (R.onTap) R.onTap(e.point.x, e.point.y, !!(e.originalEvent && (e.originalEvent.pointerType === 'touch' || e.originalEvent.type === 'touchend'))); });
     map.on('resize', () => R.resize());
     let rt = 0; const roofSoon = () => { clearTimeout(rt); rt = setTimeout(() => (window.requestIdleCallback ? requestIdleCallback(() => R.updateRoofs(), { timeout: 1500 }) : R.updateRoofs()), 900); }; map.on('moveend', roofSoon);
@@ -192,7 +228,7 @@ R.setWorld = function (world, opts) {
   const o = maplibregl.MercatorCoordinate.fromLngLat([c.lon, c.lat], 0), s = o.meterInMercatorCoordinateUnits();
   R.origin = o; R.metersToMerc = s;
   R.L.makeTranslation(o.x, o.y, o.z).scale(new THREE.Vector3(s, -s, s)).multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2));
-  buildCoverage(); buildBeaches(); R.fxInit(); R.ensureOverlay();
+  buildCoverage(); buildBeaches(); R.fxInit(); R.ensureOverlay(); R.initTraffic();
   if (R.offline) { // testvisning uten fliser: tegn veinettet som linjer
     const pts = []; for (const e of world.edges) for (let i = 1; i < e.geom.length; i++) pts.push(e.geom[i - 1][0], 0.3, e.geom[i - 1][1], e.geom[i][0], 0.3, e.geom[i][1]);
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)); R.roadDebug = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xb9ad90 })); R.scene.add(R.roadDebug);
@@ -288,9 +324,16 @@ function buildBeaches() {
     const b = R.world.beaches[id], grp = new THREE.Group(); grp.position.set(b.x, 0, b.z); g.add(grp);
     const disc = new THREE.Mesh(new THREE.CircleGeometry(34, 28), new THREE.MeshBasicMaterial({ color: 0xEBD9A8, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide })); disc.rotation.x = -Math.PI / 2; disc.position.y = 0.6; grp.add(disc);
     const tw = new THREE.Group(); tw.scale.setScalar(5.5);
-    for (const sx of [-0.45, 0.45]) for (const sz of [-0.45, 0.45]) tw.add(R.box(0.1, 1.5, 0.1, 0xf2ece0, sx, 0.75, sz));
-    tw.add(R.box(1.3, 0.14, 1.3, 0xd9c9a6, 0, 1.5, 0)); tw.add(R.box(1.1, 0.8, 1.1, 0xf2ece0, 0, 1.97, 0)); tw.add(R.box(1.45, 0.14, 1.45, 0xe5a267, 0, 2.5, 0)); tw.add(R.box(0.7, 0.34, 0.06, 0x7fa8b8, 0, 2.0, 0.56));
-    const guard = new THREE.Group(); guard.position.set(0, 1.6, 0.3); guard.add(R.box(0.28, 0.5, 0.2, 0xe5a267, 0, 0.4, 0)); guard.visible = false; tw.add(guard); grp.add(tw);
+    for (const sx of [-0.45, 0.45]) for (const sz of [-0.45, 0.45]) tw.add(R.box(0.1, 1.5, 0.1, 0xC8A27A, sx, 0.75, sz));
+    for (const sz of [-0.45, 0.45]) { const br = R.box(0.06, 1.25, 0.06, 0xB08B64, 0, 0.75, sz); br.rotation.z = 0.62; tw.add(br); }
+    tw.add(R.box(1.3, 0.12, 1.5, 0xD9BE92, 0, 1.5, 0.08)); tw.add(R.box(1.1, 0.75, 1.0, 0xE2452F, 0, 1.94, -0.1)); tw.add(R.box(1.12, 0.12, 1.02, 0xF2D21B, 0, 1.86, -0.1));
+    tw.add(R.box(1.5, 0.1, 1.4, 0xF4F1EA, 0, 2.38, -0.05)); tw.add(R.box(0.8, 0.3, 0.04, 0x2a3a46, 0, 2.02, 0.41));
+    for (let i = 0; i < 6; i++) tw.add(R.box(0.5, 0.04, 0.1, 0xC8A27A, 0, 0.2 + i * 0.24, 0.9 - i * 0.07));   // trapp
+    tw.add(R.box(0.03, 0.9, 0.03, 0xdddddd, 0.6, 2.85, -0.5)); tw.add(R.box(0.36, 0.22, 0.02, 0xE2452F, 0.78, 3.18, -0.5)); tw.add(R.box(0.36, 0.1, 0.021, 0xF2D21B, 0.78, 3.18, -0.5));
+    const ring = new THREE.Mesh(R.geo('buoyr', () => new THREE.TorusGeometry(0.17, 0.05, 6, 14)), R.mat(0xE2452F)); ring.position.set(-0.56, 1.95, 0.25); ring.rotation.y = Math.PI / 2; tw.add(ring);
+    const guard = new THREE.Group(); guard.position.set(0.3, 1.56, 0.45); guard.add(R.box(0.2, 0.32, 0.14, 0xE2452F, 0, 0.3, 0)); guard.add(R.box(0.21, 0.07, 0.15, 0xF2D21B, 0, 0.42, 0)); const hd = new THREE.Mesh(R.geo('ico', () => new THREE.SphereGeometry(1, 16, 12)), R.mat(0xE9C2A0)); hd.scale.setScalar(0.09); hd.position.y = 0.55; guard.add(hd); guard.add(R.box(0.16, 0.24, 0.12, 0x1E3A5F, 0, 0.06, 0)); guard.visible = false; tw.add(guard); grp.add(tw);
+    // parasoller og håndklær
+    for (let k = 0; k < 4; k++) { const a = k * 1.7, r = 70 + k * 9, px = Math.cos(a) * r * 0.4, pz = Math.sin(a) * r * 0.25; const pole = R.box(0.25, 6, 0.25, 0xdddddd, px, 3, pz); grp.add(pole); const top = new THREE.Mesh(R.geo('umb', () => new THREE.ConeGeometry(4, 1.6, 10)), R.mat([0xE2452F, 0x2D7FB8, 0xF2D21B, 0x5FAF6B][k])); top.position.set(px, 6.4, pz); grp.add(top); grp.add(R.box(3.5, 0.1, 1.6, [0xF4F1EA, 0xE58A6B, 0x7FB3D5, 0xF2D21B][k], px + 3, 0.7, pz + 2)); }
     R.beachViews[id] = { guard, grp };
   }
 }
@@ -328,9 +371,22 @@ R.makePin = function (iconName, bg, size, ring) {
 
 /* ---------- modeller: stasjoner ---------- */
 function windowRow(g, n, y, z, w, col) { for (let i = 0; i < n; i++) g.add(R.box(0.42, 0.34, 0.05, col || 0x8fb0c0, (i - (n - 1) / 2) * 0.8, y, z)); }
+/** Skilt med tekst (bare forsiden, så teksten aldri blir speilvendt). */
+R.signMat = function (text, bg, fg) {
+  const key = 'sign' + text + bg; if (R.mats[key]) return R.mats[key];
+  const c = document.createElement('canvas'); c.width = 512; c.height = 96; const x = c.getContext('2d');
+  x.fillStyle = bg; x.fillRect(0, 0, 512, 96); x.fillStyle = fg; x.font = '800 54px Nunito, Arial, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(text, 256, 52);
+  const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return (R.mats[key] = new THREE.MeshBasicMaterial({ map: t }));
+};
+const SIGN = { brannstasjon: ['BRANNSTASJON', '#C8281E', '#fff'], politistasjon: ['POLITI', '#1F4E9B', '#fff'], ambulansestasjon: ['AMBULANSE', '#2E8B3E', '#fff'], sykehus: ['SYKEHUS', '#F4F1EA', '#2E8B3E'],
+  legevakt: ['LEGEVAKT', '#F4F1EA', '#2E8B3E'], arrest: ['ARREST', '#5C6677', '#fff'], helikopterbase: ['LUFTAMBULANSE', '#E53935', '#fff'], rk_base: ['HJELPEKORPS', '#F4F1EA', '#C9302C'], nf_base: ['SANITET', '#F4F1EA', '#C9302C'], rs_base: ['REDNINGSSTASJON', '#E9701E', '#fff'] };
+function tree(g, x, z, s) { const t = new THREE.Mesh(R.geo('trunk', () => new THREE.CylinderGeometry(.05, .07, .5, 6)), R.mat(0x7a5a3c)); t.position.set(x, .25 * s, z); t.scale.setScalar(s); g.add(t); const c = new THREE.Mesh(R.geo('crown', () => new THREE.IcosahedronGeometry(.32, 1)), R.mat(0x5E8C4E)); c.position.set(x, .72 * s, z); c.scale.setScalar(s); g.add(c); }
 function stationModel(type) {
   const g = new THREE.Group(), T = ST[type];
-  g.add(R.box(3.95, 0.16, 3.95, 0xe3dcc8, 0, 0.08, 0));
+  g.add(R.box(3.95, 0.16, 3.95, 0xe3dcc8, 0, 0.08, 0)); g.add(R.box(3.6, 0.02, 1.0, 0x8f949a, 0, 0.17, 1.4));   // asfalt foran
+  for (let i = 0; i < 3; i++) g.add(R.box(0.04, 0.021, 0.6, 0xf4f1ea, -1.2 + i * 1.2, 0.18, 1.45));
+  tree(g, -1.75, -1.6, 1.1); tree(g, 1.75, 1.75, 0.9);
+  const sg = SIGN[type]; if (sg) { const p = new THREE.Mesh(R.geo('signq', () => new THREE.PlaneGeometry(1, 1)), R.signMat(sg[0], sg[1], sg[2])); p.scale.set(2.2, 0.4, 1); p.position.set(0, type === 'sykehus' ? 2.95 : 2.0, 1.06); p.renderOrder = 2; g.add(p); }
   const win = 0x8fb0c0;
   switch (type) {
     case 'brannstasjon':
@@ -380,69 +436,186 @@ function mastModel(mobile) {
 }
 
 /* ---------- modeller: kjøretøy ---------- */
-const VCOL = {
-  brann: { body: 0xc9785d, trim: 0xf2ece0 }, politi: { body: 0xeef1f4, trim: 0x6f8fb5 }, ambulanse: { body: 0xf3ecc8, trim: 0x98b889 },
-  rk: { body: 0xd98a82, trim: 0xf6efe6 }, nf: { body: 0xc97c74, trim: 0xf0e2c8 }, strand: { body: 0xe5a267, trim: 0xf6efe6 }, bistand: { body: 0xc4cbc6, trim: 0x8fa0b0 }
+/* Kjøretøy bygges av sideprofiler (ekstrudert i bredden) med lakkmønster som tekstur, hjul med felg, glass, lykter og lysbro.
+   Modellene lages én gang per type og klones (delte geometrier og materialer). */
+const LIVERY = {
+  brann:     { base: '#C8281E', band: 'stripe', c1: '#F2D21B', c2: '#F4F1E8', roof: '#E9E4DA' },
+  politi:    { base: '#F4F5F2', band: 'check', c1: '#1F4E9B', c2: '#F2D21B', roof: '#F4F5F2' },
+  ambulanse: { base: '#F2D21B', band: 'check', c1: '#2E8B3E', c2: '#F2D21B', roof: '#F6F2E2' },
+  rk:        { base: '#F4F1EC', band: 'stripe', c1: '#C9302C', c2: '#F4F1EC', roof: '#F4F1EC' },
+  nf:        { base: '#F4F1EC', band: 'stripe', c1: '#C9302C', c2: '#2B2B2B', roof: '#F4F1EC' },
+  rs:        { base: '#E9701E', band: 'stripe', c1: '#F4F1EC', c2: '#1E3A5F', roof: '#F4F1EC' },
+  strand:    { base: '#E2452F', band: 'none', c1: '#F2D21B', c2: '#F2D21B', roof: '#F2D21B' },
+  bistand:   { base: '#B8C0BC', band: 'stripe', c1: '#7D8B96', c2: '#B8C0BC', roof: '#C9CFCB' },
+  sivil:     { base: '#888888', band: 'none', c1: '#888', c2: '#888', roof: '#888' }
 };
-function vehicleModel(type, org) {
-  const T = UT[type], C = VCOL[org] || VCOL.bistand, g = new THREE.Group(), lights = [];
-  const dark = 0x3a3f3d, glass = 0x7d97a6, blue = 0x73a8ff;
-  const wheels = (L, Wd) => { for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(R.box(0.2, 0.5, 0.55, 0x2f3331, sx * (Wd / 2 + 0.01), 0.26, sz * L * 0.32)); };
-  const bar = (y, z, w) => { const a = R.box(0.34, 0.15, 0.22, blue, -w, y, z, true), b = R.box(0.34, 0.15, 0.22, blue, w, y, z, true); g.add(a, b); lights.push(a, b); };
-  const head = (y, z, Wd) => { for (const sx of [-1, 1]) g.add(R.box(0.2, 0.14, 0.05, 0xfff3c4, sx * Wd * 0.3, y, z, true)); };
-  switch (T.model) {
-    case 'truck': case 'rescue':
-      g.add(R.box(1.15, 0.3, 2.9, dark, 0, 0.32, 0)); wheels(2.9, 1.2);
-      g.add(R.box(1.2, T.model === 'rescue' ? 1.0 : 0.85, 1.75, C.body, 0, 0.95, -0.5)); g.add(R.box(1.2, 0.92, 0.95, C.body, 0, 0.98, 0.98));
-      g.add(R.box(1.0, 0.32, 0.06, glass, 0, 1.15, 1.47)); g.add(R.box(1.22, 0.1, 2.9, C.trim, 0, 0.62, 0)); g.add(R.box(1.22, 0.1, 1.76, C.trim, 0, 1.45, -0.5));
-      if (T.model === 'rescue') g.add(R.box(0.7, 0.2, 1.1, 0x9aa09c, 0, 1.58, -0.5));
-      bar(1.55, 1.0, 0.3); head(0.62, 1.48, 1.2); break;
-    case 'tanker': {
-      g.add(R.box(1.15, 0.3, 3.2, dark, 0, 0.32, 0)); wheels(3.2, 1.2);
-      const tank = new THREE.Mesh(R.geo('cyl', () => new THREE.CylinderGeometry(0.58, 0.58, 1, 12)), R.mat(C.body)); tank.rotation.x = Math.PI / 2; tank.scale.set(1, 2.1, 1); tank.position.set(0, 1.0, -0.55); g.add(tank);
-      g.add(R.box(1.2, 0.92, 0.95, C.body, 0, 0.98, 1.1)); g.add(R.box(1.0, 0.32, 0.06, glass, 0, 1.15, 1.59)); g.add(R.box(1.22, 0.1, 3.2, C.trim, 0, 0.62, 0));
-      bar(1.55, 1.1, 0.3); head(0.62, 1.6, 1.2); break; }
-    case 'ladder':
-      g.add(R.box(1.15, 0.3, 3.8, dark, 0, 0.32, 0)); wheels(3.8, 1.2);
-      g.add(R.box(1.2, 0.7, 2.4, C.body, 0, 0.85, -0.7)); g.add(R.box(1.2, 0.92, 0.95, C.body, 0, 0.98, 1.4)); g.add(R.box(1.0, 0.32, 0.06, glass, 0, 1.15, 1.89));
-      g.add(R.box(0.28, 0.14, 3.6, 0xd7d3c8, 0, 1.45, -0.2)); g.add(R.box(0.1, 0.5, 0.1, 0xd7d3c8, 0, 1.25, -1.6));
-      g.add(R.box(1.22, 0.1, 3.8, C.trim, 0, 0.62, 0)); bar(1.55, 1.4, 0.3); head(0.62, 1.9, 1.2); break;
-    case 'van':
-      g.add(R.box(1.1, 0.25, 2.3, dark, 0, 0.3, 0)); wheels(2.3, 1.15);
-      g.add(R.box(1.12, 0.95, 2.2, C.body, 0, 0.95, -0.05)); g.add(R.box(1.0, 0.34, 0.06, glass, 0, 1.15, 1.07)); g.add(R.box(1.14, 0.12, 2.2, C.trim, 0, 0.68, -0.05));
-      bar(1.5, 0.5, 0.28); head(0.55, 1.12, 1.1); break;
-    case 'car': case 'suv': {
-      const tall = T.model === 'suv';
-      g.add(R.box(1.0, 0.25, 2.1, dark, 0, 0.3, 0)); wheels(2.1, 1.05);
-      g.add(R.box(1.04, tall ? 0.6 : 0.46, 2.1, C.body, 0, tall ? 0.72 : 0.62, 0)); g.add(R.box(0.94, tall ? 0.45 : 0.4, 1.15, C.body, 0, tall ? 1.2 : 1.0, -0.1));
-      g.add(R.box(0.96, 0.3, 0.05, glass, 0, tall ? 1.2 : 1.0, 0.5)); g.add(R.box(1.06, 0.14, 1.7, org === 'ambulanse' ? 0x98b889 : (T.stripe ? 0xe4c94e : C.trim), 0, 0.68, 0));
-      bar(tall ? 1.48 : 1.26, -0.1, 0.25); head(0.6, 1.06, 1.0); break; }
-    case 'armored':
-      g.add(R.box(1.2, 0.28, 2.5, dark, 0, 0.32, 0)); wheels(2.5, 1.25); g.add(R.box(1.25, 1.1, 2.4, 0x46505e, 0, 1.0, 0)); g.add(R.box(1.0, 0.3, 0.06, 0x95a3b0, 0, 1.3, 1.2));
-      bar(1.62, 0.8, 0.3); head(0.6, 1.2, 1.2); break;
-    case 'ambulance':
-      g.add(R.box(1.15, 0.28, 2.7, dark, 0, 0.32, 0)); wheels(2.7, 1.2);
-      g.add(R.box(1.2, 1.1, 1.75, C.body, 0, 1.0, -0.4)); g.add(R.box(1.2, 0.85, 0.85, C.body, 0, 0.9, 1.0)); g.add(R.box(1.0, 0.3, 0.06, glass, 0, 1.1, 1.43));
-      g.add(R.box(1.22, 0.18, 2.6, C.trim, 0, 0.85, 0)); g.add(R.box(1.22, 0.1, 2.6, org === 'ambulanse' ? 0xe4d65a : C.trim, 0, 0.6, 0));
-      bar(1.62, 0.9, 0.3); head(0.6, 1.44, 1.2); break;
-    case 'atv':
-      for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(R.box(0.22, 0.4, 0.4, 0x2f3331, sx * 0.4, 0.22, sz * 0.5));
-      g.add(R.box(0.7, 0.3, 1.5, C.body, 0, 0.5, 0)); g.add(R.box(0.5, 0.15, 0.6, 0x3a3f3d, 0, 0.72, -0.1)); g.add(R.box(0.7, 0.08, 0.1, 0x3a3f3d, 0, 0.8, 0.35)); bar(0.95, 0.35, 0.18); break;
-    case 'trailer':
-      g.add(R.box(1.0, 0.2, 1.8, dark, 0, 0.3, 0)); g.add(R.box(1.1, 1.0, 1.6, C.body, 0, 0.95, 0)); g.add(R.box(1.14, 0.1, 1.64, C.trim, 0, 1.5, 0)); wheels(1.8, 1.1); bar(1.62, 0.4, 0.25); break;
-    case 'heli': {
-      const body = new THREE.Mesh(R.geo('ico', () => new THREE.SphereGeometry(1, 10, 8)), R.mat(0xe9e4a8)); body.scale.set(0.62, 0.55, 1.2); body.position.y = 0.9; g.add(body);
-      g.add(R.box(0.16, 0.16, 2.2, 0xe9e4a8, 0, 1.0, -1.9)); g.add(R.box(0.1, 0.55, 0.45, 0xb3be68, 0, 1.25, -2.9));
-      g.add(R.box(0.5, 0.18, 0.2, glass, 0, 1.12, 0.95)); g.add(R.box(0.08, 0.1, 1.8, 0x5c615e, -0.55, 0.28, 0)); g.add(R.box(0.08, 0.1, 1.8, 0x5c615e, 0.55, 0.28, 0));
-      const rotor = new THREE.Group(); rotor.position.y = 1.55; rotor.add(R.box(5.2, 0.05, 0.22, 0x555a58, 0, 0, 0), R.box(0.22, 0.05, 5.2, 0x555a58, 0, 0, 0)); g.add(rotor); g.userData.rotor = rotor;
-      bar(1.5, 0.6, 0.3); break; }
-    case 'foot': {
-      g.add(R.box(0.34, 0.6, 0.24, 0xe5a267, 0, 0.55, 0)); const hd = new THREE.Mesh(R.geo('ico', () => new THREE.SphereGeometry(1, 10, 8)), R.mat(0xf0cfae)); hd.scale.setScalar(0.17); hd.position.y = 1.0; g.add(hd);
-      g.add(R.box(0.1, 0.36, 0.1, 0x6b7a8a, -0.1, 0.18, 0)); g.add(R.box(0.1, 0.36, 0.1, 0x6b7a8a, 0.1, 0.18, 0)); break; }
-    default: g.add(R.box(1, 0.8, 2, C.body, 0, 0.6, 0));
+const VPROF = {   // sideprofil [lengde, høyde] (bak → foran), bredde, vinduer (andel av høyden), frontrute-segment
+  car:     { p: [[0, .2], [2.05, .2], [2.05, .48], [1.68, .6], [1.3, .98], [.6, 1.0], [.18, .72], [0, .64]], w: 1.0, win: [.66, .93], ws: [3, 4], cab: [.32, 1.62] },
+  suv:     { p: [[0, .22], [2.15, .22], [2.15, .58], [1.85, .7], [1.55, 1.15], [.15, 1.17], [0, 1.0]], w: 1.06, win: [.72, .95], ws: [3, 4], cab: [.2, 1.75] },
+  van:     { p: [[0, .2], [2.45, .2], [2.45, .62], [2.25, .78], [1.98, 1.28], [1.85, 1.38], [0, 1.4]], w: 1.06, win: [.62, .86], ws: [3, 4], cab: [1.45, 2.2] },
+  ambulance: { p: [[0, .22], [2.75, .22], [2.75, .62], [2.58, .74], [2.34, 1.12], [2.16, 1.18], [2.1, 1.52], [0, 1.52]], w: 1.12, win: [.5, .7], ws: [3, 4], cab: [2.12, 2.6] },
+  truck:   { p: [[0, .32], [3.15, .32], [3.15, 1.2], [3.05, 1.42], [2.3, 1.46], [2.3, 1.36], [0, 1.36]], w: 1.18, win: [.7, .92], ws: [2, 3], cab: [2.35, 3.05] },
+  rescue:  { p: [[0, .32], [3.0, .32], [3.0, 1.2], [2.9, 1.42], [2.2, 1.46], [2.2, 1.5], [0, 1.5]], w: 1.18, win: [.7, .92], ws: [2, 3], cab: [2.25, 2.9] },
+  tanker:  { p: [[0, .32], [3.3, .32], [3.3, 1.2], [3.2, 1.42], [2.5, 1.44], [2.5, .62], [0, .62]], w: 1.18, win: [.7, .92], ws: [2, 3], cab: [2.55, 3.2] },
+  ladder:  { p: [[0, .32], [3.9, .32], [3.9, 1.2], [3.8, 1.42], [3.1, 1.44], [3.1, .95], [0, .95]], w: 1.18, win: [.7, .92], ws: [2, 3], cab: [3.15, 3.8] },
+  armored: { p: [[0, .26], [2.6, .26], [2.6, .8], [2.3, 1.05], [2.1, 1.38], [0, 1.4]], w: 1.2, win: [.68, .86], ws: [3, 4], cab: [1.6, 2.2] },
+  trailer: { p: [[0, .25], [1.8, .25], [1.8, 1.3], [0, 1.3]], w: 1.05, win: [.5, .7], ws: null, cab: null },
+  atv:     { p: [[0, .3], [1.5, .3], [1.5, .55], [1.1, .7], [.4, .7], [0, .6]], w: .75, win: null, ws: null, cab: null }
+};
+R.livery = function (org, model, L, H, base) {
+  const key = 'liv' + org + model + (base || ''); if (R.mats[key]) return R.mats[key];
+  const P = Object.assign({}, LIVERY[org] || LIVERY.bistand), pr = VPROF[model]; if (base) P.base = base;
+  const c = document.createElement('canvas'); c.width = 512; c.height = 256; const x = c.getContext('2d'), X = v => v / L * 512, Y = v => (1 - v / H) * 256;
+  x.fillStyle = P.base; x.fillRect(0, 0, 512, 256);
+  // lakkglans øverst, skygge nederst
+  const g = x.createLinearGradient(0, 0, 0, 256); g.addColorStop(0, 'rgba(255,255,255,.18)'); g.addColorStop(.55, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(0,0,0,.18)'); x.fillStyle = g; x.fillRect(0, 0, 512, 256);
+  const yb0 = Y(H * .32), yb1 = Y(H * .5), bh = yb0 - yb1;
+  if (P.band === 'check') { const n = 18, cw = 512 / n; for (let r = 0; r < 2; r++) for (let i = 0; i < n; i++) { x.fillStyle = (i + r) % 2 ? P.c1 : P.c2; x.fillRect(i * cw, yb1 + r * bh / 2, cw + 1, bh / 2 + 1); } }
+  else if (P.band === 'stripe') { x.fillStyle = P.c1; x.fillRect(0, yb1, 512, bh * .55); x.fillStyle = P.c2; x.fillRect(0, yb1 + bh * .62, 512, bh * .22); }
+  // vinduer
+  if (pr && pr.win && pr.cab) { x.fillStyle = '#22303A'; const y0 = Y(H * pr.win[1]), y1 = Y(H * pr.win[0]); x.beginPath(); x.roundRect ? x.roundRect(X(pr.cab[0]), y0, X(pr.cab[1]) - X(pr.cab[0]), y1 - y0, 10) : x.rect(X(pr.cab[0]), y0, X(pr.cab[1]) - X(pr.cab[0]), y1 - y0); x.fill();
+    x.fillStyle = 'rgba(160,200,225,.35)'; x.fillRect(X(pr.cab[0]) + 6, y0 + 4, (X(pr.cab[1]) - X(pr.cab[0])) * .35, (y1 - y0) * .35);
+    if (model === 'ambulance' || model === 'van') { x.fillStyle = '#22303A'; x.fillRect(X(L * .12), Y(H * .86), X(L * .28), Y(H * .66) - Y(H * .86)); } }
+  if (model === 'truck' || model === 'rescue') { x.strokeStyle = 'rgba(0,0,0,.35)'; x.lineWidth = 3; for (let i = 0; i < 3; i++) { const a = X(.12 + i * .7); x.strokeRect(a, Y(H * .9), X(.6), Y(H * .38) - Y(H * .9)); } }
+  // dørkant, hjulbuer og lykter
+  x.strokeStyle = 'rgba(0,0,0,.28)'; x.lineWidth = 2; if (pr && pr.cab) { x.beginPath(); x.moveTo(X(pr.cab[0]), Y(H * .25)); x.lineTo(X(pr.cab[0]), Y(H * .9)); x.stroke(); }
+  x.fillStyle = '#1C1F22'; for (const f of [.2, .8]) { x.beginPath(); x.arc(X(L * f), 256, 46, Math.PI, 0); x.fill(); }
+  x.fillStyle = '#FFF4C8'; x.fillRect(506, Y(H * .5), 6, 18); x.fillStyle = '#D7262B'; x.fillRect(0, Y(H * .55), 6, 22);
+  const tex = new THREE.CanvasTexture(c); tex.repeat.set(1 / L, 1 / H); tex.anisotropy = 4;
+  const m = new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide }); R.mats[key] = m; return m;
+};
+function profileGeo(pr) {
+  const sh = new THREE.Shape(); pr.p.forEach((q, i) => (i ? sh.lineTo(q[0], q[1]) : sh.moveTo(q[0], q[1])));
+  const g = new THREE.ExtrudeGeometry(sh, { depth: pr.w, bevelEnabled: true, bevelThickness: .05, bevelSize: .04, bevelSegments: 2, steps: 1 });
+  g.rotateY(-Math.PI / 2); const L = Math.max(...pr.p.map(q => q[0])); g.translate(pr.w / 2, 0, -L / 2); g.computeVertexNormals(); return g;
+}
+R.wheelGeo = () => R.geo('tyre', () => { const g = new THREE.CylinderGeometry(.27, .27, .2, 18); g.rotateZ(Math.PI / 2); return g; });
+R.rimGeo = () => R.geo('rim', () => { const g = new THREE.CylinderGeometry(.15, .15, .215, 12); g.rotateZ(Math.PI / 2); return g; });
+function vehicleBase(type, org) {
+  const T = UT[type], model = T.model, g = new THREE.Group(), lights = [];
+  const dark = 0x2A2E31, glassM = R.matG || (R.matG = new THREE.MeshPhongMaterial({ color: 0x22313b, shininess: 90, specular: 0x9fb8c8, side: THREE.DoubleSide }));
+  const P = LIVERY[org] || LIVERY.bistand, roofHex = parseInt(P.roof.slice(1), 16);
+  const blue = () => R.mats.blueL || (R.mats.blueL = new THREE.MeshBasicMaterial({ color: 0x3d7dff }));
+  const bar = (x0, y, z, w) => { const base = R.box(w * 2 + .3, .07, .22, 0x2a2e31, 0, y - .04, z); g.add(base); for (const s of [-1, 1]) { const m = new THREE.Mesh(R.geo('box', () => new THREE.BoxGeometry(1, 1, 1)), blue()); m.scale.set(.3, .13, .2); m.position.set(s * w, y + .05, z); g.add(m); lights.push(m); } };
+  if (model === 'heli') {
+    const body = new THREE.Mesh(R.geo('ico', () => new THREE.SphereGeometry(1, 16, 12)), R.mat(0xE53935)); body.scale.set(.62, .58, 1.25); body.position.y = .9; g.add(body);
+    const nose = new THREE.Mesh(R.geo('ico'), glassM); nose.scale.set(.5, .38, .5); nose.position.set(0, 1.05, .8); g.add(nose);
+    g.add(R.box(.16, .2, 2.3, 0xE53935, 0, 1.05, -1.9)); g.add(R.box(.08, .7, .5, 0xF4F1EC, 0, 1.35, -2.95)); g.add(R.box(.9, .06, .14, 0xF4F1EC, 0, 1.12, -2.9));
+    for (const s of [-1, 1]) { g.add(R.box(.07, .07, 1.9, 0x3b3f42, s * .55, .22, 0)); g.add(R.box(.06, .4, .06, 0x3b3f42, s * .5, .45, .45)); g.add(R.box(.06, .4, .06, 0x3b3f42, s * .5, .45, -.45)); }
+    const rotor = new THREE.Group(); rotor.position.y = 1.62; rotor.add(R.box(5.4, .04, .2, 0x3b3f42, 0, 0, 0), R.box(.2, .04, 5.4, 0x3b3f42, 0, 0, 0), R.box(.3, .2, .3, 0x3b3f42, 0, -.1, 0)); rotor.name = 'rotor'; g.add(rotor);
+    const tr = new THREE.Group(); tr.position.set(.1, 1.4, -2.95); tr.add(R.box(.02, 1.0, .1, 0x3b3f42, 0, 0, 0)); tr.name = 'rotor2'; g.add(tr);
+    g.add(R.box(.7, .06, .5, 0xF4F1EC, 0, 1.4, .1)); return { g, lights };
   }
+  if (model === 'boat') {
+    const sh = new THREE.Shape(); sh.moveTo(-.55, -1.3); sh.lineTo(.55, -1.3); sh.lineTo(.6, .6); sh.quadraticCurveTo(.4, 1.3, 0, 1.6); sh.quadraticCurveTo(-.4, 1.3, -.6, .6); sh.closePath();
+    const hull = new THREE.Mesh(R.geo('hull', () => { const h = new THREE.ExtrudeGeometry(sh, { depth: .5, bevelEnabled: true, bevelSize: .06, bevelThickness: .06, bevelSegments: 2 }); h.rotateX(Math.PI / 2); h.translate(0, .55, 0); return h; }), R.mat(parseInt(P.base.slice(1), 16)));
+    g.add(hull); g.add(R.box(1.15, .08, 2.6, 0xF4F1EC, 0, .58, .1)); g.add(R.box(.9, .55, .9, 0xF4F1EC, 0, .9, -.2));
+    const gl = new THREE.Mesh(R.geo('box', () => new THREE.BoxGeometry(1, 1, 1)), glassM); gl.scale.set(.92, .22, .7); gl.position.set(0, 1.0, -.15); g.add(gl);
+    g.add(R.box(.06, .7, .06, 0xd0d0d0, 0, 1.5, -.3)); bar(0, 1.25, -.2, .25); g.add(R.box(1.2, .14, .14, 0x1E3A5F, 0, .45, -1.25));
+    return { g, lights };
+  }
+  if (model === 'foot') {   // livredder: rød/gul uniform og redningsbøye
+    g.add(R.box(.36, .5, .24, 0xE2452F, 0, .78, 0)); g.add(R.box(.38, .12, .26, 0xF2D21B, 0, .98, 0));
+    const hd = new THREE.Mesh(R.geo('ico', () => new THREE.SphereGeometry(1, 16, 12)), R.mat(0xE9C2A0)); hd.scale.setScalar(.15); hd.position.y = 1.18; g.add(hd);
+    g.add(R.box(.32, .06, .3, 0xF2D21B, 0, 1.3, 0)); for (const s of [-1, 1]) { g.add(R.box(.12, .52, .14, 0x1E3A5F, s * .1, .27, 0)); g.add(R.box(.09, .45, .1, 0xE9C2A0, s * .24, .74, 0)); }
+    g.add(R.box(.14, .5, .08, 0xE2452F, .3, .62, .12)); return { g, lights };
+  }
+  const pr = VPROF[model] || VPROF.car, L = Math.max(...pr.p.map(q => q[0])), H = Math.max(...pr.p.map(q => q[1]));
+  const civ = org === 'sivil';
+  const bodyMats = [R.livery(org, model, L, H), R.mat(roofHex)];
+  const body = new THREE.Mesh(R.geo('vp' + model, () => profileGeo(pr)), bodyMats); g.add(body);
+  // frontrute (skrå glassflate mellom to profilpunkter)
+  if (pr.ws) { const a = pr.p[pr.ws[0]], b = pr.p[pr.ws[1]], len = Math.hypot(b[0] - a[0], b[1] - a[1]), ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+    const ws = new THREE.Mesh(R.geo('box', () => new THREE.BoxGeometry(1, 1, 1)), glassM); ws.scale.set(pr.w * .9, .02, len * .86); ws.position.set(0, (a[1] + b[1]) / 2 + .02, (a[0] + b[0]) / 2 - L / 2 + .02); ws.rotation.x = ang; g.add(ws); }
+  // støtfangere, grill, lykter
+  g.add(R.box(pr.w + .06, .16, .1, dark, 0, pr.p[1][1] + .06, L / 2 + .03)); g.add(R.box(pr.w + .06, .16, .1, dark, 0, pr.p[0][1] + .06, -L / 2 - .03));
+  for (const s of [-1, 1]) { g.add(R.box(.2, .1, .04, 0xFFF4C8, s * pr.w * .33, pr.p[1][1] + .22, L / 2 + .06, true)); g.add(R.box(.14, .14, .04, 0xD7262B, s * pr.w * .4, pr.p[0][1] + .28, -L / 2 - .06, true)); g.add(R.box(.04, .1, .14, dark, s * (pr.w / 2 + .07), H * .72, L / 2 - (model === 'truck' || model === 'rescue' || model === 'tanker' || model === 'ladder' ? .25 : .7))); }
+  // hjul med felg
+  const rimM = R.mat(0xC9CDD0), tyreM = R.mat(0x1E2124), axles = model === 'ladder' || model === 'tanker' ? [.15, .3, .82] : model === 'truck' || model === 'rescue' ? [.17, .8] : [.18, .8];
+  for (const f of axles) for (const s of [-1, 1]) { const tyre = new THREE.Mesh(R.wheelGeo(), tyreM), rim = new THREE.Mesh(R.rimGeo(), rimM); tyre.position.set(s * (pr.w / 2 + .02), .27, -L / 2 + f * L); rim.position.copy(tyre.position); g.add(tyre, rim); }
+  // påbygg per type
+  if (model === 'tanker') { const tk = new THREE.Mesh(R.geo('cyl', () => new THREE.CylinderGeometry(.58, .58, 1, 20)), R.mat(0xC8281E)); tk.rotation.x = Math.PI / 2; tk.scale.set(1, 2.3, 1); tk.position.set(0, 1.05, -L / 2 + 1.25); g.add(tk); g.add(R.box(1.2, .05, 2.3, 0xF2D21B, 0, .78, -L / 2 + 1.25)); }
+  if (model === 'ladder') { g.add(R.box(.36, .12, 3.4, 0xD8D6D0, 0, 1.12, -.25)); for (let i = 0; i < 9; i++) g.add(R.box(.36, .03, .04, 0x9a9890, 0, 1.19, -1.8 + i * .38)); g.add(R.box(.5, .3, .5, 0x3b3f42, 0, 1.05, -L / 2 + .4)); }
+  if (model === 'rescue' || model === 'truck') { g.add(R.box(pr.w * .8, .08, 1.6, 0xB9B7B0, 0, H + .04, -.4)); for (let i = 0; i < 4; i++) g.add(R.box(pr.w * .82, .02, .02, 0x8a8880, 0, H + .1, -1.1 + i * .45)); }
+  if (model === 'armored') g.add(R.box(.5, .25, .5, 0x3b4450, 0, H + .12, -.2));
+  if (!civ && org !== 'strand') { const top = pr.cab ? Math.max(...pr.p.filter(q => q[0] >= pr.cab[0] - .05 && q[0] <= pr.cab[1] + .05).map(q => q[1])) : H, zc = pr.cab ? (pr.cab[0] + pr.cab[1]) / 2 - L / 2 : 0; bar(0, top + .06, zc, model === 'car' || model === 'suv' ? .22 : .3); if (model === 'ambulance' || model === 'van') for (const s of [-1, 1]) { const m = new THREE.Mesh(R.geo('box'), blue()); m.scale.set(.12, .1, .12); m.position.set(s * .45, H + .02, -L / 2 + .1); g.add(m); lights.push(m); } }
+  return { g, lights };
+}
+R._vcache = {};
+function vehicleModel(type, org) {
+  const key = type + '|' + org; let base = R._vcache[key]; if (!base) base = R._vcache[key] = vehicleBase(type, org);
+  const g = base.g.clone(true), lights = [];
+  const idx = new Set(base.lights.map(m => base.g.children.indexOf(m)));
+  g.children.forEach((c, i) => { if (idx.has(i)) lights.push(c); if (c.name === 'rotor') g.userData.rotor = c; if (c.name === 'rotor2') g.userData.rotor2 = c; });
   g.userData.lights = lights; return g;
 }
+
+
+/* ---------- sivil trafikk: biler som kjører rundt på veinettet nær kameraet ---------- */
+const CIV_COL = [0xE8E6E1, 0x23262A, 0x8A9096, 0x2D4E7A, 0x8C2A2A, 0xC9CDD0, 0x3F5B45, 0x5A4636, 0xD9D4C7, 0x1F3346];
+R.traffic = { cars: [], body: null, glass: null, under: null };
+R.initTraffic = function () {
+  R.clearTraffic(); const w = R.world; if (!w || !w.edges.length) return;
+  const N = Game.lowGfx ? 45 : 120, T = R.traffic;
+  T.cand = w.edges.filter(e => w.comp[e.a] === w.mainComp && HW_MUL[e.hw] >= 0.85 && e.len > 25);
+  const civMat = R.mats.civ || (R.mats.civ = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide }));
+  T.body = new THREE.InstancedMesh(R.geo('vpcar', () => profileGeo(VPROF.car)), civMat, N);
+  T.glass = new THREE.InstancedMesh(R.geo('box', () => new THREE.BoxGeometry(1, 1, 1)), R.matG || (R.matG = new THREE.MeshPhongMaterial({ color: 0x22313b, shininess: 90, specular: 0x9fb8c8 })), N);
+  T.under = new THREE.InstancedMesh(R.geo('box'), R.mat(0x1E2124), N);
+  const col = new THREE.Color();
+  for (let i = 0; i < N; i++) { col.setHex(CIV_COL[i % CIV_COL.length]); T.body.setColorAt(i, col); T.cars.push({ e: null, s: 0, dir: 1, sp: 0 }); }
+  for (const m of [T.body, T.glass, T.under]) { m.frustumCulled = false; m.count = N; R.scene.add(m); }
+  T.body.instanceColor.needsUpdate = true;
+};
+R.clearTraffic = function () { const T = R.traffic; for (const m of [T.body, T.glass, T.under]) if (m) R.scene.remove(m); T.cars = []; T.body = T.glass = T.under = null; };
+R.spawnCar = function (c) {
+  const T = R.traffic, cx = R.cam.tx, cz = R.cam.tz, rad = clamp(R.mpp * Math.max(R.w, R.h) * 0.7, 300, 1600);
+  for (let k = 0; k < 40; k++) { const e = T.cand[Math.floor(Math.random() * T.cand.length)], p = e.geom[e.geom.length >> 1]; if (Math.hypot(p[0] - cx, p[1] - cz) < rad || k === 39) { c.e = e; c.dir = Math.random() < 0.5 ? 1 : -1; c.s = Math.random() * e.len; c.sp = 430 * e.mul * rr(0.8, 1.1); return; } }
+};
+R.updateTraffic = function (dtGame) {
+  const T = R.traffic, w = R.world; if (!T.body || !w) return;
+  const cx = R.cam.tx, cz = R.cam.tz, rad = clamp(R.mpp * Math.max(R.w, R.h) * 0.9, 400, 2000), nav = w.nav;
+  for (let i = 0; i < T.cars.length; i++) {
+    const c = T.cars[i]; if (!c.e) R.spawnCar(c);
+    c.s += c.dir * c.sp * dtGame;
+    if (c.s > c.e.len || c.s < 0) {   // neste veistrekning i krysset (ikke snu hvis mulig)
+      const node = c.s > c.e.len ? c.e.b : c.e.a, opts = w.adj[node].filter(x => x.edge !== c.e && HW_MUL[x.edge.hw] >= 0.85);
+      const nx = opts.length ? opts[Math.floor(Math.random() * opts.length)] : { edge: c.e };
+      const ne = nx.edge; c.dir = ne.a === node ? 1 : -1; c.s = c.dir > 0 ? 0 : ne.len; c.e = ne; c.sp = 430 * ne.mul * rr(0.8, 1.1);
+    }
+    const p = nav.pointAt(c.e, c.s), q = nav.pointAt(c.e, clamp(c.s + c.dir * 3, 0, c.e.len)), dx = q[0] - p[0], dz = q[1] - p[1], d = Math.hypot(dx, dz) || 1;
+    const ux = dx / d, uz = dz / d, px = p[0] - uz * 1.9, pz = p[1] + ux * 1.9;   // høyre kjørefelt
+    if (Math.hypot(px - cx, pz - cz) > rad) { c.e = null; R.spawnCar(c); }
+    const h = Math.atan2(ux, uz);
+    _q.setFromAxisAngle(_up, h); _v3.set(px, 0, pz); _s3.set(VS * 0.95, VS * 0.95, VS * 0.95); _m4.compose(_v3, _q, _s3); T.body.setMatrixAt(i, _m4);
+    _v3.set(px + Math.sin(h) * 0.2 * VS, 0.8 * VS, pz + Math.cos(h) * 0.2 * VS); _s3.set(0.92 * VS, 0.3 * VS, 0.95 * VS); _m4.compose(_v3, _q, _s3); T.glass.setMatrixAt(i, _m4);
+    _v3.set(px, 0.3 * VS, pz); _s3.set(0.95 * VS, 0.25 * VS, 1.7 * VS); _m4.compose(_v3, _q, _s3); T.under.setMatrixAt(i, _m4);
+  }
+  T.body.instanceMatrix.needsUpdate = T.glass.instanceMatrix.needsUpdate = T.under.instanceMatrix.needsUpdate = true;
+};
+const _up = new THREE.Vector3(0, 1, 0);
+
+/* ---------- strender: finn strandkanten i kartdataene og flytt tårn, livredder og badeplass dit ---------- */
+R.isWater = function (x, z) {
+  if (!R.blockedAt(x, z, 0) || !R._blk) return false;
+  const inPoly = (ring, px, pz) => { let c = false; for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const a = ring[i], b = ring[j]; if ((a[1] > pz) !== (b[1] > pz) && px < (b[0] - a[0]) * (pz - a[1]) / (b[1] - a[1]) + a[0]) c = !c; } return c; };
+  return R._blk.rings.some(r => r.layer === 'water' && x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1 && inPoly(r.ring, x, z));
+};
+R.fixBeaches = function () {
+  const w = R.world, map = R.map; if (!w || !map || !map.getSource('om') || !R.ready) return;
+  const b0 = map.getBounds();
+  for (const id in w.beaches) {
+    const b = w.beaches[id]; if (b.fixed) continue; const ll = w.proj.toLL(b.x, b.z); if (!b0.contains([ll.lon, ll.lat])) continue;
+    R._blk = null; const road = w.nav.rpXZ(b.rp); let dx = b.x - road.x, dz = b.z - road.z, d = Math.hypot(dx, dz);
+    if (d < 5 || b.island) { dx = b.wv[0]; dz = b.wv[1]; d = 1; }   // øyer: bruk oppgitt retning mot sjøen
+    dx /= d; dz /= d; const start = b.island ? { x: b.x - dx * 120, z: b.z - dz * 120 } : road;
+    let shore = null; for (let k = 0; k < 140; k++) { const px = start.x + dx * k * 4, pz = start.z + dz * k * 4; if (R.isWater(px, pz)) { shore = { x: px - dx * 4, z: pz - dz * 4 }; break; } }
+    b.fixed = true; if (!shore) continue;
+    b.shore = shore; b.tower = { x: shore.x - dx * 14, z: shore.z - dz * 14 }; b.swim = { x: shore.x + dx * 28, z: shore.z + dz * 28 }; b.x = (b.tower.x + shore.x) / 2; b.z = (b.tower.z + shore.z) / 2; b.wv = [dx, dz];
+    const v = R.beachViews && R.beachViews[id]; if (v) { v.grp.position.set(b.x, 0, b.z); v.grp.rotation.y = Math.atan2(dx, dz); }
+    if (typeof S !== 'undefined' && S) for (const u of Object.values(S.units)) if (u.type === 'livredder' && u.beach === id && u.status === 'ledig') { u.x = b.tower.x; u.z = b.tower.z; }
+  }
+};
 
 /* ---------- partikler: ild, røyk, gass, vannsprut (alt i meter) ---------- */
 R.fxInit = function () {
@@ -525,7 +698,7 @@ R.setEnv = function (e, force) {
   if (u >= 0 && u <= 1) { const a = u * Math.PI; R.sun.position.set(Math.cos(a) * 95, Math.sin(a) * 85 + 12, 45); } else R.sun.position.set(-60, 75, -35);
   const tw = Math.max(0, 1 - Math.abs(dl - 0.42) / 0.34), b = lerp(0.58, 1, smooth(0, 1, dl)) * (wet ? 0.92 : 1);
   R.map.getCanvas().style.filter = 'brightness(' + b.toFixed(3) + ') saturate(' + (lerp(0.75, 1, dl) * (wet ? 0.82 : 1)).toFixed(3) + ') sepia(' + (tw * 0.18).toFixed(3) + ') hue-rotate(' + (night * -12).toFixed(1) + 'deg)';
-  const nightPat = night > 0.55 ? '-n' : ''; if (R.nightPat !== nightPat && R.map.getLayer('bld-low')) { R.nightPat = nightPat; R.map.setPaintProperty('bld-low', 'fill-extrusion-pattern', 'win-low' + nightPat); R.map.setPaintProperty('bld-high', 'fill-extrusion-pattern', 'win-high' + nightPat); }
+  const nightPat = night > 0.55 ? '-n' : ''; if (R.nightPat !== nightPat && R.map.getLayer('bld-low-0')) { R.nightPat = nightPat; for (let k = 0; k < 5; k++) for (const t of ['low', 'high']) R.map.setPaintProperty('bld-' + t + '-' + k, 'fill-extrusion-pattern', 'win-' + t + '-' + k + nightPat); }
   R.wxMode = wet ? (wx === 'storm' ? 'storm' : 'regn') : snow ? 'snø' : '';
 };
 
@@ -565,7 +738,7 @@ R.addUnitView = function (u) {
   const T = UT[u.type], org = u.org === 'bistand' ? 'bistand' : T.org, grp = new THREE.Group(), model = vehicleModel(u.type, org); grp.add(model); grp.scale.setScalar(VS);
   const col = (AGENCIES[org] || AGENCIES.bistand).farge, pin = R.makePin((AGENCIES[org] || AGENCIES.bistand).ikon, col, 1); let halo = null;
   if (org === 'rk' || org === 'nf' || org === 'strand') { halo = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.4, 20), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false })); halo.rotation.x = -Math.PI / 2; halo.position.y = 0.2; grp.add(halo); }
-  R.dyn.add(grp); R.dyn.add(pin); R.views.units[u.id] = { grp, model, pin, halo, lights: model.userData.lights || [], rotor: model.userData.rotor, h: u.h || 0 };
+  R.dyn.add(grp); R.dyn.add(pin); R.views.units[u.id] = { grp, model, pin, halo, lights: model.userData.lights || [], rotor: model.userData.rotor, rotor2: model.userData.rotor2, h: u.h || 0 };
 };
 R.addIncidentView = function (inc) {
   const col = PRI_COLOR[inc.pri] || '#8FA3B8', grp = new THREE.Group();
@@ -603,6 +776,7 @@ R.sync = function (S, dt) {
     const siren = u.siren && T.model !== 'foot';
     for (let i = 0; i < v.lights.length; i++) v.lights[i].visible = siren ? ((i + flash) % 2 === 0) : false;
     if (v.rotor) v.rotor.rotation.y += (u.status === 'ledig' ? 0 : 22) * dt;
+    if (v.rotor2) v.rotor2.rotation.x += (u.status === 'ledig' ? 0 : 30) * dt;
     if (v.halo) { v.halo.rotation.z += dt * 1.2; v.halo.material.opacity = 0.6 + 0.3 * Math.sin(t * 4); }
     v.pin.visible = !!((u.status !== 'ledig' && far > 62) || (R.sel && R.sel.type === 'unit' && R.sel.id === id)); R.pinAt(v.pin, px, 8 + alt, pz, pinPx.unit); v.pin.material.opacity = u.status === 'ledig' ? 0.85 : 1;
   }
@@ -683,6 +857,8 @@ R.updateLabels = function () {
 R.frame = function (dt, simDt, S) {
   if (!R.ready || !R.world) return;
   R.time += dt; R.updateCam();
+  R.waterTick(dt); R.updateTraffic(S ? simDt : dt * MIN_PER_SEC);
+  R._bfx = (R._bfx || 0) + dt; if (R._bfx > 2) { R._bfx = 0; R.fixBeaches(); }
   if (S) R.sync(S, dt);
   R.fxUpdate(dt, S); R.updateLabels();
   R.map.triggerRepaint();
