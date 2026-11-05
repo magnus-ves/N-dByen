@@ -227,7 +227,7 @@ UI.placeBar = function () {
 };
 UI.confirmPlacement = function () {
   const p = Game.place; if (!p || !p.sel) return;
-  const arg = p.ground ? { x: p.sel.x, z: p.sel.z } : p.sel.id;
+  const arg = p.ground ? { x: p.sel.x, z: p.sel.z } : p.sel.dyn ? Sim.createLot(p.sel.x, p.sel.z).id : p.sel.id;
   const done = p.onConfirm(arg);
   if (done !== false) UI.endPlacement(false);
 };
@@ -249,7 +249,13 @@ UI.placeTap = function (px, py, touch) {
     p.sel = { x: g.x, z: g.z, addr: 'Valgt punkt', cov: 'Dekning: ' + sig }; UI.placeBar(); UI.markPlace(g.x, g.z); return;
   }
   const hit = R.pick(px, py, touch, S || { incidents: {}, units: {}, stations: {}, net: { masts: {} } });
-  if (!hit) return;
+  if (!hit) {   // fri plassering: trykk hvor som helst nær en vei – spillet finner ledig plass ved siden av
+    const g = R.terrainPoint(px, py), spot = Sim.findSpot(g.x, g.z);
+    if (!spot) { UI.toast('Ingen ledig plass her – prøv nærmere en vei, bort fra bygg og vann.', 'warn'); return; }
+    const nr = WORLD.nav.nearestRP(spot.x, spot.z, true), q = Net.quality(Net.signalAt(spot.x, spot.z));
+    p.sel = { dyn: true, x: spot.x, z: spot.z, addr: WORLD.addrOf({ a: nr.a, b: nr.b, e: nr.e, t: nr.t }, 0), cov: 'Nødnett: ' + (q === 'bra' ? 'god dekning' : q === 'svak' ? 'svak dekning' : 'ingen dekning') };
+    UI.markPlace(spot.x, spot.z); UI.placeBar(); return;
+  }
   const lot = WORLD.lotById.get(hit.id); if (!lot) return;
   const q = Net.quality(Net.signalAt(lot.x, lot.z));
   p.sel = { id: lot.id, x: lot.x, z: lot.z, addr: lot.addr, cov: 'Nødnett: ' + (q === 'bra' ? 'god dekning' : q === 'svak' ? 'svak dekning' : 'ingen dekning') };
@@ -637,7 +643,7 @@ UI.buyItem = function (id) {
   if (!it.ok) { UI.toast(it.reason || 'Ikke tilgjengelig akkurat nå.', 'warn'); return; }
   if (it.kind === 'place') {
     const isMast = id === 'mast:new', lots = isMast ? Sim.mastLots() : Sim.freeLots();
-    UI.beginPlacement({ title: esc(it.navn) + ' · ' + fmtKr(it.cost), hint: isMast ? 'Trykk på en tomt, park eller øy for å bygge basestasjon' : 'Trykk på en ledig tomt (grønne ringer)', lots, costText: fmtKr(it.cost),
+    UI.beginPlacement({ title: esc(it.navn) + ' · ' + fmtKr(it.cost), hint: isMast ? 'Trykk hvor som helst nær en vei der det er ledig plass for å bygge basestasjon' : 'Trykk hvor som helst nær en vei der det er ledig plass (grønne ringer er forslag)', lots, costText: fmtKr(it.cost),
       onConfirm: lotId => { const r = UI.res(Shop.exec(id, lotId)); return r.ok ? undefined : false; } });
     if (window.innerWidth < 900) { UI._sheetBefore = UI.sheet || 1; UI.setSheet(0); }
     return;

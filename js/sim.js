@@ -242,6 +242,24 @@ Sim.mastLots = () => WORLD.lots.filter(isFree);
 Sim.stationList = org => Object.values(S.stations).filter(s => ST[s.type].org === org && (ST[s.type].rolle === 'etat' || ST[s.type].rolle === 'frivillig'));
 Sim.stationCap = st => ST[st.type].cap + 2 * st.up.garasje;
 Sim.unitsAt = id => Object.values(S.units).filter(u => u.stationId === id);
+/** Finner ledig plass nær en vei ved (x,z): sidene av nærmeste vei, 12–30 m fra midtlinjen, uten bygg/vann. */
+Sim.findSpot = function (x, z) {
+  const nav = WORLD.nav, r = nav.nearestRP(x, z, true); if (!r || r.dist > 160) return null;
+  const rp0 = { a: r.a, b: r.b, e: r.e, t: r.t }, e = nav.edgeFor(rp0), s0 = r.t * e.len, out = [];
+  for (const ds of [0, -14, 14, -28, 28, -45, 45]) for (const off of [14, 19, 26, 34]) for (const side of [1, -1]) {
+    const t = clamp((s0 + ds) / e.len, 0.05, 0.95), rp = { a: e.a, b: e.b, e: e.id, t }, c = nav.rpXZ(rp), d = nav.dirAt(rp), px = c.x - d[1] * off * side, pz = c.z + d[0] * off * side;
+    out.push({ x: px, z: pz, w: Math.hypot(px - x, pz - z) + Math.abs(ds) * 0.3 });
+  }
+  out.sort((a, b) => a.w - b.w);
+  for (const c of out) {
+    const rr_ = nav.nearestRP(c.x, c.z, true); if (!rr_ || rr_.dist < 10) continue;                  // ikke oppå en annen vei
+    if (S && WORLD.lots.some(l => !l.free && Math.hypot(l.x - c.x, l.z - c.z) < 14) || Object.keys(S.stations).some(id => { const l = WORLD.lotById.get(S.stations[id].lotId); return Math.hypot(l.x - c.x, l.z - c.z) < 14; })) continue;
+    if (R.blockedAt(c.x, c.z, 7)) continue;
+    return { x: c.x, z: c.z };
+  }
+  return null;
+};
+Sim.createLot = function (x, z) { const lot = WORLD.addLotDyn(x, z); (S.dynLots = S.dynLots || []).push({ id: lot.id, x, z }); return lot; };
 Sim.stationLot = st => WORLD.lotById.get(st.lotId);
 
 Sim.buildStation = function (type, lotId, opts) {

@@ -239,6 +239,8 @@ function buildWorld(cfg, roadGJ, siteFeats) {
   world.mastDefs = [];
   for (const m of (cfg.masts || [])) { const p = proj.toXZ(m.lat, m.lon), lot = addLot({ x: p.x, z: p.z, kind: 'mast', free: false, name: m.navn }); world.mastDefs.push({ id: m.id, navn: m.navn, lotId: lot.id, ground: true, rmul: m.rmul || 1 }); }
   world.lots = lots; world.lotById = lotById;
+  /** Oppretter en tomt der spilleren valgte (lagres i S.dynLots, se Sim.createLot). */
+  world.addLotDyn = (x, z, id) => addLot(Object.assign({ x, z, dyn: true }, id ? { id } : {}));
 
   /* strender, parker, kaikanter, fjell – alle med ekte koordinater */
   const approachFor = (d, island) => (island ? 9 : 0) + Math.max(0, (d - 90) / 160);

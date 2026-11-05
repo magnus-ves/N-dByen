@@ -208,6 +208,26 @@ R.screenOf = function (x, y, z) {
   const nx = _v4.x / _v4.w, ny = _v4.y / _v4.w; if (_v4.z / _v4.w > 1) return null;
   return { x: (nx + 1) / 2 * R.w, y: (1 - ny) / 2 * R.h };
 };
+/** Er punktet (meter) opptatt av bygg (innenfor margin) eller vann ifølge kartdataene? Uten kartdata: aldri. */
+R.blockedAt = function (x, z, margin) {
+  const map = R.map, w = R.world; if (!map || !w || !map.getSource('om')) return false;
+  const inPoly = (ring, px, pz) => { let c = false; for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const a = ring[i], b = ring[j]; if ((a[1] > pz) !== (b[1] > pz) && px < (b[0] - a[0]) * (pz - a[1]) / (b[1] - a[1]) + a[0]) c = !c; } return c; };
+  const dSeg = (px, pz, a, b) => { const dx = b[0] - a[0], dz = b[1] - a[1], L = dx * dx + dz * dz || 1e-9, t = clamp(((px - a[0]) * dx + (pz - a[1]) * dz) / L, 0, 1); return Math.hypot(px - a[0] - dx * t, pz - a[1] - dz * t); };
+  const ll = w.proj.toLL(x, z), pt = map.project([ll.lon, ll.lat]), box = [[pt.x - 80, pt.y - 80], [pt.x + 80, pt.y + 80]];
+  for (const layer of ['building', 'water']) {
+    let feats = []; try { feats = map.querySourceFeatures('om', { sourceLayer: layer }); } catch (e) { return false; }
+    for (const f of feats) {
+      const g = f.geometry; if (!g) continue; const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : []; 
+      for (const poly of polys) {
+        const ring = poly[0].map(q => { const p = w.proj.toXZ(q[1], q[0]); return [p.x, p.z]; });
+        let near = false; for (const q of ring) if (Math.abs(q[0] - x) < 200 && Math.abs(q[1] - z) < 200) { near = true; break; } if (!near && !inPoly(ring, x, z)) continue;
+        if (inPoly(ring, x, z)) return true;
+        if (layer === 'building') for (let i = 1; i < ring.length; i++) if (dSeg(x, z, ring[i - 1], ring[i]) < margin) return true;
+      }
+    }
+  }
+  return false;
+};
 R.updateCam = function () {
   const c = R.map.getCenter(), p = R.world.proj.toXZ(c.lat, c.lng), z = R.map.getZoom();
   R.mpp = 78271.517 * Math.cos(c.lat * Math.PI / 180) / Math.pow(2, z); R.cam.tx = p.x; R.cam.tz = p.z; R.cam.dist = R.mpp * 100; R.cam.gdist = R.cam.dist;
