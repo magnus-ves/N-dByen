@@ -2,9 +2,11 @@ name: Publiser til GitHub Pages
 # Sjekker koden, bygger en ren mappe med spillet og publiserer den til GitHub Pages.
 # Pages må være slått på én gang: Settings → Pages → Source: «GitHub Actions».
 # Er det ikke slått på, blir jobben grønn med en tydelig melding om hva som må gjøres (i stedet for å feile).
+# GitHub lar bare standardgrenen (Settings → General → Default branch) publisere til Pages,
+# så alle grener sjekkes, men bare standardgrenen publiseres.
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, 'claude/**']
     paths-ignore: ['README.md', 'data/README.md', 'legacy/**']
   workflow_dispatch:
   workflow_run:                       # publiser på nytt når veidata er oppdatert av «Hent veidata»
@@ -12,7 +14,7 @@ on:
     types: [completed]
     branches: [main, master]
 permissions: { contents: read, pages: write, id-token: write }
-concurrency: { group: pages, cancel-in-progress: true }
+concurrency: { group: 'pages-${{ github.ref_name }}', cancel-in-progress: true }
 
 jobs:
   bygg:
@@ -85,6 +87,14 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      - name: Hvilken gren publiseres?
+        run: |
+          if [ "${{ github.ref_name }}" = "${{ github.event.repository.default_branch }}" ]; then
+            echo "Dette er standardgrenen (${{ github.ref_name }}) – spillet publiseres."
+          else
+            echo "::notice::Grenen ${{ github.ref_name }} er sjekket. Spillet publiseres fra standardgrenen ${{ github.event.repository.default_branch }}."
+          fi
+
       - uses: actions/configure-pages@v5
         if: steps.pages.outputs.on == 'true'
       - uses: actions/upload-pages-artifact@v3
@@ -94,7 +104,7 @@ jobs:
   publiser:
     needs: bygg
     timeout-minutes: 15
-    if: needs.bygg.outputs.pages == 'true'
+    if: needs.bygg.outputs.pages == 'true' && github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     environment: { name: github-pages, url: '${{ steps.d.outputs.page_url }}' }
     steps:
