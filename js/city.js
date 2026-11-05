@@ -101,8 +101,8 @@ const City = {
   /** Bygg (eller bygg om) husene rundt kartsenteret. */
   update() {
     const map = R.map, w = R.world; if (!map || !w || !R.ready || City.busy || !map.getSource('om')) return;
-    const z = map.getZoom(); if (z < 15.2) { City.clear(); return; }
-    const c = map.getCenter(), cp = w.proj.toXZ(c.lat, c.lng), rad = clamp(R.mpp * Math.max(R.w, R.h) * 0.9, 300, 1100);
+    const z = map.getZoom(); if (z < 14.3) { City.clear(); return; }
+    const c = map.getCenter(), cp = w.proj.toXZ(c.lat, c.lng), rad = clamp(R.mpp * Math.max(R.w, R.h) * 1.1, 400, 1700);
     const key = Math.round(cp.x / 60) + ',' + Math.round(cp.z / 60) + ',' + Math.round(rad / 100);
     if (key === City.lastKey && City.mesh) return; City.busy = true;
     try {
@@ -116,7 +116,7 @@ const City = {
       };
       let n = 0; const atlas = SatAtlas.ensure(w, cp, rad);
       for (const f of feats) {
-        if (n > 4500) break;
+        if (n > 9000) break;
         const pr = f.properties || {}; if (pr.hide_3d) continue;
         const g = f.geometry; if (!g || (g.type !== 'Polygon' && g.type !== 'MultiPolygon')) continue;
         for (const poly of (g.type === 'Polygon' ? [g.coordinates] : g.coordinates)) {
