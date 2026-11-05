@@ -226,3 +226,7 @@ code{background:rgba(62,74,63,.1);padding:1px 6px;border-radius:8px;font-size:12
 @keyframes ringpulse{0%,100%{box-shadow:0 0 0 0 rgba(228,174,78,.0)}50%{box-shadow:0 0 0 4px rgba(228,174,78,.35)}}
 .slot a{cursor:pointer;text-decoration:underline;margin-left:4px}
 .ic{flex:none}
+
+.inp{border:1px solid rgba(80,90,80,.25);border-radius:12px;padding:9px 12px;font:inherit;background:rgba(255,255,255,.8);min-width:0}
+#rMic.on{background:#D9695A;color:#fff}
+.btn.net{background:#E8E2F4}

@@ -169,7 +169,7 @@ const SEASONS = [
 const AGENCIES = {
   brann:     { id: 'brann',     navn: 'Brann og redning', kort: 'Brann',     nr: '110', sentral: '110-sentral',            tg: 'BRANN',   farge: '#C9785D', ikon: 'flame',  tekst: 'Slukk branner, redd folk ut av vrakbiler og håndter gasslekkasjer.' },
   politi:    { id: 'politi',    navn: 'Politi',           kort: 'Politi',    nr: '112', sentral: 'Operasjonssentral 112',   tg: 'POLITI',  farge: '#6F8FB5', ikon: 'shield', tekst: 'Prioriter P1–P4, håndter innbrudd, slagsmål og savnede, og led søk og redning.' },
-  ambulanse: { id: 'ambulanse', navn: 'Ambulanse',        kort: 'Ambulanse', nr: '113', sentral: 'AMK-sentral 113',         tg: 'HELSE',   farge: '#B3BE68', ikon: 'ambulance',  tekst: 'Akutt, haster, vanlig: hjertestans, fall, fødsel og drukningsulykker.', cm: 2, k160: 2 },
+  ambulanse: { id: 'ambulanse', navn: 'Ambulanse',        kort: 'Ambulanse', nr: '113', sentral: 'AMK-sentral 113',         tg: 'HELSE',   farge: '#B3BE68', ikon: 'ambulance',  tekst: 'Akutt, haster, vanlig: hjertestans, fall, fødsel og drukningsulykker.' },
   rk:        { id: 'rk',        navn: 'Røde Kors Hjelpekorps',  kort: 'Hjelpekorps', nr: '', sentral: '', tg: 'REDNING', farge: '#D98A82', ikon: 'hand', tekst: 'Søk etter savnede, førstehjelp, sanitetsvakt og fjellredning.' },
   nf:        { id: 'nf',        navn: 'Norsk Folkehjelp Sanitet', kort: 'Folkehjelp', nr: '', sentral: '', tg: 'REDNING', farge: '#C97C74', ikon: 'hand', tekst: 'Sanitetsvakt, søk og redning, støtte ved store ulykker.' },
   rs:        { id: 'rs',        navn: 'Redningsselskapet',      kort: 'RS', nr: '', sentral: '', tg: 'REDNING', farge: '#E0874A', ikon: 'anchor', tekst: 'Redningsskøyter i Oslofjorden – henter folk på øyene og på sjøen.' },
@@ -191,7 +191,7 @@ const UT = {
   hundepatrulje:   { navn: 'Hundepatrulje',         org: 'politi',    model: 'van',      cost: 110000, run: 8,  spd: 1.05, crew: 2, lvl: 3, turnout: 0.9, term: 'k', cm: 1, k160: 1 },
   innsatsleder:    { navn: 'Innsatsleder politi',   org: 'politi',    model: 'suv',      cost: 120000, run: 9,  spd: 1.15, crew: 1, lvl: 4, turnout: 0.7, term: 'k', cm: 1, k160: 1 },
   beredskapstropp: { navn: 'Beredskapstropp (Delta)', org: 'politi',  model: 'armored',  cost: 600000, run: 30, spd: 1.05, crew: 6, lvl: 8, turnout: 1.0, term: 'k', cm: 4, k160: 1 },
-  ambulanse:       { navn: 'Ambulanse',             org: 'ambulanse', model: 'ambulance', cost: 120000, run: 9, spd: 1.10, crew: 2, lvl: 1, turnout: 0.8, term: 'k' },
+  ambulanse:       { navn: 'Ambulanse',             org: 'ambulanse', model: 'ambulance', cost: 120000, run: 9, spd: 1.10, crew: 2, lvl: 1, turnout: 0.8, term: 'k', cm: 2, k160: 2 },
   legebil:         { navn: 'Legebil',               org: 'ambulanse', model: 'suv',      cost: 180000, run: 12, spd: 1.20, crew: 2, lvl: 3, turnout: 0.8, term: 'k', cm: 2, k160: 1 },
   luftambulanse:   { navn: 'Luftambulanse',         org: 'ambulanse', model: 'heli',     cost: 900000, run: 60, spd: 3.00, crew: 3, lvl: 6, turnout: 2.0, term: 'k', needs: 'helikopterbase', cm: 3, k160: 0 },
   redningsbat:     { navn: 'Redningsbåt (brann)',  org: 'brann',     model: 'boat',     cost: 160000, run: 12, spd: 1.25, crew: 3, lvl: 1, turnout: 1.5, term: 'k', boat: true, cm: 2, k160: 0 },

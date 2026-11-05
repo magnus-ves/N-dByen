@@ -154,7 +154,8 @@ const Net = {
       const u = S.units[id]; if (u.vis === false || u.bistand) { u.contact = 'bra'; continue; }
       const sig = this.signalAt(u.x, u.z); u.sig = sig;
       let q = this.quality(sig);
-      if (u.dropUntil && u.dropUntil > S.t) q = 'ingen';
+      if (u.status === 'ledig' && (u.stationId || u.type === 'livredder')) q = 'bra';   // på stasjonen/tårnet: fast samband
+      else if (u.dropUntil && u.dropUntil > S.t) q = 'ingen';
       else if (q === 'svak' && u.status !== 'ledig' && Math.random() < (S.net.termLevel >= 2 ? 0.003 : S.net.termLevel ? 0.011 : 0.03) * dt) { u.dropUntil = S.t + rr(1.5, 4); q = 'ingen'; }
       u.cong = false;
       u._q = q;
@@ -624,9 +625,9 @@ Sim.answerCall = function (id) { const c = S.calls.find(x => x.id === id); if (!
 /** Frekvens og valg av neste hendelse. */
 /** Hendelser per spillminutt. Øker med etater og antall enheter: fra ca. ett anrop hvert 2.–3. minutt (ekte tid) til rundt to i minuttet for en stor organisasjon. */
 Sim.rate = function () {
-  const cfg = WORLD.cfg, base = { brann: 0.04, politi: 0.06, ambulanse: 0.07 };
+  const cfg = WORLD.cfg, base = { brann: 0.025, politi: 0.035, ambulanse: 0.04 };
   let lam = 0; for (const a of ETATER) if (S.agencies[a]) lam += base[a];
-  if (lam) lam += 0.035 * Object.values(S.units).filter(u => !u.bistand && u.type !== 'livredder').length;
+  if (lam) lam += 0.03 * Object.values(S.units).filter(u => !u.bistand && u.type !== 'livredder').length;
   if (!lam && Sim.staffedBeaches().length && isSummer()) lam = 0.05;
   return Math.min(0.67, lam * (cfg.incidentMul.total || 1) * (0.8 + 0.2 * cfg.diff) * (1 + 0.08 * (S.level - 1)));
 };

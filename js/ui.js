@@ -48,6 +48,8 @@ UI.init = function () {
   Bus.on('toast', m => UI.toast(m.msg, m.kind));
   Bus.on('log', e => UI.pushMini(e));
   Bus.on('levelup', d => UI.levelUp(d));
+  Radio.init(); $('#btnRadio').classList.toggle('on', Radio.enabled);
+  $('#btnRadio').addEventListener('click', () => { Radio.enabled = !Radio.enabled; Radio.unlock(); if (!Radio.enabled && 'speechSynthesis' in window) speechSynthesis.cancel(); Radio.queue = []; $('#btnRadio').classList.toggle('on', Radio.enabled); UI.toast(Radio.enabled ? (Radio.listen.size ? 'Radio på' : 'Radio på – velg talegrupper å lytte på under Nødnett') : 'Radio av', 'info'); });
   Bus.on('incident', inc => { UI.dirty = true; if (Game.mode === 'play') UI.renderTab(true); if (UI.sheet === 0 && window.innerWidth < 900) UI.pulseTab('hendelser'); });
   Bus.on('alarm', al => { UI.dirty = true; UI.alarmBar(); R.focus(S.units[al.unitId].x, S.units[al.unitId].z, 80); });
   Bus.on('incidentDone', () => { UI.dirty = true; });
@@ -436,7 +438,7 @@ UI.unitRow = function (u) {
   h += '<div class="grow"><b class="sm">' + esc(u.name) + '</b><div class="xs muted">' + chip(UI.unitState(u), UI.statusCls(u.status)) + (job ? ' ' + job : '') + '</div></div>' + UI.sigHtml(u) + '</div>';
   if (sel) {
     h += '<div class="card" style="margin:-2px 0 8px"><div class="kv"><span>Stasjon</span><span>' + esc(st) + '</span><span>Nødnett</span><span>' + ({ bra: 'God dekning', svak: 'Svak dekning', ingen: 'Ingen kontakt' }[u.contact || 'bra']) + (u.cong ? ' (overbelastet)' : '') + '</span><span>Samband</span><span>' + (Net.vhf() ? 'VHF-radio' : (T.term === 'h' ? 'Nødnett håndterminal' : 'Nødnett kjøretøyterminal') + ' nivå ' + S.net.termLevel) + '</span><span>Mannskap</span><span>' + (Staff.needs(u) ? Staff.of(u).map(p => esc(p.navn) + (p.k160 ? ' (160)' : '')).join(', ') || 'mangler' : T.crew + ' frivillige') + '</span></div>'
-      + '<div class="actions">' + (u.job ? '<button class="btn sm" data-act="recall" data-id="' + u.id + '">Kall tilbake</button>' : '') + '<button class="btn ghost sm" data-act="focusunit" data-id="' + u.id + '">' + icon('pin') + ' Vis på kart</button></div></div>';
+      + '<div class="actions"><button class="btn net sm" data-act="talk" data-id="' + u.id + '">' + icon('radio') + ' Snakk</button>' + (u.job ? '<button class="btn sm" data-act="recall" data-id="' + u.id + '">Kall tilbake</button>' : '') + '<button class="btn ghost sm" data-act="focusunit" data-id="' + u.id + '">' + icon('pin') + ' Vis på kart</button></div></div>';
   }
   return h;
 };
@@ -496,7 +498,9 @@ UI.tabNodnett = function () {
   let h = '<div class="card"><div class="row"><i class="dot ' + (ns === 'g' ? '' : ns) + '"></i><div class="grow"><b>' + (ns === 'g' ? 'Nettet fungerer normalt' : ns === 'y' ? 'Høy belastning eller svak dekning' : 'Utfall eller overbelastning!') + '</b><div class="xs muted">' + Net.techName() + ' · god/svak dekning på ' + cov + ' % av landarealet</div></div><button class="btn sm' + (S.settings.cover ? ' net' : '') + '" data-act="cover">' + icon('layers') + ' Dekning</button></div></div>';
   const alarms = S.net.alarms.filter(a => !a.done);
   for (const al of alarms) { const u = S.units[al.unitId], inc = S.incidents[al.incId]; if (!u) continue; h += '<div class="card" style="background:#f6dcd5;border-color:#d9695a"><div class="row">' + icon('warn') + '<div class="grow"><b>NØDKNAPP: ' + esc(u.name) + '</b><div class="sm">' + esc(inc ? inc.loc.addr : '') + ' · ' + Math.max(0, Math.ceil(al.deadline - S.t)) + ' min igjen</div></div><button class="btn clay sm" data-act="sendhelp" data-id="' + al.id + '">Send hjelp</button></div></div>'; }
-  h += '<h3 class="sec">Talegrupper</h3>';
+  h += '<h3 class="sec">Radio – lytt på samband</h3><div class="card">' + Radio.channels().map(c => '<button class="opt' + (Radio.listen.has(c.id) ? ' on' : '') + '" data-act="listen" data-id="' + esc(c.id) + '"><div class="av" style="background:' + (Radio.listen.has(c.id) ? '#7b9a79' : '#B7BDB8') + '">' + icon(Radio.listen.has(c.id) ? 'headset' : 'radio') + '</div><div class="grow"><div class="b sm">' + esc(c.navn) + '</div><div class="xs muted">' + (Radio.listen.has(c.id) ? 'Lytter' : 'Trykk for å lytte') + '</div></div></button>').join('')
+    + '<div class="xs muted" style="margin-top:6px">Meldingene leses opp med radioklang. Snakk med en enhet fra Enheter-fanen. ' + ('speechSynthesis' in window ? '' : 'Nettleseren din støtter ikke talesyntese.') + '</div></div>';
+  h += '<h3 class="sec">' + (Net.vhf() ? 'Kanaler' : 'Talegrupper') + '</h3>';
   const groups = Net.groups();
   for (const tg of ['BRANN', 'POLITI', 'HELSE', 'REDNING']) {
     const mem = groups[tg] || [], busy = mem.filter(u => u.status !== 'ledig').length, p = S.net.tgPrio[tg];
@@ -607,6 +611,8 @@ UI.act = function (act, d) {
     case 'addopt': if (inc) { const s = inc.slots.find(x => x.k === d.k); const c = s && Sim.candidates(inc, s)[0]; if (c) { Sim.assign(inc, s, c.u); UI.toast(c.u.name + ' sendt (' + Math.ceil(c.eta) + ' min)', 'good'); } else UI.toast('Ingen ledig enhet – kjøp flere eller sjekk avtaler.', 'warn'); UI.sug = {}; UI.dirty = true; } break;
     case 'bistand': if (inc) UI.openBistand(inc); break;
     case 'samv': if (inc) UI.res(Sim.createSamvirke(inc)); break;
+    case 'listen': Radio.toggle(id); UI.dirty = true; break;
+    case 'talk': UI.mc || Radio.talk(id); break;
     case 'answer': { const c = Sim.answerCall(id); if (c) { UI.toast('Du snakker med innringer: «' + c.text + '»', 'info'); UI.dirty = true; } break; }
     case 'hire': UI.res(Staff.hire(id, d.k === '1')); break;
     case 'course': UI.res(Staff.course(id)); break;
