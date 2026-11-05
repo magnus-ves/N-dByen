@@ -779,6 +779,11 @@ R.fixBeaches = function () {
     R._blk = null; b.tries = (b.tries || 0) + 1; if (b.tries >= 6) b.fixed = true; let dx, dz, shore = null;   // prøver igjen til kartflisene er lastet
     if (b.towerFixed) {
       // tårnet står der det er oppgitt: let i alle retninger etter nærmeste vann og legg badeplassen der
+      if (R.isWater(b.tower.x, b.tower.z)) {   // punktet ligger litt ute i vannet: flytt tårnet inn til nærmeste land
+        let land = null;
+        for (let k = 0; k < 24; k++) { const a = k / 24 * TAU, ux = Math.cos(a), uz = Math.sin(a); for (let st = 1; st <= 45; st++) { const px = b.tower.x + ux * st * 4, pz = b.tower.z + uz * st * 4; if (!R.isWater(px, pz)) { if (!land || st < land.st) land = { st, px: px + ux * 6, pz: pz + uz * 6 }; break; } } }
+        if (!land) continue; b.tower = { x: land.px, z: land.pz };
+      }
       let best = null;
       for (let k = 0; k < 24; k++) { const a = k / 24 * TAU, ux = Math.cos(a), uz = Math.sin(a); for (let st = 1; st <= 45; st++) { const px = b.tower.x + ux * st * 4, pz = b.tower.z + uz * st * 4; if (R.isWater(px, pz)) { if (!best || st < best.st) best = { st, ux, uz, px, pz }; break; } } }
       if (!best) continue; dx = best.ux; dz = best.uz; shore = { x: best.px - dx * 3, z: best.pz - dz * 3 };

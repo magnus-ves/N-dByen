@@ -469,7 +469,7 @@ const CITY_CONFIGS = {
     beaches: [   // tårnposisjoner (lat, lon) – livredderne står her; retningen ut mot vannet finnes fra kartdataene
       { id: 'sorenga', navn: 'Sørenga sjøbad', lat: 59.9006614, lon: 10.7512228, crowd: 1.3, wdir: [-1, 0.2], fast: true },
       { id: 'opera', navn: 'Oprastranda', lat: 59.9065057, lon: 10.7528321, crowd: 1.0, wdir: [0, 1], fast: true },
-      { id: 'paradisbukta', navn: 'Paradisbukta', lat: 59.9043, lon: 10.6934, crowd: 1.0, wdir: [1, 0] },
+      { id: 'paradisbukta', navn: 'Paradisbukta', lat: 59.8972, lon: 10.6735, crowd: 1.0, wdir: [-1, 0], fast: true },   // rett nord for Huk, vestsiden av Bygdøy
       { id: 'huk', navn: 'Huk', lat: 59.8951209, lon: 10.6760143, crowd: 1.2, wdir: [-0.8, 0.6], fast: true },
       { id: 'hovedoya', navn: 'Hovedøya', lat: 59.8934992, lon: 10.72728, crowd: 0.7, island: true, wdir: [-0.6, 0.8], fast: true },
       { id: 'langoyene', navn: 'Langøyene', lat: 59.8790, lon: 10.7285, crowd: 0.8, island: true, wdir: [-1, 0] }
