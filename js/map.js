@@ -59,7 +59,7 @@ R.style = function (offline) {
   return style;
 };
 R.setSeason = function (si) {
-  R.seasonIdx = si; const map = R.map; if (!map || !map.isStyleLoaded()) return; const P = SEASON_STYLE[si], set = (id, prop, v) => { if (map.getLayer(id)) map.setPaintProperty(id, prop, v); };
+  R.seasonIdx = si; const map = R.map; if (!map || !R.ready) return; /* isStyleLoaded() er false så lenge fliser lastes, så R.ready brukes */ const P = SEASON_STYLE[si], set = (id, prop, v) => { if (map.getLayer(id)) map.setPaintProperty(id, prop, v); };
   set('bg', 'background-color', P.bg); for (const id of ['landcover-grass', 'park']) set(id, 'fill-color', P.grass); set('landcover-wood', 'fill-color', P.wood); set('water', 'fill-color', P.water); set('waterway', 'line-color', P.water);
   // satellittbildet er statisk; vinter bleker det litt, høst varmer det
   set('sat', 'raster-saturation', [-0.1, -0.1, 0.0, -0.45][si]); set('sat', 'raster-brightness-max', [1, 1, 0.95, 1][si]); set('sat', 'raster-hue-rotate', [0, 0, -12, 0][si]); set('sat', 'raster-brightness-min', si === 3 ? 0.18 : 0);
@@ -126,9 +126,9 @@ R.updateRoofs = function () {
       const ridgeAlongW = r.w >= r.d;
       RR.items.push({ x: r.cx, z: r.cz, y: (f.properties && f.properties.render_min_height ? 0 : 0) + h, sx: (ridgeAlongW ? r.w : r.d) + 0.8, sz: (ridgeAlongW ? r.d : r.w) + 0.8, rh: clamp(short * 0.34, 1.6, 5), a: ridgeAlongW ? r.a : r.a + Math.PI / 2, col: ROOF_COL[(Math.abs(Math.round(r.cx * 7 + r.cz * 13))) % ROOF_COL.length] });
     }
-    if (RR.items.length > 6000) RR.items.splice(0, RR.items.length - 6000);
-    if (RR.mesh) { R.scene.remove(RR.mesh); RR.mesh.dispose(); }
-    const m = RR.mesh = new THREE.InstancedMesh(R.geo('gable', gableGeo), new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide }), Math.max(1, RR.items.length)), col = new THREE.Color();
+    if (RR.items.length > 6000) { RR.items.splice(0, RR.items.length - 6000); RR.keys = new Set(RR.items.map(it => Math.round(it.x / 1.5) + ',' + Math.round(it.z / 1.5) + ',' + Math.round(it.y))); }
+    if (RR.mesh) { R.scene.remove(RR.mesh); RR.mesh.dispose(); RR.mesh = null; }
+    const m = RR.mesh = new THREE.InstancedMesh(R.geo('gable', gableGeo), R.roofMat || (R.roofMat = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide })), Math.max(1, RR.items.length)), col = new THREE.Color();
     RR.items.forEach((it, i) => { _v3.set(it.x, it.y, it.z); _q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -it.a); _s3.set(it.sx, it.rh, it.sz); _m4.compose(_v3, _q, _s3); m.setMatrixAt(i, _m4); col.setHex(it.col); m.setColorAt(i, col); });
     m.count = RR.items.length; m.frustumCulled = false; R.scene.add(m);
   } catch (e) { console.warn('tak', e); }
@@ -161,7 +161,7 @@ R.init = function (container, opts) {
     map.on('styleimagemissing', e => { if (/^win-/.test(e.id) && !map.hasImage(e.id)) map.addImage(e.id, R.makeWindows(e.id), { pixelRatio: 2 }); });
     let done = false, errShown = false;
     map.on('error', e => { if (!errShown && e && e.error && /tile|fetch|Failed|NetworkError|AJAX/i.test(String(e.error.message || e.error))) { errShown = true; R.tileError = true; if (R.onTileError) R.onTileError(e.error); } });
-    map.on('load', () => { map.addLayer(R.layer); R.ready = true; R.setBase(R.base || 'sat'); if (!done) { done = true; resolve(true); } });
+    map.on('load', () => { map.addLayer(R.layer); R.ready = true; R.setBase(R.base || 'sat'); R.setSeason(R.seasonIdx); if (!done) { done = true; resolve(true); } });
     map.on('click', e => { if (R.onTap) R.onTap(e.point.x, e.point.y, !!(e.originalEvent && (e.originalEvent.pointerType === 'touch' || e.originalEvent.type === 'touchend'))); });
     map.on('resize', () => R.resize());
     let rt = 0; const roofSoon = () => { clearTimeout(rt); rt = setTimeout(() => (window.requestIdleCallback ? requestIdleCallback(() => R.updateRoofs(), { timeout: 1500 }) : R.updateRoofs()), 900); }; map.on('moveend', roofSoon);
@@ -172,7 +172,11 @@ R.init = function (container, opts) {
 R.resize = function () { if (!R.map) return; const c = R.map.getCanvas(); R.w = c.clientWidth || window.innerWidth; R.h = c.clientHeight || window.innerHeight; R.dpr = R.map.getPixelRatio ? R.map.getPixelRatio() : 1; };
 R.setQuality = function (cap) { if (R.map) { R.map.setPixelRatio(Math.min(window.devicePixelRatio || 1, cap)); R.resize(); } };
 R.resize0 = null;
-R.setPadding = function (right, bottom) { R.insetR = right; R.insetB = bottom; if (R.map) R.map.setPadding({ top: 0, left: 0, right, bottom }); };
+R.setPadding = function (right, bottom) {
+  right = Math.round(right); bottom = Math.round(bottom);
+  if (R._padSet && R.insetR === right && R.insetB === bottom) return;   // map.setPadding er en jumpTo: den avbryter pågående dra og animasjoner, så bare kall ved endring
+  R.insetR = right; R.insetB = bottom; if (R.map) { R._padSet = true; R.map.setPadding({ top: 0, left: 0, right, bottom }); }
+};
 
 /* ---------- verden: opprinnelse for lokale meterkoordinater, dekningslag, strender ---------- */
 R.clearWorld = function () {
@@ -215,22 +219,40 @@ R.screenOf = function (x, y, z) {
 /** Er punktet (meter) opptatt av bygg (innenfor margin) eller vann ifølge kartdataene? Uten kartdata: aldri. */
 R.blockedAt = function (x, z, margin) {
   const map = R.map, w = R.world; if (!map || !w || !map.getSource('om')) return false;
-  const inPoly = (ring, px, pz) => { let c = false; for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const a = ring[i], b = ring[j]; if ((a[1] > pz) !== (b[1] > pz) && px < (b[0] - a[0]) * (pz - a[1]) / (b[1] - a[1]) + a[0]) c = !c; } return c; };
-  const dSeg = (px, pz, a, b) => { const dx = b[0] - a[0], dz = b[1] - a[1], L = dx * dx + dz * dz || 1e-9, t = clamp(((px - a[0]) * dx + (pz - a[1]) * dz) / L, 0, 1); return Math.hypot(px - a[0] - dx * t, pz - a[1] - dz * t); };
-  const ll = w.proj.toLL(x, z), pt = map.project([ll.lon, ll.lat]), box = [[pt.x - 80, pt.y - 80], [pt.x + 80, pt.y + 80]];
-  for (const layer of ['building', 'water']) {
-    let feats = []; try { feats = map.querySourceFeatures('om', { sourceLayer: layer }); } catch (e) { return false; }
-    for (const f of feats) {
-      const g = f.geometry; if (!g) continue; const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : []; 
-      for (const poly of polys) {
-        const ring = poly[0].map(q => { const p = w.proj.toXZ(q[1], q[0]); return [p.x, p.z]; });
-        let near = false; for (const q of ring) if (Math.abs(q[0] - x) < 200 && Math.abs(q[1] - z) < 200) { near = true; break; } if (!near && !inPoly(ring, x, z)) continue;
-        if (inPoly(ring, x, z)) return true;
-        if (layer === 'building') for (let i = 1; i < ring.length; i++) if (dSeg(x, z, ring[i - 1], ring[i]) < margin) return true;
+  // Byggeomriss og vann i nærheten leses ut av kartfliser (dyrt), så listen gjenbrukes for punkter nær hverandre i et par sekunder.
+  const now = performance.now(), bc = R._blk;
+  if (!bc || now - bc.t > 2500 || Math.hypot(bc.x - x, bc.z - z) > 120 || bc.w !== w) {
+    const rings = []; let ok = true;
+    for (const layer of ['building', 'water']) {
+      let feats = []; try { feats = map.querySourceFeatures('om', { sourceLayer: layer }); } catch (e) { ok = false; break; }
+      for (const f of feats) {
+        const g = f.geometry; if (!g) continue; const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+        for (const poly of polys) {
+          const o = poly[0]; if (!o || o.length < 4) continue;
+          let near = false; const ring = o.map(q => { const p = w.proj.toXZ(q[1], q[0]); if (Math.abs(p.x - x) < 260 && Math.abs(p.z - z) < 260) near = true; return [p.x, p.z]; });
+          if (near || layer === 'water') { let x0 = 1e18, x1 = -1e18, z0 = 1e18, z1 = -1e18; for (const q of ring) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); z0 = Math.min(z0, q[1]); z1 = Math.max(z1, q[1]); } if (x0 < x + 260 && x1 > x - 260 && z0 < z + 260 && z1 > z - 260) rings.push({ layer, ring, x0, x1, z0, z1 }); }
+        }
       }
     }
+    if (!ok) return false; R._blk = { t: now, x, z, w, rings };
+  }
+  const inPoly = (ring, px, pz) => { let c = false; for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const a = ring[i], b = ring[j]; if ((a[1] > pz) !== (b[1] > pz) && px < (b[0] - a[0]) * (pz - a[1]) / (b[1] - a[1]) + a[0]) c = !c; } return c; };
+  const dSeg = (px, pz, a, b) => { const dx = b[0] - a[0], dz = b[1] - a[1], L = dx * dx + dz * dz || 1e-9, t = clamp(((px - a[0]) * dx + (pz - a[1]) * dz) / L, 0, 1); return Math.hypot(px - a[0] - dx * t, pz - a[1] - dz * t); };
+  for (const r of R._blk.rings) {
+    if (x < r.x0 - margin || x > r.x1 + margin || z < r.z0 - margin || z > r.z1 + margin) continue;
+    if (inPoly(r.ring, x, z)) return true;
+    if (r.layer === 'building') for (let i = 1; i < r.ring.length; i++) if (dSeg(x, z, r.ring[i - 1], r.ring[i]) < margin) return true;
   }
   return false;
+};
+R.freeBounds = function () { if (R.map) R.map.setMaxBounds(null); };   // trengs før kameraet flyttes til en annen by
+/** Fjerner kjøretøy, markører og effekter fra forrige runde (verden og dekningslaget beholdes). */
+R.clearViews = function () {
+  if (!R.dyn) return;
+  while (R.dyn.children.length) R.dyn.remove(R.dyn.children[0]);
+  R.selRing = null; R.placeRings = null; R.pathLine = null; R.placeMode = null; R.sel = null; R.views = { stations: {}, masts: {}, units: {}, incidents: {}, ghosts: {}, alarms: {} };
+  if (R.fx) { R.fx.life.fill(0); R.fx.alpha.fill(0); R.fx.size.fill(0); }
+  R.ensureOverlay();
 };
 R.updateCam = function () {
   const c = R.map.getCenter(), p = R.world.proj.toXZ(c.lat, c.lng), z = R.map.getZoom();

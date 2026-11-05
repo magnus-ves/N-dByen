@@ -24,24 +24,23 @@ Game.applySeason = function (si) { R.setSeason(si); R.setBeachSeason(si === 1); 
 Game.worlds = {};
 /** Laster veinett (data/*.geojson, ellers Overpass) og bygger verden for en by. */
 Game.loading = {};
-Game.loadWorld = function (id, quiet) {
+Game.loadWorld = function (id) {
   if (Game.worlds[id]) return Promise.resolve(Game.worlds[id]);
   const cfg = CITY_CONFIGS[id];
-  if (!quiet && !Game.worlds[id] && !Game.loadingShown) { Game.loadingShown = true; UI.toast('Laster veinett for ' + cfg.navn + (Game.loading[id] ? ' …' : ' – første gang kan det ta en stund …'), 'info'); }
   if (!Game.loading[id]) Game.loading[id] = (async () => {
     const t0 = performance.now(), [rd, sites] = await Promise.all([loadRoadData(cfg), loadSites(cfg)]), t1 = performance.now();
     const w = buildWorld(cfg, rd.gj, sites); w.kilde = rd.kilde; Game.worlds[id] = w;
     console.info('[NødByen]', cfg.navn, 'veinett fra', rd.kilde, w.stat, 'henting ' + Math.round(t1 - t0) + ' ms, bygging ' + Math.round(performance.now() - t1) + ' ms');
     return w;
-  })().catch(e => { delete Game.loading[id]; throw e; });
-  return Game.loading[id].finally(() => { Game.loadingShown = false; });
+  })().then(w => { delete Game.loading[id]; return w; }, e => { delete Game.loading[id]; throw e; });
+  return Game.loading[id];
 };
 /** Laster begge byene i bakgrunnen mens spilleren ser menyen. */
-Game.prefetch = function () { const ids = Object.keys(CITY_CONFIGS); (function next(i) { if (i >= ids.length) return; Game.loadWorld(ids[i], true).catch(() => {}).then(() => setTimeout(() => next(i + 1), 500)); })(0); };
+Game.prefetch = function () { const ids = Object.keys(CITY_CONFIGS); (function next(i) { if (i >= ids.length) return; Game.loadWorld(ids[i]).catch(() => {}).then(() => setTimeout(() => next(i + 1), 500)); })(0); };
 Game.fail = function (e, retry) {
   console.error(e);
   const fil = location.protocol === 'file:' ? ' Du har åpnet siden som fil – start den via en webserver (<code>npm start</code>), ellers kan ikke veidata leses.' : '';
-  UI.modal({ title: 'Kunne ikke laste kartdata', html: '<p>Veinettet for byen kunne ikke hentes (' + esc(String(e && e.message || e)) + ').' + fil + ' Sjekk nettforbindelsen. Eier du siden: kjør <code>npm run data</code> og legg <code>data/*.geojson</code> i repoet.</p>', buttons: [{ label: 'Prøv igjen', cls: 'primary', fn: () => { retry(); } }, { label: 'Lukk', cls: 'ghost' }] });
+  UI.modal({ title: 'Kunne ikke laste kartdata', html: '<p>Veinettet for byen kunne ikke hentes: ' + esc(String(e && e.message || e)) + '.' + fil + ' Sjekk nettforbindelsen. Eier du siden: kjør <code>npm run data</code> og legg <code>data/*.geojson</code> i repoet.</p>', buttons: [{ label: 'Prøv igjen', cls: 'primary', fn: () => { retry(); } }, { label: 'Lukk', cls: 'ghost' }] });
 };
 /** Viser (og laster ved behov) en by som bakgrunn i menyene. */
 Game.showCity = async function (id, season) {
@@ -51,17 +50,19 @@ Game.showCity = async function (id, season) {
 };
 Game.toMenu = function (cityId) {
   S = null; Game.mode = 'menu'; Game.place = null; UI.sel = null; $('#alarmBar').innerHTML = '';
-  if (R.world) { R.setPlacement(null); R.setSelection(null); R.showCoverage(false); } R.setLabels([]);
+  if (R.world) { R.clearViews(); R.showCoverage(false); } R.setLabels([]);
   UI.screenCities();
 };
 /** Etatvalg vises straks; veinettet lastes i bakgrunnen og avventes først når etat er valgt. */
 Game.pickAgency = function (cityId) {
-  const c = CITY_CONFIGS[cityId]; if (R.map) R.map.flyTo({ center: [c.center.lon, c.center.lat], zoom: c.zoom, pitch: c.pitch, bearing: c.bearing, duration: 1800 });
-  UI.screenAgency(cityId); Game.loadWorld(cityId, true).catch(() => {});
+  const c = CITY_CONFIGS[cityId]; if (R.map) { R.freeBounds(); R.map.flyTo({ center: [c.center.lon, c.center.lat], zoom: c.zoom, pitch: c.pitch, bearing: c.bearing, duration: 1800 }); }   // grensene fra forrige by må vekk, ellers sperrer de flyturen
+  UI.screenAgency(cityId); Game.loadWorld(cityId).catch(() => {});
 };
 Game.beginFirstStation = async function (cityId, agency) {
+  if (Game.starting) return; Game.starting = true;
   if (!Game.worlds[cityId]) UI.showLoading('Laster kart og veinett for ' + CITY_CONFIGS[cityId].navn + ' …');
-  try { await Game.showCity(cityId, UI.season); } catch (e) { UI.screenAgency(cityId); Game.fail(e, () => Game.beginFirstStation(cityId, agency)); return; }
+  try { await Game.showCity(cityId, UI.season); } catch (e) { Game.starting = false; UI.screenAgency(cityId); Game.fail(e, () => Game.beginFirstStation(cityId, agency)); return; }
+  Game.starting = false;
   Sim.newGame(cityId, agency, UI.season, Game.world);
   R.seasonIdx = S.startSeason; R.setWorld(WORLD); R.setEnv(Game.envFor(S.startSeason), true);
   Game.mode = 'place0'; UI.hideScreen();
@@ -73,13 +74,27 @@ Game.beginFirstStation = async function (cityId, agency) {
 };
 Game.continueCity = async function (id) {
   const o = Store.load(id); if (!o) { Game.pickAgency(id); return; }
+  if (Game.starting) return; Game.starting = true;
   if (!Game.worlds[id]) UI.showLoading('Laster kart og veinett for ' + CITY_CONFIGS[id].navn + ' …');
-  try { await Game.showCity(id, o.startSeason); } catch (e) { UI.screenCities(); Game.fail(e, () => Game.continueCity(id)); return; }
-  S = o; WORLD = Game.world; for (const d of (S.dynLots || [])) if (!WORLD.lotById.get(d.id)) WORLD.addLotDyn(d.x, d.z, d.id); Clock.info(); R.seasonIdx = Clock.cur.season; R.setWorld(WORLD);
-  for (const sid in S.stations) { const l = WORLD.lotById.get(S.stations[sid].lotId); if (l) S.occ[l.id] = sid; }
-  Net.dirty = true; S.paused = true; S.settings = S.settings || { auto: false, cover: false };
-  for (const u of Object.values(S.units)) { u.path = u.path || []; u._eta = {}; }
-  Vol.seasonSync(); Game.enterPlay(false);
+  try { await Game.showCity(id, o.startSeason); } catch (e) { Game.starting = false; UI.screenCities(); Game.fail(e, () => Game.continueCity(id)); return; }
+  Game.starting = false;
+  try {
+    S = o; WORLD = Game.world; WORLD.clearDyn(); Clock.info();
+    // Tomter spilleren har opprettet, og bygg som sto på dem. Kartdata kan ha endret seg siden lagringen, så posisjonen er fasit.
+    const fix = (lotId, x, z) => { const l = WORLD.lotById.get(lotId); if (l && (x === undefined || Math.hypot(l.x - x, l.z - z) < 3)) return lotId; const n = x === undefined ? null : WORLD.addLotDyn(x, z); return n ? n.id : lotId; };
+    const dyn = [];
+    for (const d of (S.dynLots || [])) { const n = WORLD.addLotDyn(d.x, d.z, /^d\d+$/.test(d.id) ? d.id : undefined); if (n) dyn.push({ id: n.id, x: d.x, z: d.z }); }
+    S.dynLots = dyn; S.occ = {};
+    for (const sid in S.stations) { const st = S.stations[sid]; st.lotId = fix(st.lotId, st.lx, st.lz); if (!WORLD.lotById.get(st.lotId)) throw new Error('mangler tomt for ' + st.name); S.occ[st.lotId] = sid; }
+    for (const m of Object.values(S.net.masts)) { if (m.lotId) { m.lotId = fix(m.lotId, m.x, m.z); if (WORLD.lotById.get(m.lotId)) S.occ[m.lotId] = S.occ[m.lotId] || 'mast'; } }
+    R.seasonIdx = Clock.cur.season; R.setWorld(WORLD);
+    Net.dirty = true; S.paused = true; S.settings = S.settings || { auto: false, cover: false };
+    for (const u of Object.values(S.units)) { u.path = u.path || []; u._eta = {}; }
+    Vol.seasonSync(); Game.enterPlay(false);
+  } catch (e) {
+    console.error(e); S = null; Game.mode = 'menu'; UI.screenCities();
+    UI.modal({ title: 'Lagringen kunne ikke åpnes', html: '<p>Det lagrede spillet passer ikke med kartdataene (' + esc(String(e && e.message || e)) + '). Du kan starte en ny runde i byen.</p>', buttons: [{ label: 'Start ny runde', cls: 'primary', fn: () => { Store.clear(id); Game.pickAgency(id); } }, { label: 'Lukk', cls: 'ghost' }] });
+  }
 };
 Game.enterPlay = function (isNew) {
   Game.mode = 'play'; UI.hideScreen(); UI.sel = null; UI.lastHtml = '';
@@ -157,5 +172,5 @@ async function boot() {
   window.addEventListener('pagehide', () => Store.save());
   document.addEventListener('visibilitychange', () => { if (document.hidden) Store.save(); });
 }
-window.NB = { get S() { return S; }, get WORLD() { return WORLD; }, Sim, Net, Vol, Eco, Shop, Clock, Log, Bus, R, UI, Game, Store, CITY_CONFIGS, UT, ST, TEMPLATES, buildWorld };
 boot();
+try { window.NB = { get S() { return S; }, get WORLD() { return WORLD; }, Sim, Net, Vol, Eco, Shop, Clock, Log, Bus, R, UI, Game, Store, CITY_CONFIGS, UT, ST, TEMPLATES, buildWorld }; } catch (e) { /* feilsøkingshåndtak – mangler hvis et bibliotek ikke lastet */ }

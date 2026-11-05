@@ -113,7 +113,7 @@ UI.alarmBar = function () {
 UI.modal = function (o) {
   const root = $('#modalRoot'), back = document.createElement('div'); back.className = 'mback';
   back.innerHTML = '<div class="modal glass"><h2>' + (o.title || '') + '</h2><div class="body">' + (o.html || '') + '</div><div class="btns"></div></div>';
-  const h = { el: back, body: $('.body', back), closed: false, close() { if (h.closed) return; h.closed = true; back.remove(); UI.mc--; if (UI.mc === 0 && S && UI._wasPaused === false && Game.mode === 'play') S.paused = false; if (o.onClose) o.onClose(); } };
+  const h = { el: back, body: $('.body', back), closed: false, close() { if (h.closed) return; h.closed = true; back.remove(); UI.mc--; if (UI.mc === 0) { if (S && UI._wasPaused === false && Game.mode === 'play') S.paused = false; UI._wasPaused = null; } if (o.onClose) o.onClose(); } };
   back._close = () => h.close();
   const btns = $('.btns', back);
   (o.buttons || [{ label: 'Lukk' }]).forEach(b => {
@@ -122,7 +122,7 @@ UI.modal = function (o) {
   });
   back.addEventListener('pointerdown', e => { if (e.target === back && o.dismiss !== false) h.close(); });
   root.appendChild(back);
-  if (UI.mc === 0 && S && Game.mode === 'play') { UI._wasPaused = S.paused; S.paused = true; }
+  if (UI.mc === 0) { UI._wasPaused = S && Game.mode === 'play' ? S.paused : null; if (S && Game.mode === 'play') S.paused = true; }
   UI.mc++; if (o.init) o.init(h);
   return h;
 };
@@ -228,9 +228,13 @@ UI.placeBar = function () {
 };
 UI.confirmPlacement = function () {
   const p = Game.place; if (!p || !p.sel) return;
-  const arg = p.ground ? { x: p.sel.x, z: p.sel.z } : p.sel.dyn ? Sim.createLot(p.sel.x, p.sel.z).id : p.sel.id;
+  let made = null, arg;
+  if (p.ground) arg = { x: p.sel.x, z: p.sel.z };
+  else if (p.sel.dyn) { const lot = Sim.createLot(p.sel.x, p.sel.z); if (!lot) { UI.toast('Kan ikke bygge her – for langt fra en vei.', 'warn'); return; } made = lot.id; arg = lot.id; }
+  else arg = p.sel.id;
   const done = p.onConfirm(arg);
-  if (done !== false) UI.endPlacement(false);
+  if (done === false) { if (made) Sim.dropLot(made); return; }       // kjøpet feilet: ikke la en ubrukt tomt bli liggende
+  UI.endPlacement(false);
 };
 UI.endPlacement = function (cancelled) {
   const p = Game.place; if (!p) return; Game.place = null;
@@ -251,9 +255,9 @@ UI.placeTap = function (px, py, touch) {
   }
   const hit = R.pick(px, py, touch, S || { incidents: {}, units: {}, stations: {}, net: { masts: {} } });
   if (!hit) {   // fri plassering: trykk hvor som helst nær en vei – spillet finner ledig plass ved siden av
-    const g = R.terrainPoint(px, py), spot = Sim.findSpot(g.x, g.z);
-    if (!spot) { UI.toast('Ingen ledig plass her – prøv nærmere en vei, bort fra bygg og vann.', 'warn'); return; }
-    const nr = WORLD.nav.nearestRP(spot.x, spot.z, true), q = Net.quality(Net.signalAt(spot.x, spot.z));
+    const g = R.terrainPoint(px, py), spot = g && Sim.findSpot(g.x, g.z), nr = spot && WORLD.nav.nearestRP(spot.x, spot.z, true);
+    if (!spot || !nr) { UI.toast('Ingen ledig plass her – prøv nærmere en vei, bort fra bygg og vann.', 'warn'); return; }
+    const q = Net.quality(Net.signalAt(spot.x, spot.z));
     p.sel = { dyn: true, x: spot.x, z: spot.z, addr: WORLD.addrOf({ a: nr.a, b: nr.b, e: nr.e, t: nr.t }, 0), cov: 'Nødnett: ' + (q === 'bra' ? 'god dekning' : q === 'svak' ? 'svak dekning' : 'ingen dekning') };
     UI.markPlace(spot.x, spot.z); UI.placeBar(); return;
   }

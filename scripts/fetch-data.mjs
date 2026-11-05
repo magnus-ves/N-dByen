@@ -14,21 +14,21 @@ import { dirname, join } from 'node:path';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const code = (await readFile(join(root, 'js/core.js'), 'utf8')) + '\n' + (await readFile(join(root, 'js/geo.js'), 'utf8'));
-const api = vm.runInNewContext(code + '\n({ CITY_CONFIGS, overpassQuery, overpassToGeoJSON, OVERPASS });', {});
-const { CITY_CONFIGS, overpassQuery, overpassToGeoJSON, OVERPASS } = api;
+const api = vm.runInNewContext(code + '\n({ CITY_CONFIGS, overpassQuery, overpassToGeoJSON, OVERPASS, roadsFromVectorTiles });', { fetch, AbortSignal, TextDecoder, console });
+const { CITY_CONFIGS, overpassQuery, overpassToGeoJSON, OVERPASS, roadsFromVectorTiles } = api;
 
 async function overpass(query, label) {
   let last;
-  for (let round = 0; round < 3; round++) {
+  for (let round = 0; round < 2; round++) {
     for (const url of OVERPASS) {
       try {
         process.stdout.write(`  ${label}: ${new URL(url).host} … `);
-        const r = await fetch(url, { method: 'POST', headers: { 'User-Agent': 'NodByen-data-script/1.0 (+https://github.com/magnus-ves/n-dbyen)', 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(query) });
+        const r = await fetch(url, { method: 'POST', signal: AbortSignal.timeout(75000), headers: { 'User-Agent': 'NodByen-data-script/1.0 (+https://github.com/magnus-ves/n-dbyen)', 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(query) });
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const j = await r.json(); console.log('ok'); return j;
       } catch (e) { last = e; console.log('feilet (' + e.message + ')'); }
     }
-    await new Promise(res => setTimeout(res, 8000 * (round + 1)));
+    await new Promise(res => setTimeout(res, 4000));
   }
   throw last;
 }
@@ -51,10 +51,18 @@ await mkdir(join(root, 'data'), { recursive: true });
 for (const id of wanted) {
   const cfg = CITY_CONFIGS[id]; if (!cfg) { console.error('Ukjent by:', id); process.exitCode = 1; continue; }
   console.log(`\n${cfg.navn}:`);
-  const roads = overpassToGeoJSON(await overpass(overpassQuery(cfg), 'veier'));
+  let roads;
+  try { roads = overpassToGeoJSON(await overpass(overpassQuery(cfg), 'veier')); }
+  catch (e) {
+    console.log('  Overpass svarer ikke (' + e.message + ') – henter veiene fra OpenFreeMap-fliser i stedet …');
+    roads = await roadsFromVectorTiles(cfg, { progress: (d, t) => process.stdout.write(`\r  fliser ${d}/${t}`) }); console.log('');
+  }
   await writeFile(join(root, cfg.roads), JSON.stringify(roads));
   console.log(`  → ${cfg.roads}: ${roads.features.length} veistrekk`);
-  const sites = sitesToGeoJSON(await overpass(sitesQuery(cfg), 'stasjoner'));
-  await writeFile(join(root, cfg.sitesFile), JSON.stringify(sites));
-  console.log(`  → ${cfg.sitesFile}: ${sites.features.length} steder`);
+  try {
+    const sites = sitesToGeoJSON(await overpass(sitesQuery(cfg), 'stasjoner'));
+    await writeFile(join(root, cfg.sitesFile), JSON.stringify(sites));
+    console.log(`  → ${cfg.sitesFile}: ${sites.features.length} steder`);
+  } catch (e) { console.log('  Hoppet over stasjoner (' + e.message + ') – spillet bruker da stasjonene i js/core.js.'); }
 }
+console.log('\nFerdig. Legg filene i repoet:  git add data/*.geojson && git commit -m "Veidata" && git push');

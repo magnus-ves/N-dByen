@@ -253,13 +253,15 @@ Sim.findSpot = function (x, z) {
   out.sort((a, b) => a.w - b.w);
   for (const c of out) {
     const rr_ = nav.nearestRP(c.x, c.z, true); if (!rr_ || rr_.dist < 10) continue;                  // ikke oppå en annen vei
-    if (S && WORLD.lots.some(l => !l.free && Math.hypot(l.x - c.x, l.z - c.z) < 14) || Object.keys(S.stations).some(id => { const l = WORLD.lotById.get(S.stations[id].lotId); return Math.hypot(l.x - c.x, l.z - c.z) < 14; })) continue;
+    if (WORLD.lots.some(l => (!l.free || (S && S.occ[l.id])) && Math.hypot(l.x - c.x, l.z - c.z) < 14)) continue;                 // ikke oppå sykehus, master, stasjoner eller andre bygg
     if (R.blockedAt(c.x, c.z, 7)) continue;
     return { x: c.x, z: c.z };
   }
   return null;
 };
-Sim.createLot = function (x, z) { const lot = WORLD.addLotDyn(x, z); (S.dynLots = S.dynLots || []).push({ id: lot.id, x, z }); return lot; };
+Sim.createLot = function (x, z) { const lot = WORLD.addLotDyn(x, z); if (lot) (S.dynLots = S.dynLots || []).push({ id: lot.id, x, z }); return lot; };
+/** Fjerner en tomt som ble opprettet for et kjøp som ikke ble gjennomført. */
+Sim.dropLot = function (id) { if (S.occ[id]) return; WORLD.dropLot(id); if (S.dynLots) S.dynLots = S.dynLots.filter(d => d.id !== id); };
 Sim.stationLot = st => WORLD.lotById.get(st.lotId);
 
 Sim.buildStation = function (type, lotId, opts) {
@@ -275,7 +277,7 @@ Sim.buildStation = function (type, lotId, opts) {
     if (!spend(T.cost)) return fail_('Du har ikke nok penger.');
   }
   const id = 's' + S.nid++, count = Object.values(S.stations).filter(s => s.type === type).length + 1;
-  const st = { id, type, lotId, no: count, name: opts.name || (T.navn + ' ' + count), up: { garasje: 0, mannskap: 0 }, t: S.t };
+  const st = { id, type, lotId, lx: lot.x, lz: lot.z, no: count, name: opts.name || (T.navn + ' ' + count), up: { garasje: 0, mannskap: 0 }, t: S.t };
   if (opts.free && T.rolle === 'helse') st.gift = true;
   S.stations[id] = st; S.occ[lotId] = id;
   Bus.emit('built', st);
@@ -320,7 +322,8 @@ Sim.callsign = u => u.name;
 /* ---------- bevegelse og statusmaskin ---------- */
 Sim.unitRP = function (u) {
   if (u.status === 'ledig' && u.stationId && S.stations[u.stationId]) return WORLD.lotById.get(S.stations[u.stationId].lotId).rp;
-  const r = WORLD.nav.nearestRP(u.x, u.z, true); return { a: r.a, b: r.b, e: r.e, t: r.t };
+  const r = WORLD.nav.nearestRP(u.x, u.z, true) || WORLD.nav.nearestRP(u.x, u.z, false); if (r) return { a: r.a, b: r.b, e: r.e, t: r.t };
+  const st = u.stationId && S.stations[u.stationId], l = st && WORLD.lotById.get(st.lotId); return l ? l.rp : WORLD.lots[0].rp;   // utenfor kartet: bruk stasjonens veipunkt
 };
 Sim.turnoutOf = u => { const T = UT[u.type]; return (T.turnout || 0) * (1 - 0.15 * (S.up[T.org] || 0)); };
 Sim.speedOf = function (u) {
@@ -530,6 +533,7 @@ Sim.pickTemplate = function () {
     if (tpl.loc === 'strand' && !Object.keys(WORLD.beaches).length) continue;
     if (tpl.loc === 'fjell' && !Sim.hasFjell()) continue;
     if (tpl.loc === 'vann' && !Sim.waterfront().length) continue;
+    if (tpl.loc === 'park' && !WORLD.parks.length) continue;
     const m = tpl.w * tplMods(tpl, info); if (m <= 0.0001) continue;
     const key = leadOwned ? tpl.lead.find(a => S.agencies[a]) : 'strand';
     (groups[key] = groups[key] || []).push({ id, w: m });
@@ -1044,7 +1048,7 @@ const Shop = {
       case 'upg': { const l = S.up[v]; if (l >= 3) return fail_('Maks nivå.'); if (!spend(SPEED_UP_COST[l])) return fail_('Du har ikke nok penger.'); S.up[v]++; return ok_('Raskere utrykning nivå ' + S.up[v] + ' for ' + AGENCIES[v].kort + '.'); }
       case 'sign': return Vol.sign(v);
       case 'mast': {
-        if (v === 'new') { if (!spend(120000)) return fail_('Du har ikke nok penger.'); const mid = Net.addMast(arg); Log.add('NØDNETT', 'Driftssentral', 'Ny basestasjon ' + S.net.masts[mid].navn + ' er i drift', 'info'); return ok_('Ny basestasjon er bygget.'); }
+        if (v === 'new') { if (!isFree(WORLD.lotById.get(arg))) return fail_('Tomten er ikke ledig.'); if (!spend(120000)) return fail_('Du har ikke nok penger.'); const mid = Net.addMast(arg); Log.add('NØDNETT', 'Driftssentral', 'Ny basestasjon ' + S.net.masts[mid].navn + ' er i drift', 'info'); return ok_('Ny basestasjon er bygget.'); }
         if (v === 'mobile') { if (!spend(90000)) return fail_('Du har ikke nok penger.'); S.net.mobile++; return ok_('Mobil basestasjon er på lager. Sett den ut under Nødnett.'); }
         if (v === 'cap') { const m = S.net.masts[arg]; if (!m || m.level >= 3) return fail_('Basestasjonen har maks kapasitet.'); if (!spend(45000)) return fail_('Du har ikke nok penger.'); Net.upgrade(arg); return ok_('Kapasiteten på ' + m.navn + ' er økt.'); }
         break; }
@@ -1081,7 +1085,7 @@ Sim.tick = function (dt) {
 };
 /** Oppretter nytt spill: bygger by, tilstand, sykehus og master. */
 Sim.newGame = function (cityId, first, startSeason, world) {
-  WORLD = world;
+  WORLD = world; WORLD.clearDyn();                       // tomter fra en tidligere runde skal ikke bli med
   S = newState(cityId, first, startSeason);
   Clock.info(); Net.init();
   for (const h of WORLD.hospitalDefs) Sim.buildStation(h.type, h.lotId, { free: true, force: true, name: h.navn });
