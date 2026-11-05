@@ -4,7 +4,7 @@
    MapLibre GL JS tegner kart og 3D-bygg (OpenFreeMap-fliser, egen pastellstil).
    Et Three.js «custom layer» tegner kjøretøy, stasjoner, master, hendelsesmarkører og effekter oppå kartet.
    ========================================================================== */
-const _m4 = new THREE.Matrix4(), _v3 = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s3 = new THREE.Vector3(), _v4 = new THREE.Vector4();
+const _m4c = new THREE.Matrix4(), _m4 = new THREE.Matrix4(), _v3 = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s3 = new THREE.Vector3(), _v4 = new THREE.Vector4();
 const VS = 2.6, SS = 5.2, MS = 5;          // modellskala (meter per modellenhet)
 const TILE_URL = 'https://tiles.openfreemap.org/planet';
 // Satellittbilder (Esri World Imagery). Bytt URL/kreditering her om du bruker en annen leverandør (se README om vilkår).
@@ -18,7 +18,7 @@ const SEASON_STYLE = [
   { bg: '#F2F4F2', grass: '#EAF0ED', wood: '#D6E0DB', water: '#9DB5C0', bld: '#EDEAE3' }
 ];
 const R = { ready: false, world: null, S: null, time: 0, seasonIdx: 0, dpr: 1, w: 800, h: 600, mats: {}, geos: {}, env: { daylight: 1, night: 0, hour: 12, weather: 'klar', season: 0 },
-  cam: { dist: 150, tx: 0, tz: 0, gdist: 150, gpitch: 0.9 }, mpp: 1, onTap: null, onHover: null, coverOn: false, insetR: 0, insetB: 0, placeMode: null, mvp: new THREE.Matrix4(), L: new THREE.Matrix4(), views: null, wxMode: '' };
+  cam: { dist: 150, tx: 0, tz: 0, gdist: 150, gpitch: 0.9 }, mpp: 1, onTap: null, onHover: null, coverOn: false, insetR: 0, insetB: 0, placeMode: null, mvp: new THREE.Matrix4(), L: new THREE.Matrix4(), camPos: new THREE.Vector3(0, 500, 0), views: null, wxMode: '' };
 R.mat = hex => R.mats['l' + hex] || (R.mats['l' + hex] = new THREE.MeshLambertMaterial({ color: hex, side: THREE.DoubleSide }));
 R.matB = hex => R.mats['b' + hex] || (R.mats['b' + hex] = new THREE.MeshBasicMaterial({ color: hex, side: THREE.DoubleSide }));
 R.geo = (k, f) => R.geos[k] || (R.geos[k] = f());
@@ -188,7 +188,11 @@ R.init = function (container, opts) {
       onAdd(m, gl) { R.renderer = new THREE.WebGLRenderer({ canvas: m.getCanvas(), context: gl, antialias: true }); R.renderer.autoClear = false; },
       render(gl, matrix) {
         if (!R.world) return;
-        R.mvp.fromArray(matrix).multiply(R.L); R.camera.projectionMatrix.copy(R.mvp); R.camera.projectionMatrixInverse.copy(R.mvp).invert();
+        R.mvp.fromArray(matrix).multiply(R.L);
+        // ekte kameraposisjon (meter), så speilinger og lys i materialene følger synsvinkelen
+        try { const cp = R.map.transform.getCameraPosition(), q = R.world.proj.toXZ(cp.lngLat.lat, cp.lngLat.lng); R.camPos.set(q.x, cp.altitude, q.z); } catch (e) { R.camPos.set(R.cam.tx, 500, R.cam.tz); }
+        R.camera.position.copy(R.camPos); R.camera.updateMatrixWorld(true);
+        R.camera.projectionMatrix.copy(R.mvp).multiply(_m4c.makeTranslation(R.camPos.x, R.camPos.y, R.camPos.z)); R.camera.projectionMatrixInverse.copy(R.camera.projectionMatrix).invert();
         R.renderer.resetState(); R.renderer.setViewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight); R.renderer.render(R.scene, R.camera);
       }
     };

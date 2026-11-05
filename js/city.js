@@ -45,55 +45,89 @@ const City = {
     industri: ['#A9ADA8', '#B9B2A2', '#8E9592']
   },
   tex: {},
+  /* Fasadeteksturer: ett felt = 2 vindusfag × 3 etasjer, med variasjon per vindu (persienner, gardiner, lys inne)
+     så mønsteret ikke gjentar seg. specularMap = glassmaske (glass speiler himmelen), lit = vinduer som lyser om natten. */
+  COLS: { butikk: 2, tak: 1, tegltak: 1, sokkel: 1, gesims: 1 }, ROWS: { butikk: 1, tak: 1, tegltak: 1, sokkel: 1, gesims: 1 },
+  cols: st => City.COLS[st] || 2, rows: st => City.ROWS[st] || 3,
   makeTex(style) {
-    const S_ = 256, c = document.createElement('canvas'); c.width = c.height = S_; const x = c.getContext('2d');
-    const lit = document.createElement('canvas'); lit.width = lit.height = S_; const l = lit.getContext('2d'); l.fillStyle = '#000'; l.fillRect(0, 0, S_, S_);
-    const noise = (a) => { for (let i = 0; i < 900; i++) { x.fillStyle = 'rgba(' + (Math.random() < .5 ? '0,0,0' : '255,255,255') + ',' + (Math.random() * a) + ')'; x.fillRect(Math.random() * S_, Math.random() * S_, 2, 2); } };
-    const win = (px, py, w, h, frame, glass, sill) => {
-      if (frame) { x.fillStyle = frame; x.fillRect(px - 5, py - 5, w + 10, h + 10); }
-      const g = x.createLinearGradient(0, py, 0, py + h); g.addColorStop(0, glass[0]); g.addColorStop(1, glass[1]); x.fillStyle = g; x.fillRect(px, py, w, h);
-      x.fillStyle = 'rgba(255,255,255,.22)'; x.beginPath(); x.moveTo(px, py); x.lineTo(px + w * .55, py); x.lineTo(px, py + h * .5); x.fill();
-      if (frame) { x.fillStyle = frame; x.fillRect(px + w / 2 - 3, py, 6, h); x.fillRect(px, py + h * .33, w, 5); }
-      if (sill) { x.fillStyle = 'rgba(0,0,0,.25)'; x.fillRect(px - 8, py + h + 5, w + 16, 6); x.fillStyle = 'rgba(255,255,255,.5)'; x.fillRect(px - 8, py + h + 4, w + 16, 3); }
-      l.fillStyle = Math.random() < .55 ? 'rgba(255,205,130,1)' : 'rgba(255,225,170,.7)'; if (Math.random() < .7) l.fillRect(px, py, w, h);
+    const CW = 256, cols = City.cols(style), rows = City.rows(style), W = CW * cols, H = CW * rows;
+    const mk = () => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; };
+    const c = mk(), x = c.getContext('2d'), lit = mk(), l = lit.getContext('2d'), spc = mk(), sp = spc.getContext('2d');
+    l.fillStyle = '#000'; l.fillRect(0, 0, W, H); sp.fillStyle = '#000'; sp.fillRect(0, 0, W, H);
+    let seed = style.length * 977 + 13; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const noise = (a, n) => { for (let i = 0; i < (n || 2600); i++) { x.fillStyle = 'rgba(' + (rnd() < .5 ? '0,0,0' : '255,255,255') + ',' + (rnd() * a) + ')'; x.fillRect(rnd() * W, rnd() * H, 2, 2); } };
+    const GLASS = [['#9DB9CC', '#3E5868'], ['#B5CAD6', '#566F7E'], ['#7E98AA', '#2E4250'], ['#C9D8E0', '#6F8796'], ['#8FA6B3', '#3A4C58']];
+    const win = (px, py, w, h, frame, sill, opt) => {
+      opt = opt || {}; const gl = GLASS[Math.floor(rnd() * GLASS.length)];
+      if (frame) { x.fillStyle = frame; x.fillRect(px - 5, py - 5, w + 10, h + 10); x.fillStyle = 'rgba(0,0,0,.18)'; x.fillRect(px - 5, py + h + 3, w + 10, 2); }
+      const g = x.createLinearGradient(0, py, 0, py + h); g.addColorStop(0, gl[0]); g.addColorStop(1, gl[1]); x.fillStyle = g; x.fillRect(px, py, w, h);
+      sp.fillStyle = '#d0d0d0'; sp.fillRect(px, py, w, h);
+      const r = rnd();
+      if (r < .22) { const bh = h * (.25 + rnd() * .5); x.fillStyle = '#E8E2D2'; x.fillRect(px, py, w, bh); x.fillStyle = 'rgba(0,0,0,.12)'; for (let yy = py + 4; yy < py + bh; yy += 5) x.fillRect(px, yy, w, 1); sp.fillStyle = '#202020'; sp.fillRect(px, py, w, bh); }
+      else if (r < .42) { const cc = ['#B85A4A', '#E8E0C8', '#5E7B6A', '#C9A35A', '#7A6A8E'][Math.floor(rnd() * 5)]; x.fillStyle = cc; x.fillRect(px, py, w * .22, h); x.fillRect(px + w * .78, py, w * .22, h); sp.fillStyle = '#202020'; sp.fillRect(px, py, w * .22, h); sp.fillRect(px + w * .78, py, w * .22, h); }
+      else if (r < .5) { x.fillStyle = 'rgba(255,214,150,.55)'; x.fillRect(px + 3, py + h * .4, w - 6, h * .6 - 3); }   // lys inne på dagtid
+      x.fillStyle = 'rgba(255,255,255,.16)'; x.beginPath(); x.moveTo(px, py); x.lineTo(px + w * .5, py); x.lineTo(px, py + h * .45); x.fill();
+      if (frame && !opt.noBars) { x.fillStyle = frame; x.fillRect(px + w / 2 - 3, py, 6, h); if (!opt.noTransom) x.fillRect(px, py + h * .3, w, 5); }
+      if (sill) { x.fillStyle = 'rgba(0,0,0,.25)'; x.fillRect(px - 8, py + h + 5, w + 16, 6); x.fillStyle = 'rgba(255,255,255,.55)'; x.fillRect(px - 8, py + h + 4, w + 16, 3);
+        const st = x.createLinearGradient(0, py + h + 10, 0, py + h + 60); st.addColorStop(0, 'rgba(0,0,0,.08)'); st.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = st; x.fillRect(px - 4, py + h + 10, w + 8, 50); }   // regnstriper
+      if (rnd() < .6) { l.fillStyle = rnd() < .5 ? 'rgba(255,205,130,1)' : 'rgba(255,228,175,.75)'; l.fillRect(px, py, w, h); }
     };
-    const glassD = ['#5E7686', '#2E4250'];
-    x.fillStyle = '#ffffff'; x.fillRect(0, 0, S_, S_);   // grunnfarge hvit: tones med byggets farge (vertexColors)
+    x.fillStyle = '#ffffff'; x.fillRect(0, 0, W, H);   // grunnfarge hvit: tones med byggets farge (vertexColors)
+    const cells = fn => { for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) { x.save(); sp.save(); l.save(); for (const k of [x, sp, l]) k.translate(i * CW, j * CW); fn(i, j); x.restore(); sp.restore(); l.restore(); } };
     switch (style) {
-      case 'murgard':   // bygård: pusset/murt fasade, høye vinduer med hvite karmer og gesims
-        noise(.05); x.fillStyle = 'rgba(0,0,0,.06)'; for (let y = 0; y < S_; y += 9) x.fillRect(0, y, S_, 1);
-        win(78, 52, 100, 150, '#F4F0E6', glassD, true); x.fillStyle = 'rgba(0,0,0,.12)'; x.fillRect(0, 0, S_, 10); x.fillStyle = 'rgba(255,255,255,.25)'; x.fillRect(0, 10, S_, 4); break;
-      case 'puss':      // pusset leilighetsbygg
-        noise(.04); win(70, 60, 116, 130, '#FBF8F2', glassD, true); x.fillStyle = 'rgba(0,0,0,.08)'; x.fillRect(0, S_ - 8, S_, 8); break;
-      case 'glass':     // glassfasade med spiler
-        { const g = x.createLinearGradient(0, 0, S_, S_); g.addColorStop(0, '#E9F1F5'); g.addColorStop(1, '#B9CCD6'); x.fillStyle = g; x.fillRect(0, 0, S_, S_);
-          x.fillStyle = 'rgba(40,60,75,.35)'; x.fillRect(0, 0, S_, S_); x.fillStyle = '#E4E8E8'; x.fillRect(0, 0, 8, S_); x.fillRect(0, 0, S_, 10); x.fillRect(S_ / 2 - 3, 0, 6, S_);
-          x.fillStyle = 'rgba(255,255,255,.25)'; x.beginPath(); x.moveTo(10, 12); x.lineTo(120, 12); x.lineTo(10, 140); x.fill(); l.fillStyle = 'rgba(255,230,180,.8)'; if (Math.random() < .6) l.fillRect(10, 12, 240, 240); } break;
-      case 'moderne':   // kledning med vindusbånd
-        x.fillStyle = 'rgba(0,0,0,.07)'; for (let i = 0; i < S_; i += 32) x.fillRect(i, 0, 2, S_); win(24, 70, 208, 110, '#3A3F42', ['#7E95A2', '#3B5160'], false); break;
-      case 'villa':     // trehus: liggende panel, to vinduer
-        x.fillStyle = 'rgba(0,0,0,.10)'; for (let y = 0; y < S_; y += 14) x.fillRect(0, y, S_, 2); win(44, 70, 64, 96, '#FBF8F2', glassD, false); win(148, 70, 64, 96, '#FBF8F2', glassD, false);
-        x.fillStyle = '#FBF8F2'; x.fillRect(0, 0, 10, S_); x.fillRect(S_ - 10, 0, 10, S_); break;
-      case 'industri':  // bølgeblikk, høye smale vinduer
-        for (let i = 0; i < S_; i += 12) { x.fillStyle = 'rgba(0,0,0,.10)'; x.fillRect(i, 0, 5, S_); } win(98, 40, 60, 60, '#8A8F8C', glassD, false); break;
-      case 'butikk':    // butikkfront: stort glass, markise og skilt
-        x.fillStyle = '#3C3A36'; x.fillRect(0, 0, S_, S_); x.fillStyle = '#E8E1D2'; x.fillRect(0, 0, S_, 46);
-        { const g = x.createLinearGradient(0, 70, 0, 250); g.addColorStop(0, '#A9C2CE'); g.addColorStop(1, '#40525C'); x.fillStyle = g; x.fillRect(16, 74, 224, 182); }
-        x.fillStyle = 'rgba(255,255,255,.3)'; x.beginPath(); x.moveTo(16, 74); x.lineTo(130, 74); x.lineTo(16, 200); x.fill();
-        x.fillStyle = 'rgba(0,0,0,.35)'; x.fillRect(126, 74, 6, 182); l.fillStyle = 'rgba(255,220,160,1)'; l.fillRect(16, 74, 224, 182); l.fillRect(0, 0, S_, 46); break;
-      case 'tak':       // flatt tak: grus/takpapp
-        x.fillStyle = '#8D8E8A'; x.fillRect(0, 0, S_, S_); noise(.18); x.fillStyle = 'rgba(0,0,0,.08)'; for (let i = 0; i < S_; i += 64) { x.fillRect(i, 0, 3, S_); x.fillRect(0, i, S_, 3); } break;
-      case 'tegltak':   // takstein
-        x.fillStyle = '#ffffff'; x.fillRect(0, 0, S_, S_); for (let y = 0; y < S_; y += 16) for (let i = (y / 16) % 2 ? 0 : 16; i < S_; i += 32) { x.fillStyle = 'rgba(0,0,0,.16)'; x.fillRect(i, y + 12, 30, 4); x.fillStyle = 'rgba(0,0,0,.08)'; x.fillRect(i, y, 2, 16); } noise(.06); break;
+      case 'murgard':   // bygård: pusset fasade med fuger, høye vinduer, gesims mellom etasjene
+        noise(.05); x.fillStyle = 'rgba(0,0,0,.05)'; for (let y = 0; y < H; y += 9) x.fillRect(0, y, W, 1);
+        cells(() => { win(78, 56, 100, 148, '#F4F0E6', true); x.fillStyle = 'rgba(0,0,0,.13)'; x.fillRect(0, 0, CW, 9); x.fillStyle = 'rgba(255,255,255,.3)'; x.fillRect(0, 9, CW, 4); x.fillStyle = 'rgba(255,255,255,.18)'; x.fillRect(70, 40, 116, 8); }); break;
+      case 'puss':
+        noise(.035); cells(() => { win(66, 60, 124, 132, '#FBF8F2', true); x.fillStyle = 'rgba(0,0,0,.06)'; x.fillRect(0, CW - 6, CW, 6); }); break;
+      case 'glass':
+        { const g = x.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#B8CCD8'); g.addColorStop(1, '#6E8898'); x.fillStyle = g; x.fillRect(0, 0, W, H); sp.fillStyle = '#e0e0e0'; sp.fillRect(0, 0, W, H);
+          cells(() => { x.fillStyle = '#D9DEE0'; x.fillRect(0, 0, 7, CW); x.fillRect(0, 0, CW, 12); x.fillRect(CW / 2 - 3, 0, 6, CW); sp.fillStyle = '#000'; sp.fillRect(0, 0, 7, CW); sp.fillRect(0, 0, CW, 12);
+            if (rnd() < .3) { x.fillStyle = 'rgba(232,226,210,.55)'; x.fillRect(8, 13, CW - 9, 60); } if (rnd() < .55) { l.fillStyle = 'rgba(255,232,185,.85)'; l.fillRect(8, 13, CW - 9, CW - 14); } }); } break;
+      case 'moderne':
+        x.fillStyle = 'rgba(0,0,0,.06)'; for (let i = 0; i < W; i += 32) x.fillRect(i, 0, 2, H);
+        cells(() => { win(22, 72, 212, 108, '#3A3F42', false, { noTransom: true }); x.fillStyle = 'rgba(0,0,0,.1)'; x.fillRect(0, 196, CW, 8); }); break;
+      case 'villa':
+        x.fillStyle = 'rgba(0,0,0,.10)'; for (let y = 0; y < H; y += 14) x.fillRect(0, y, W, 2);
+        cells(() => { win(46, 72, 62, 94, '#FBF8F2', false); win(148, 72, 62, 94, '#FBF8F2', false); x.fillStyle = '#FBF8F2'; x.fillRect(0, 0, 8, CW); }); break;
+      case 'industri':
+        for (let i = 0; i < W; i += 12) { x.fillStyle = 'rgba(0,0,0,.10)'; x.fillRect(i, 0, 5, H); } noise(.05);
+        cells((i, j) => { if ((i + j) % 2 === 0) win(98, 44, 60, 60, '#8A8F8C', false); }); break;
+      case 'butikk':
+        x.fillStyle = '#3C3A36'; x.fillRect(0, 0, W, H);
+        cells(() => { const aw = ['#2F5D50', '#8C2F2A', '#2B3F66', '#C9A35A', '#4A4A4A'][Math.floor(rnd() * 5)]; x.fillStyle = aw; x.fillRect(0, 0, CW, 44); x.fillStyle = 'rgba(255,255,255,.8)'; x.fillRect(30, 16, 120 + rnd() * 60, 12);
+          const g = x.createLinearGradient(0, 64, 0, 250); g.addColorStop(0, '#B3C8D2'); g.addColorStop(1, '#3E4E58'); x.fillStyle = g; x.fillRect(14, 64, 228, 192); sp.fillStyle = '#c0c0c0'; sp.fillRect(14, 64, 228, 192);
+          x.fillStyle = 'rgba(255,214,150,.35)'; x.fillRect(14, 150, 228, 106); x.fillStyle = 'rgba(0,0,0,.4)'; x.fillRect(124, 64, 8, 192);
+          l.fillStyle = 'rgba(255,220,160,1)'; l.fillRect(14, 64, 228, 192); l.fillRect(0, 0, CW, 44); }); break;
+      case 'sokkel':
+        x.fillStyle = '#8E8B85'; x.fillRect(0, 0, W, H); noise(.15, 1500); x.fillStyle = 'rgba(0,0,0,.15)'; for (let i = 0; i < W; i += 64) x.fillRect(i, 0, 2, H); break;
+      case 'gesims':
+        x.fillStyle = '#ffffff'; x.fillRect(0, 0, W, H); x.fillStyle = 'rgba(0,0,0,.18)'; x.fillRect(0, H * .7, W, H * .3); x.fillStyle = 'rgba(255,255,255,.4)'; x.fillRect(0, H * .1, W, H * .08); break;
+      case 'tak':
+        x.fillStyle = '#8D8E8A'; x.fillRect(0, 0, W, H); noise(.18); x.fillStyle = 'rgba(0,0,0,.08)'; for (let i = 0; i < W; i += 64) { x.fillRect(i, 0, 3, H); x.fillRect(0, i, W, 3); } break;
+      case 'tegltak':
+        for (let y = 0; y < H; y += 16) for (let i = (y / 16) % 2 ? 0 : 16; i < W; i += 32) { x.fillStyle = 'rgba(0,0,0,.16)'; x.fillRect(i, y + 12, 30, 4); x.fillStyle = 'rgba(0,0,0,.08)'; x.fillRect(i, y, 2, 16); } noise(.06); break;
     }
-    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8;
-    const e = new THREE.CanvasTexture(lit); e.wrapS = e.wrapT = THREE.RepeatWrapping;
-    return { map: t, lit: e };
+    const tex = cv => { const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; return t; };
+    return { map: tex(c), lit: tex(lit), spec: tex(spc) };
+  },
+  /** Himmel til speilinger i glass (enkel kube: blå himmel, lys horisont, mørkere by og bakke). */
+  envMap() {
+    if (City._env) return City._env;
+    const face = (top) => { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+      if (top === 1) { x.fillStyle = '#8DB8DF'; x.fillRect(0, 0, 128, 128); } else if (top === -1) { x.fillStyle = '#5E625E'; x.fillRect(0, 0, 128, 128); }
+      else { const g = x.createLinearGradient(0, 0, 0, 128); g.addColorStop(0, '#7FAEDB'); g.addColorStop(.45, '#CFE0EC'); g.addColorStop(.5, '#E9EEF0'); g.addColorStop(.52, '#7C8486'); g.addColorStop(1, '#4E5452'); x.fillStyle = g; x.fillRect(0, 0, 128, 128);
+        x.fillStyle = 'rgba(70,78,82,.85)'; for (let i = 0; i < 128; i += 6) { const h = 4 + Math.random() * 14; x.fillRect(i, 64 - h, 5, h); }   // bysilhuett
+        x.fillStyle = 'rgba(255,255,255,.55)'; for (let k = 0; k < 4; k++) { x.beginPath(); x.ellipse(Math.random() * 128, 18 + Math.random() * 30, 14 + Math.random() * 16, 4 + Math.random() * 4, 0, 0, TAU); x.fill(); } }
+      return c; };
+    const cube = new THREE.CubeTexture([face(0), face(0), face(1), face(-1), face(0), face(0)]); cube.needsUpdate = true; City._env = cube; return cube;
   },
   mat(style) {
     if (style === 'taksat') return SatAtlas.mat;
     if (City.tex[style]) return City.tex[style].m;
-    const T = City.makeTex(style), m = new THREE.MeshLambertMaterial({ map: T.map, vertexColors: true, side: THREE.DoubleSide, emissive: 0xffffff, emissiveMap: style === 'tak' || style === 'tegltak' ? null : T.lit, emissiveIntensity: 0 });
+    const T = City.makeTex(style), roof = style === 'tak' || style === 'tegltak' || style === 'sokkel' || style === 'gesims';
+    const m = new THREE.MeshLambertMaterial({ map: T.map, vertexColors: true, side: THREE.DoubleSide, emissive: 0xffffff, emissiveMap: roof ? null : T.lit, emissiveIntensity: 0 });
+    if (!roof) { m.envMap = City.envMap(); m.specularMap = T.spec; m.combine = THREE.MixOperation; m.reflectivity = style === 'glass' ? 0.75 : 0.6; }
     City.tex[style] = { m, T }; return m;
   },
   setNight(n) { City.night = n; for (const k in City.tex) { const m = City.tex[k].m; m.emissiveIntensity = m.emissiveMap ? n * 0.85 : 0; } },
@@ -109,11 +143,13 @@ const City = {
       const feats = map.querySourceFeatures('om', { sourceLayer: 'building' }), seen = new Set(), B = {};
       const get = st => B[st] || (B[st] = { p: [], n: [], uv: [], c: [] });
       const col = new THREE.Color(), col2 = new THREE.Color();
-      const quad = (st, a, b, h0, h1, u1, v0, v1, cr, nx, nz) => {   // én veggflate
-        const g = get(st); g.p.push(a[0], h0, a[1], b[0], h0, b[1], b[0], h1, b[1], a[0], h0, a[1], b[0], h1, b[1], a[0], h1, a[1]);
-        for (let k = 0; k < 6; k++) { g.n.push(nx, 0, nz); g.c.push(cr.r, cr.g, cr.b); }
-        g.uv.push(0, v0, u1, v0, u1, v1, 0, v0, u1, v1, 0, v1);
+      const quad = (st, a, b, h0, h1, u1, v0, v1, cr, nx, nz, ao) => {   // én veggflate (u1 = antall vindusfag, v = etasjer)
+        const g = get(st), cu = City.cols(st), rw = City.rows(st), U = u1 / cu, V0 = v0 / rw, V1 = v1 / rw, d = ao ? 0.72 : 1;   // ao: mørkere nederst (skygge mot bakken)
+        g.p.push(a[0], h0, a[1], b[0], h0, b[1], b[0], h1, b[1], a[0], h0, a[1], b[0], h1, b[1], a[0], h1, a[1]);
+        for (const f of [d, d, 1, d, 1, 1]) { g.n.push(nx, 0, nz); g.c.push(cr.r * f, cr.g * f, cr.b * f); }
+        g.uv.push(0, V0, U, V0, U, V1, 0, V0, U, V1, 0, V1);
       };
+      const inst = { balk: [], rail: [], box: [] };   // detaljer som tegnes som instanser (balkonger, takbokser, piper)
       let n = 0; const atlas = SatAtlas.ensure(w, cp, rad);
       for (const f of feats) {
         if (n > 9000) break;
@@ -136,12 +172,22 @@ const City = {
           const grow = 0.35, sc = (p) => { const dx = p[0] - cx, dz = p[1] - cz, d = Math.hypot(dx, dz) || 1; return [p[0] + dx / d * grow, p[1] + dz / d * grow]; };
           const P = pts.map(sc), floors = Math.max(1, Math.round((H - H0 - (shop ? 4 : 0)) / City.FLOOR));
           const white = { r: 1, g: 1, b: 1 };
+          const ground = H0 < 1, plinth = ground && !shop && st !== 'glass' && st !== 'industri', cornice = H - H0 > 7 && (st === 'murgard' || st === 'puss');
+          const balc = (st === 'puss' || st === 'moderne') && H >= 9 && H < 45 && hsh > 0.35, corC = new THREE.Color().copy(col).multiplyScalar(0.92), stone = { r: .95, g: .94, b: .92 };
           for (let i = 0; i < P.length; i++) {
             const a = P[i], b = P[(i + 1) % P.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 0.4) continue;
             let nx = (b[1] - a[1]) / L, nz = -(b[0] - a[0]) / L; if (!ccw) { nx = -nx; nz = -nz; }
-            const bays = Math.max(1, Math.round(L / City.BAY));
-            if (shop) { quad('butikk', a, b, H0, H0 + 4, bays, 0, 1, white, nx, nz); quad(st, a, b, H0 + 4, H, bays, 0, floors, col, nx, nz); }
-            else quad(st, a, b, H0, H, L < 2 ? 0.4 : bays, 0, floors, col, nx, nz);
+            const bays = Math.max(1, Math.round(L / City.BAY)), off = (p, k) => [p[0] + nx * k, p[1] + nz * k];
+            if (shop) { quad('butikk', a, b, H0, H0 + 4, bays, 0, 1, white, nx, nz, true); quad(st, a, b, H0 + 4, H, bays, 0, floors, col, nx, nz); }
+            else quad(st, a, b, H0, H, L < 2 ? 0.4 : bays, 0, floors, col, nx, nz, ground);
+            if (plinth && L > 1.5) quad('sokkel', off(a, .08), off(b, .08), 0, 0.85, L / 4, 0, 1, stone, nx, nz, true);
+            if (cornice && L > 1.5) quad('gesims', off(a, .22), off(b, .22), H - .5, H - .05, L / 4, 0, 1, corC, nx, nz);
+            // balkonger: annethvert vindusfag, fra 2. etasje
+            if (balc && L >= 7 && inst.balk.length < 6000) {
+              const f0 = shop ? 1 : 1, ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L, rot = Math.atan2(nx, nz);
+              for (let k = 0; k < bays; k += 2) { const t = (k + .5) / bays, bx = a[0] + (b[0] - a[0]) * t, bz = a[1] + (b[1] - a[1]) * t;
+                for (let fl = f0; fl < floors; fl++) { const y = H0 + (shop ? 4 : 0) + fl * (H - H0 - (shop ? 4 : 0)) / floors; inst.balk.push([bx + nx * .65, y, bz + nz * .65, rot]); inst.rail.push([bx + nx * 1.3, y + .55, bz + nz * 1.3, rot]); } }
+            }
           }
           // tak: saltak på små, tilnærmet rektangulære hus – ellers flatt tak med takkant
           const r = minRect(pts), short = Math.min(r.w, r.d), long = Math.max(r.w, r.d);
@@ -153,10 +199,16 @@ const City = {
             const sat = atlas.uv(w, r.cx, r.cz), g = get(sat ? 'taksat' : 'tegltak'), tri = (p1, p2, p3, y1, y2, y3) => { g.p.push(p1[0], y1, p1[1], p2[0], y2, p2[1], p3[0], y3, p3[1]); for (let k = 0; k < 3; k++) { g.n.push(0, 1, 0); g.c.push(roofCol.r, roofCol.g, roofCol.b); } for (const q of [p1, p2, p3]) { const t = sat && atlas.uv(w, q[0], q[1]); if (t) g.uv.push(t[0], t[1]); else g.uv.push(q[0] / 4, q[1] / 4); } };
             const a1 = Pt(-hw, -hd), a2 = Pt(hw, -hd), a3 = Pt(hw, hd), a4 = Pt(-hw, hd), r1 = Pt(-hw, 0), r2 = Pt(hw, 0), top = H + rh;
             tri(a1, a2, r2, H, H, top); tri(a1, r2, r1, H, top, top); tri(a4, r1, r2, H, top, top); tri(a4, r2, a3, H, top, H);
+            if (hsh > 0.3) { const cpnt = Pt(hw * (hsh - .5) * 1.2, hd * .3); inst.box.push([cpnt[0], top - rh * .3 + .6, cpnt[1], .7, 1.6, .7, 0x8E5A48]); }   // pipe
             const gw = get(st); for (const [p, q, sg] of [[a1, a4, -1], [a2, a3, 1]]) { gw.p.push(p[0], H, p[1], q[0], H, q[1], (p[0] + q[0]) / 2, top, (p[1] + q[1]) / 2); for (let k = 0; k < 3; k++) { gw.n.push(ax[0] * sg, 0, ax[1] * sg); gw.c.push(col.r, col.g, col.b); } gw.uv.push(0, 0, 1, 0, .5, rh / City.FLOOR); }   // gavler
           } else {
             const tris = THREE.ShapeUtils.triangulateShape(P.map(p => new THREE.Vector2(p[0], p[1])), []), sat = atlas.uv(w, cx, cz), g = get(sat ? 'taksat' : 'tak'), tc = 0.85 + hsh * 0.15;
             for (const t of tris) for (const j of t) { g.p.push(P[j][0], H + .05, P[j][1]); g.n.push(0, 1, 0); g.c.push(tc, tc, tc * 0.98); const q = sat && atlas.uv(w, P[j][0], P[j][1]); if (q) g.uv.push(q[0], q[1]); else g.uv.push(P[j][0] / 12, P[j][1] / 12); }
+            if (A > 220 && inst.box.length < 4000) {   // ventilasjon og trappehus
+              const ca = Math.cos(r.a), sa = Math.sin(r.a), nb = 1 + Math.floor(hsh * 3);
+              for (let q = 0; q < nb; q++) { const u = (City.hash(k + q) - .5) * r.w * .5, v = (City.hash(k + 'v' + q) - .5) * r.d * .5; inst.box.push([r.cx + ca * u - sa * v, H + .6, r.cz + sa * u + ca * v, 2.2, 1.2, 1.4, 0x9DA3A6, r.a]); }
+              if (H > 12) inst.box.push([r.cx, H + 1.3, r.cz, 3.2, 2.6, 3.2, 0xB9B4AA, r.a]);
+            }
             if (H - H0 > 6) { const gp = get('tak'); for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length]; gp.p.push(a[0], H, a[1], b[0], H, b[1], b[0], H + .7, b[1], a[0], H, a[1], b[0], H + .7, b[1], a[0], H + .7, a[1]); for (let k = 0; k < 6; k++) { gp.n.push(0, 1, 0); gp.c.push(col.r * .9, col.g * .9, col.b * .9); } gp.uv.push(0, 0, 1, 0, 1, .1, 0, 0, 1, .1, 0, .1); } }   // takkant
           }
         }
@@ -164,6 +216,15 @@ const City = {
       City.clear();
       const grp = new THREE.Group();
       City.trees(grp, w, cp, rad);
+      // balkonger (betongplate + glassrekkverk) og takbokser som instanser
+      const boxG = R.geo('box', () => new THREE.BoxGeometry(1, 1, 1)), addInst = (list, mat, sx, sy, sz) => {
+        if (!list.length) return; const m = new THREE.InstancedMesh(boxG, mat, list.length), cc = new THREE.Color();
+        list.forEach((it, i) => { _v3.set(it[0], it[1], it[2]); _q.setFromAxisAngle(_up, it[7] != null ? -it[7] : it[3] || 0); _s3.set(sx || it[3], sy || it[4], sz || it[5]); if (!sx) _q.setFromAxisAngle(_up, -(it[7] || 0)); _m4.compose(_v3, _q, _s3); m.setMatrixAt(i, _m4); if (!sx) { cc.setHex(it[6]); m.setColorAt(i, cc); } });
+        m.frustumCulled = false; m.castShadow = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; grp.add(m);
+      };
+      addInst(inst.balk, R.mat(0xD9D6CE), 2.6, 0.2, 1.3);
+      addInst(inst.rail, City.railMat || (City.railMat = new THREE.MeshLambertMaterial({ color: 0x9FB3BE, transparent: true, opacity: 0.55, side: THREE.DoubleSide })), 2.6, 1.0, 0.06);
+      addInst(inst.box, City.boxMat || (City.boxMat = new THREE.MeshLambertMaterial({ color: 0xffffff })));
       for (const st in B) {
         const d = B[st]; if (!d.p.length) continue; const geo = new THREE.BufferGeometry();
         geo.setAttribute('position', new THREE.Float32BufferAttribute(d.p, 3)); geo.setAttribute('normal', new THREE.Float32BufferAttribute(d.n, 3));
