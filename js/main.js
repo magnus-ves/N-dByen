@@ -23,14 +23,21 @@ Game.envFor = function (si) { const sun = SEASONS[si].sun; return { daylight: 1,
 Game.applySeason = function (si) { R.setSeason(si); R.setBeachSeason(si === 1); };
 Game.worlds = {};
 /** Laster veinett (data/*.geojson, ellers Overpass) og bygger verden for en by. */
-Game.loadWorld = async function (id) {
-  if (Game.worlds[id]) return Game.worlds[id];
-  const cfg = CITY_CONFIGS[id]; UI.toast('Laster veinett for ' + cfg.navn + ' – første gang kan det ta et halvt minutt …', 'info');
-  const rd = await loadRoadData(cfg), sites = await loadSites(cfg);
-  const w = buildWorld(cfg, rd.gj, sites); w.kilde = rd.kilde; Game.worlds[id] = w;
-  console.info('[NødByen]', cfg.navn, 'veinett fra', rd.kilde, w.stat);
-  return w;
+Game.loading = {};
+Game.loadWorld = function (id, quiet) {
+  if (Game.worlds[id]) return Promise.resolve(Game.worlds[id]);
+  const cfg = CITY_CONFIGS[id];
+  if (!quiet && !Game.worlds[id] && !Game.loadingShown) { Game.loadingShown = true; UI.toast('Laster veinett for ' + cfg.navn + (Game.loading[id] ? ' …' : ' – første gang kan det ta en stund …'), 'info'); }
+  if (!Game.loading[id]) Game.loading[id] = (async () => {
+    const t0 = performance.now(), [rd, sites] = await Promise.all([loadRoadData(cfg), loadSites(cfg)]), t1 = performance.now();
+    const w = buildWorld(cfg, rd.gj, sites); w.kilde = rd.kilde; Game.worlds[id] = w;
+    console.info('[NødByen]', cfg.navn, 'veinett fra', rd.kilde, w.stat, 'henting ' + Math.round(t1 - t0) + ' ms, bygging ' + Math.round(performance.now() - t1) + ' ms');
+    return w;
+  })().catch(e => { delete Game.loading[id]; throw e; });
+  return Game.loading[id].finally(() => { Game.loadingShown = false; });
 };
+/** Laster begge byene i bakgrunnen mens spilleren ser menyen. */
+Game.prefetch = function () { for (const id of Object.keys(CITY_CONFIGS)) Game.loadWorld(id, true).catch(() => { /* feil vises når byen velges */ }); };
 Game.fail = function (e, retry) {
   console.error(e);
   const fil = location.protocol === 'file:' ? ' Du har åpnet siden som fil – start den via en webserver (<code>npm start</code>), ellers kan ikke veidata leses.' : '';
@@ -141,7 +148,7 @@ async function boot() {
   R.onTileError = () => UI.toast('Fikk ikke kontakt med kartfliser (OpenFreeMap). Spillet virker, men bakgrunnskartet kan mangle.', 'warn');
   // menyen vises alltid med en gang; veinett lastes først når du velger by
   const c0 = CITY_CONFIGS.oslo; R.map.jumpTo({ center: [c0.center.lon, c0.center.lat], zoom: c0.zoom, pitch: c0.pitch, bearing: c0.bearing });
-  $('#loadMsg').remove(); UI.screenCities();
+  $('#loadMsg').remove(); UI.screenCities(); setTimeout(Game.prefetch, 300);
   Game.last = performance.now(); requestAnimationFrame(loop);
   window.addEventListener('pagehide', () => Store.save());
   document.addEventListener('visibilitychange', () => { if (document.hidden) Store.save(); });

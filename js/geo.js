@@ -30,9 +30,12 @@ function overpassToGeoJSON(json) {
   return { type: 'FeatureCollection', features: feats };
 }
 async function fetchOverpassLive(cfg) {
+  // mellomlager i nettleseren (Cache Storage) så Overpass bare trengs første gang
+  const ck = new Request(location.origin + '/__cache/overpass/' + cfg.id + '/v1');
+  try { const c = await caches.open('nodbyen-data'), hit = await c.match(ck); if (hit) return await hit.json(); } catch (e) { /* ingen cache */ }
   let lastErr;
   for (const url of OVERPASS) {
-    try { const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(overpassQuery(cfg, true)), signal: AbortSignal.timeout ? AbortSignal.timeout(60000) : undefined }); if (!r.ok) throw new Error('HTTP ' + r.status); return overpassToGeoJSON(await r.json()); } catch (e) { lastErr = e; }
+    try { const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(overpassQuery(cfg, true)), signal: AbortSignal.timeout ? AbortSignal.timeout(60000) : undefined }); if (!r.ok) throw new Error('HTTP ' + r.status); const gj = overpassToGeoJSON(await r.json()); try { (await caches.open('nodbyen-data')).put(ck, new Response(JSON.stringify(gj))); } catch (e) { /* ignorer */ } return gj; } catch (e) { lastErr = e; }
   }
   throw lastErr || new Error('Overpass utilgjengelig');
 }
