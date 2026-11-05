@@ -55,7 +55,7 @@ R.style = function (offline) {
     layers.push({ id: 'place', type: 'symbol', source: 'om', 'source-layer': 'place', filter: ['in', 'class', 'suburb', 'neighbourhood', 'quarter'], layout: { 'text-field': nm, 'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-transform': 'uppercase', 'text-letter-spacing': 0.08 }, paint: { 'text-color': '#7A8776', 'text-halo-color': '#F6F0E0', 'text-halo-width': 1.4 } });
     layers.push({ id: 'street-name', type: 'symbol', source: 'om', 'source-layer': 'transportation_name', minzoom: 15.5, layout: { 'text-field': nm, 'text-font': ['Noto Sans Regular'], 'text-size': 11, 'symbol-placement': 'line' }, paint: { 'text-color': '#7B7566', 'text-halo-color': '#FBF7EC', 'text-halo-width': 1.2 } });
   }
-  const style = { version: 8, name: 'NødByen pastell', glyphs: GLYPHS, sources: offline ? {} : { om: { type: 'vector', url: TILE_URL, attribution: 'OpenFreeMap © OpenMapTiles Data from OpenStreetMap' }, sat: { type: 'raster', tiles: [SAT_URL], tileSize: 256, maxzoom: 19, attribution: SAT_CREDIT } }, layers, light: { anchor: 'viewport', color: '#fff6e6', intensity: 0.38, position: [1.2, 200, 38] } };
+  const style = { version: 8, name: 'NødByen pastell', glyphs: GLYPHS, sources: offline ? {} : { om: { type: 'vector', url: TILE_URL, attribution: 'OpenFreeMap © OpenMapTiles Data from OpenStreetMap' }, sat: { type: 'raster', tiles: [SAT_URL], tileSize: 256, maxzoom: 18, attribution: SAT_CREDIT } }, layers, light: { anchor: 'viewport', color: '#fff6e6', intensity: 0.38, position: [1.2, 200, 38] } };
   return style;
 };
 R.setSeason = function (si) {
@@ -108,18 +108,21 @@ function minRect(pts) {
 function polyArea(pts) { let s = 0; for (let i = 0; i < pts.length; i++) { const p = pts[i], q = pts[(i + 1) % pts.length]; s += p[0] * q[1] - q[0] * p[1]; } return Math.abs(s) / 2; }
 R.roofs = { mesh: null, keys: new Set(), items: [], busy: false };
 R.updateRoofs = function () {
-  const map = R.map, w = R.world; if (!map || !w || !map.getSource('om') || map.getZoom() < 15.4 || R.roofs.busy) return;
+  const map = R.map, w = R.world; if (!map || !w || !map.getSource('om') || map.getZoom() < 16.2 || R.roofs.busy) return;
   R.roofs.busy = true;
   try {
-    const c = map.getCenter(), cp = w.proj.toXZ(c.lat, c.lng), rad = clamp(R.mpp * Math.max(R.w, R.h) * 0.8, 300, 1800), feats = map.querySourceFeatures('om', { sourceLayer: 'building' }), RR = R.roofs;
+    const c = map.getCenter(), cp = w.proj.toXZ(c.lat, c.lng), rad = clamp(R.mpp * Math.max(R.w, R.h) * 0.8, 250, 900), feats = map.querySourceFeatures('om', { sourceLayer: 'building' }), RR = R.roofs;
+    let made = 0;
     for (const f of feats) {
+      if (made > 700) break;
       const g = f.geometry; if (!g || (g.type !== 'Polygon' && g.type !== 'MultiPolygon')) continue;
-      const ring = (g.type === 'Polygon' ? g.coordinates[0] : g.coordinates[0][0]); if (!ring || ring.length < 4) continue;
+      const ring = (g.type === 'Polygon' ? g.coordinates[0] : g.coordinates[0][0]); if (!ring || ring.length < 4 || ring.length > 24) continue;
       const h = (f.properties && f.properties.render_height) || 6; if (h >= 16) continue;
+      { const q0 = w.proj.toXZ(ring[0][1], ring[0][0]); if (Math.hypot(q0.x - cp.x, q0.z - cp.z) > rad + 80) continue; }   // billig forhåndsfilter
       const pts = ring.slice(0, -1).map(q => { const p = w.proj.toXZ(q[1], q[0]); return [p.x, p.z]; });
       const r = minRect(pts); if (Math.hypot(r.cx - cp.x, r.cz - cp.z) > rad) continue;
       const short = Math.min(r.w, r.d), long = Math.max(r.w, r.d); if (short < 4 || long > 60 || polyArea(pts) / r.area < 0.8) continue;   // bare tilnærmet rektangulære hus
-      const key = Math.round(r.cx / 1.5) + ',' + Math.round(r.cz / 1.5) + ',' + Math.round(h); if (RR.keys.has(key)) continue; RR.keys.add(key);
+      const key = Math.round(r.cx / 1.5) + ',' + Math.round(r.cz / 1.5) + ',' + Math.round(h); if (RR.keys.has(key)) continue; RR.keys.add(key); made++;
       const ridgeAlongW = r.w >= r.d;
       RR.items.push({ x: r.cx, z: r.cz, y: (f.properties && f.properties.render_min_height ? 0 : 0) + h, sx: (ridgeAlongW ? r.w : r.d) + 0.8, sz: (ridgeAlongW ? r.d : r.w) + 0.8, rh: clamp(short * 0.34, 1.6, 5), a: ridgeAlongW ? r.a : r.a + Math.PI / 2, col: ROOF_COL[(Math.abs(Math.round(r.cx * 7 + r.cz * 13))) % ROOF_COL.length] });
     }
@@ -141,7 +144,7 @@ R.init = function (container, opts) {
     try {
       map = new maplibregl.Map({ container, style: R.style(!!opts.offline), center: [10.752, 59.913], zoom: 14.5, pitch: 55, bearing: -18, maxPitch: 75, minZoom: 12.5, maxZoom: 19.5, attributionControl: false, antialias: true, dragRotate: true, pitchWithRotate: true, touchPitch: true, hash: false, fadeDuration: 150, localIdeographFontFamily: false });
     } catch (e) { reject(e); return; }
-    R.map = map; R.dpr = window.devicePixelRatio || 1;
+    R.map = map; map.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5)); R.dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     map.touchZoomRotate.enableRotation();
     R.scene = new THREE.Scene(); R.camera = new THREE.Camera();
     R.hemi = new THREE.HemisphereLight(0xfaf3e2, 0xdadcc8, 0.9); R.sun = new THREE.DirectionalLight(0xfff1d6, 0.7); R.sun.position.set(60, 90, 40);
@@ -161,13 +164,14 @@ R.init = function (container, opts) {
     map.on('load', () => { map.addLayer(R.layer); R.ready = true; R.setBase(R.base || 'sat'); if (!done) { done = true; resolve(true); } });
     map.on('click', e => { if (R.onTap) R.onTap(e.point.x, e.point.y, !!(e.originalEvent && (e.originalEvent.pointerType === 'touch' || e.originalEvent.type === 'touchend'))); });
     map.on('resize', () => R.resize());
-    let rt = 0; const roofSoon = () => { clearTimeout(rt); rt = setTimeout(() => R.updateRoofs(), 350); }; map.on('moveend', roofSoon); setInterval(() => { if (!map.isMoving()) R.updateRoofs(); }, 4000);
+    let rt = 0; const roofSoon = () => { clearTimeout(rt); rt = setTimeout(() => (window.requestIdleCallback ? requestIdleCallback(() => R.updateRoofs(), { timeout: 1500 }) : R.updateRoofs()), 900); }; map.on('moveend', roofSoon);
     R.resize();
     setTimeout(() => { if (!done) { done = true; resolve(false); } }, 3500);
   });
 };
-R.resize = function () { if (!R.map) return; const c = R.map.getCanvas(); R.w = c.clientWidth || window.innerWidth; R.h = c.clientHeight || window.innerHeight; R.dpr = window.devicePixelRatio || 1; };
+R.resize = function () { if (!R.map) return; const c = R.map.getCanvas(); R.w = c.clientWidth || window.innerWidth; R.h = c.clientHeight || window.innerHeight; R.dpr = R.map.getPixelRatio ? R.map.getPixelRatio() : 1; };
 R.setQuality = function (cap) { if (R.map) { R.map.setPixelRatio(Math.min(window.devicePixelRatio || 1, cap)); R.resize(); } };
+R.resize0 = null;
 R.setPadding = function (right, bottom) { R.insetR = right; R.insetB = bottom; if (R.map) R.map.setPadding({ top: 0, left: 0, right, bottom }); };
 
 /* ---------- verden: opprinnelse for lokale meterkoordinater, dekningslag, strender ---------- */

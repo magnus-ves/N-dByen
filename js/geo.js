@@ -76,7 +76,7 @@ class MinHeap {
 
 /* ---------- veigraf: knutepunkter ved kryss, kanter med polylinje-geometri ---------- */
 function buildRoadGraph(feats, proj) {
-  const key = c => Math.round(c[0] * 1e6) + ',' + Math.round(c[1] * 1e6), ways = [], cnt = new Map();
+  const key = c => Math.round(c[0] * 1e6) * 1e8 + Math.round(c[1] * 1e6), ways = [], cnt = new Map();   // numerisk nøkkel (raskere enn tekst)
   for (const f of feats) {
     if (!f.geometry || f.geometry.type !== 'LineString') continue;
     const hw = f.properties && f.properties.highway; if (!HW_MUL[hw] || f.geometry.coordinates.length < 2) continue;
@@ -161,7 +161,8 @@ function makeNav(world) {
   const CS = 150, grid = new Map(), gk = (i, j) => i * 100003 + j;
   for (const e of edges) {
     const seen = new Set();
-    for (let s = 0; s <= e.len + 40; s += 40) { const p = pointAt(e, Math.min(s, e.len)), i = Math.floor(p[0] / CS), j = Math.floor(p[1] / CS), k = gk(i, j); if (!seen.has(k)) { seen.add(k); let a = grid.get(k); if (!a) grid.set(k, a = []); a.push(e); } }
+    for (let q = 0; q < e.geom.length; q++) { const g0 = e.geom[q], i = Math.floor(g0[0] / CS), j = Math.floor(g0[1] / CS), k = gk(i, j); if (!seen.has(k)) { seen.add(k); let a = grid.get(k); if (!a) grid.set(k, a = []); a.push(e); } }
+    for (let s = 60; s < e.len; s += 60) { const p = pointAt(e, s), i = Math.floor(p[0] / CS), j = Math.floor(p[1] / CS), k = gk(i, j); if (!seen.has(k)) { seen.add(k); let a = grid.get(k); if (!a) grid.set(k, a = []); a.push(e); } }
   }
   function nearestRP(x, z, mainOnly) {
     const ci = Math.floor(x / CS), cj = Math.floor(z / CS); let best = null, bd = 1e12;
@@ -205,7 +206,7 @@ function buildWorld(cfg, roadGJ, siteFeats) {
   world.landAt = (x, z) => { const r = nav.nearestRP(x, z, true); return !!r && r.dist < 400; };
   const dens = (x, z) => clamp(1 - Math.hypot(x, z) / cfg.downtownR, 0, 1);
   world.dens = dens;
-  for (const e of world.edges) { const p = nav.pointAt(e, e.len / 2); e.dens = dens(p[0], p[1]); }
+  for (const e of world.edges) { const p = e.geom[e.geom.length >> 1]; e.dens = dens(p[0], p[1]); }
   const main = world.edges.filter(e => comp[e.a] === world.mainComp);
   // adresse = gatenavn + husnummer (utledet fra posisjon langs gata)
   world.addrOf = (rp, side) => { const e = nav.edgeFor(rp); if (!e) return 'Ukjent veg'; const s = (rp.a === e.a ? rp.t : 1 - rp.t) * e.len; return (e.name || 'Veien') + ' ' + (2 * Math.floor(s / 14) + 1 + (side ? 1 : 0)); };
@@ -275,7 +276,7 @@ function buildWorld(cfg, roadGJ, siteFeats) {
   const border = main.map(e => nav.pointAt(e, 0)).map((p, i) => ({ p, e: main[i] })).filter(o => Math.min(o.p[0] - world.X0, world.X1 - o.p[0], o.p[1] - world.Z0, world.Z1 - o.p[1]) < 300);
   world.ports = border.filter((_, i) => i % 6 === 0).slice(0, 40).map(o => world.nodes[o.e.a]);
   if (!world.ports.length) world.ports = [world.nodes[main[0].a]];
-  world.sample = main.filter((_, i) => i % Math.max(1, Math.floor(main.length / 500)) === 0).map(e => { const p = nav.pointAt(e, e.len / 2); return { x: p[0], z: p[1] }; });
+  world.sample = main.filter((_, i) => i % Math.max(1, Math.floor(main.length / 400)) === 0).map(e => { const p = nav.pointAt(e, e.len / 2); return { x: p[0], z: p[1] }; });
   world.stat = { noder: world.NN, kanter: world.edges.length, hovedkomp: sizes[world.mainComp], tomter: lots.length };
   return world;
 }

@@ -37,7 +37,7 @@ Game.loadWorld = function (id, quiet) {
   return Game.loading[id].finally(() => { Game.loadingShown = false; });
 };
 /** Laster begge byene i bakgrunnen mens spilleren ser menyen. */
-Game.prefetch = function () { for (const id of Object.keys(CITY_CONFIGS)) Game.loadWorld(id, true).catch(() => { /* feil vises når byen velges */ }); };
+Game.prefetch = function () { const ids = Object.keys(CITY_CONFIGS); (function next(i) { if (i >= ids.length) return; Game.loadWorld(ids[i], true).catch(() => {}).then(() => setTimeout(() => next(i + 1), 500)); })(0); };
 Game.fail = function (e, retry) {
   console.error(e);
   const fil = location.protocol === 'file:' ? ' Du har åpnet siden som fil – start den via en webserver (<code>npm start</code>), ellers kan ikke veidata leses.' : '';
@@ -144,7 +144,7 @@ async function boot() {
   if (!hasGL) { fatal('Nettleseren din støtter ikke WebGL, som trengs for 3D-kartet. Prøv en nyere nettleser.'); return; }
   const q = new URLSearchParams(location.search);
   UI.init();
-  let ok; try { ok = await R.init($('#view'), { offline: q.has('offline') }); } catch (e) { fatal('Kartet kunne ikke startes: ' + esc(String(e.message || e))); return; }
+  let initP; try { initP = R.init($('#view'), { offline: q.has('offline') }); } catch (e) { fatal('Kartet kunne ikke startes: ' + esc(String(e.message || e))); return; }   initP.catch(() => {}); // ikke vent på kartfliser – menyen vises straks
   R.onTileError = () => UI.toast('Fikk ikke kontakt med kartfliser (OpenFreeMap). Spillet virker, men bakgrunnskartet kan mangle.', 'warn');
   // menyen vises alltid med en gang; veinett lastes først når du velger by
   const c0 = CITY_CONFIGS.oslo; R.map.jumpTo({ center: [c0.center.lon, c0.center.lat], zoom: c0.zoom, pitch: c0.pitch, bearing: c0.bearing });
