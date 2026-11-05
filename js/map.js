@@ -9,8 +9,8 @@ const VS = 2.6, SS = 5.2, MS = 5;          // modellskala (meter per modellenhet
 const TILE_URL = 'https://tiles.openfreemap.org/planet';
 const GLYPHS = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf';
 const SEASON_STYLE = [
-  { bg: '#F1EBD8', grass: '#C4D9B2', wood: '#A8C596', water: '#8DB4C4', bld: '#E6D9BF' },
-  { bg: '#EFE9D4', grass: '#B4D1A2', wood: '#94B982', water: '#80B0C2', bld: '#E8DAC0' },
+  { bg: '#F1EBD8', grass: '#C4D9B2', wood: '#A8C596', water: '#8DB4C4', bld: '#EFE4CC' },
+  { bg: '#EFE9D4', grass: '#B4D1A2', wood: '#94B982', water: '#80B0C2', bld: '#F0E5CD' },
   { bg: '#EFE4CC', grass: '#D6C992', wood: '#BFA968', water: '#88AAB6', bld: '#E4D2B4' },
   { bg: '#F2F4F2', grass: '#EAF0ED', wood: '#D6E0DB', water: '#9DB5C0', bld: '#EDEAE3' }
 ];
@@ -34,15 +34,15 @@ R.style = function (offline) {
     f('landuse-pitch', 'landuse', 'fill', ['in', 'class', 'pitch', 'playground', 'cemetery'], { 'fill-color': '#CFE0BC' });
     f('water', 'water', 'fill', null, { 'fill-color': P.water });
     f('waterway', 'waterway', 'line', null, { 'line-color': P.water, 'line-width': 1.4 });
-    const road = (id, cls, w, col, casing) => { if (casing) f(id + '-c', 'transportation', 'line', ['all', ['in', 'class'].concat(cls), ['!=', 'brunnel', 'tunnel']], { 'line-color': '#D8CBAE', 'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], 12, w * 0.5, 18, w * 4.2] }, { layout: { 'line-cap': 'round', 'line-join': 'round' } });
-      f(id, 'transportation', 'line', ['all', ['in', 'class'].concat(cls), ['!=', 'brunnel', 'tunnel']], { 'line-color': col, 'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], 12, w * 0.35, 18, w * 3.4] }, { layout: { 'line-cap': 'round', 'line-join': 'round' } }); };
+    const road = (id, cls, w, col, casing) => { if (casing) f(id + '-c', 'transportation', 'line', ['all', ['in', 'class'].concat(cls), ['!=', 'brunnel', 'tunnel']], { 'line-color': '#CDBF9F', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 12, w * 0.6, 15, w * 1.9, 18, w * 5.2] }, { layout: { 'line-cap': 'round', 'line-join': 'round' } });
+      f(id, 'transportation', 'line', ['all', ['in', 'class'].concat(cls), ['!=', 'brunnel', 'tunnel']], { 'line-color': col, 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 12, w * 0.4, 15, w * 1.4, 18, w * 4.2] }, { layout: { 'line-cap': 'round', 'line-join': 'round' } }); };
     road('r-minor', ['minor', 'service', 'track'], 1.6, '#FBF7EC', true);
     road('r-tert', ['tertiary'], 2.2, '#FBF4E0', true);
     road('r-sec', ['secondary', 'primary'], 2.8, '#F6E6BC', true);
     road('r-trunk', ['motorway', 'trunk'], 3.2, '#EFD9A2', true);
     f('r-path', 'transportation', 'line', ['in', 'class', 'path', 'pedestrian'], { 'line-color': '#E4D7B8', 'line-width': 1, 'line-dasharray': [2, 2] });
     f('r-rail', 'transportation', 'line', ['==', 'class', 'rail'], { 'line-color': '#C9BFA8', 'line-width': 1.2, 'line-dasharray': [3, 2] });
-    f('building3d', 'building', 'fill-extrusion', null, { 'fill-extrusion-color': P.bld, 'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 6], 'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0], 'fill-extrusion-opacity': 0.94, 'fill-extrusion-vertical-gradient': true }, { minzoom: 14 });
+    f('building3d', 'building', 'fill-extrusion', null, { 'fill-extrusion-color': P.bld, 'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 6], 'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0], 'fill-extrusion-opacity': 0.94, 'fill-extrusion-vertical-gradient': false }, { minzoom: 14 });
     const nm = ['coalesce', ['get', 'name:nb'], ['get', 'name']];
     layers.push({ id: 'water-name', type: 'symbol', source: 'om', 'source-layer': 'water_name', layout: { 'text-field': nm, 'text-font': ['Noto Sans Italic'], 'text-size': 12 }, paint: { 'text-color': '#5F8797', 'text-halo-color': '#F1EBD8', 'text-halo-width': 1 } });
     layers.push({ id: 'place', type: 'symbol', source: 'om', 'source-layer': 'place', filter: ['in', 'class', 'suburb', 'neighbourhood', 'quarter'], layout: { 'text-field': nm, 'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-transform': 'uppercase', 'text-letter-spacing': 0.08 }, paint: { 'text-color': '#7A8776', 'text-halo-color': '#F6F0E0', 'text-halo-width': 1.4 } });
