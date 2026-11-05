@@ -235,7 +235,7 @@ async function roadsFromVectorTiles(cfg, opts) {
 async function roadsFromTiles(cfg) {
   const ck = new Request(location.origin + '/__cache/tiles/' + cfg.id + '/v1');
   try { const c = await caches.open('nodbyen-data'), hit = await c.match(ck); if (hit) return await hit.json(); } catch (e) { /* ingen cache */ }
-  const gj = await roadsFromVectorTiles(cfg);
+  const gj = await roadsFromVectorTiles(cfg, { progress: (d, t) => { const m = document.querySelector('#screens .logo p'); if (m) m.textContent = 'Henter veier fra kartfliser ' + d + '/' + t + ' …'; } });
   try { (await caches.open('nodbyen-data')).put(ck, new Response(JSON.stringify(gj))); } catch (e) { /* ignorer */ }
   return gj;
 }

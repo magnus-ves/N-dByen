@@ -40,7 +40,7 @@ Game.prefetch = function () { const ids = Object.keys(CITY_CONFIGS); (function n
 Game.fail = function (e, retry) {
   console.error(e);
   const fil = location.protocol === 'file:' ? ' Du har åpnet siden som fil – start den via en webserver (<code>npm start</code>), ellers kan ikke veidata leses.' : '';
-  UI.modal({ title: 'Kunne ikke laste kartdata', html: '<p>Veinettet for byen kunne ikke hentes: ' + esc(String(e && e.message || e)) + '.' + fil + ' Sjekk nettforbindelsen. Eier du siden: kjør <code>npm run data</code> og legg <code>data/*.geojson</code> i repoet.</p>', buttons: [{ label: 'Prøv igjen', cls: 'primary', fn: () => { retry(); } }, { label: 'Lukk', cls: 'ghost' }] });
+  UI.modal({ title: 'Kunne ikke laste kartdata', html: '<p>Spillet kunne ikke startes: ' + esc(String(e && e.message || e)) + '.' + fil + ' Sjekk nettforbindelsen. Eier du siden: kjør <code>npm run data</code> og legg <code>data/*.geojson</code> i repoet.</p>', buttons: [{ label: 'Prøv igjen', cls: 'primary', fn: () => { retry(); } }, { label: 'Lukk', cls: 'ghost' }] });
 };
 /** Viser (og laster ved behov) en by som bakgrunn i menyene. */
 Game.showCity = async function (id, season) {
@@ -60,17 +60,20 @@ Game.pickAgency = function (cityId) {
 };
 Game.beginFirstStation = async function (cityId, agency) {
   if (Game.starting) return; Game.starting = true;
+  const back = e => { Game.starting = false; UI.screenAgency(cityId); Game.fail(e, () => Game.beginFirstStation(cityId, agency)); };
   if (!Game.worlds[cityId]) UI.showLoading('Laster kart og veinett for ' + CITY_CONFIGS[cityId].navn + ' …');
-  try { await Game.showCity(cityId, UI.season); } catch (e) { Game.starting = false; UI.screenAgency(cityId); Game.fail(e, () => Game.beginFirstStation(cityId, agency)); return; }
-  Game.starting = false;
-  Sim.newGame(cityId, agency, UI.season, Game.world);
-  R.seasonIdx = S.startSeason; R.setWorld(WORLD); R.setEnv(Game.envFor(S.startSeason), true);
-  Game.mode = 'place0'; UI.hideScreen();
-  $('#hud').classList.remove('hidden'); $('#topbar').classList.add('hidden'); $('#mapTools').classList.add('hidden'); $('#miniLog').classList.add('hidden'); $('#panel').classList.add('hidden'); UI.layout();
-  const lots = Sim.freeLots();
-  UI.beginPlacement({ title: 'Plasser første stasjon (' + AGENCIES[agency].navn + ')', hint: 'Trykk hvor som helst nær en vei der det er ledig plass (grønne ringer er forslag). De lilla feltene viser Nødnett-dekning.', lots, costText: 'gratis',
-    onConfirm: lotId => { const r = Sim.firstStation(lotId); if (!r.ok) { UI.toast(r.msg, 'bad'); return false; } Game.enterPlay(true); } });
-  R.map.easeTo({ pitch: 50, duration: 600 });
+  try { await Game.showCity(cityId, UI.season); } catch (e) { back(e); return; }
+  try {
+    Sim.newGame(cityId, agency, UI.season, Game.world);
+    R.seasonIdx = S.startSeason; R.setWorld(WORLD); R.setEnv(Game.envFor(S.startSeason), true);
+    Game.mode = 'place0'; UI.hideScreen();
+    $('#hud').classList.remove('hidden'); $('#topbar').classList.add('hidden'); $('#mapTools').classList.add('hidden'); $('#miniLog').classList.add('hidden'); $('#panel').classList.add('hidden'); UI.layout();
+    const lots = Sim.freeLots();
+    UI.beginPlacement({ title: 'Plasser første stasjon (' + AGENCIES[agency].navn + ')', hint: 'Trykk hvor som helst nær en vei der det er ledig plass (grønne ringer er forslag). De lilla feltene viser Nødnett-dekning.', lots, costText: 'gratis',
+      onConfirm: lotId => { const r = Sim.firstStation(lotId); if (!r.ok) { UI.toast(r.msg, 'bad'); return false; } Game.enterPlay(true); } });
+    R.map.easeTo({ pitch: 50, duration: 600 });
+    Game.starting = false;
+  } catch (e) { console.error(e); S = null; Game.mode = 'menu'; $('#hud').classList.add('hidden'); back(e); }
 };
 Game.continueCity = async function (id) {
   const o = Store.load(id); if (!o) { Game.pickAgency(id); return; }
@@ -169,6 +172,7 @@ async function boot() {
   const c0 = CITY_CONFIGS.oslo; R.map.jumpTo({ center: [c0.center.lon, c0.center.lat], zoom: c0.zoom, pitch: c0.pitch, bearing: c0.bearing });
   $('#loadMsg').remove(); UI.screenCities(); setTimeout(Game.prefetch, 300);
   Game.last = performance.now(); requestAnimationFrame(loop);
+  window.addEventListener('error', e => { try { UI.toast('Feil: ' + (e.message || 'ukjent'), 'bad'); } catch (x) { /* ignorer */ } });
   window.addEventListener('pagehide', () => Store.save());
   document.addEventListener('visibilitychange', () => { if (document.hidden) Store.save(); });
 }
