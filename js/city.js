@@ -6,6 +6,31 @@
    Farger: byggets egen farge fra kartdataene der den finnes, ellers en typisk norsk bypalett.
    Lenger unna tegner MapLibre byggene som enkle blokker med vindusmønster.
    ========================================================================== */
+/** Satellittbilder (samme som bakkekartet) samlet i én tekstur rundt kameraet, slik at takene viser de ekte takene. */
+const SatAtlas = {
+  z: 17, key: '', tex: null, mat: null, tx0: 0, ty0: 0, W: 1, H: 1, ok: false,
+  mx(lon) { return (lon + 180) / 360 * Math.pow(2, this.z) * 256; },
+  my(lat) { const r = lat * Math.PI / 180; return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * Math.pow(2, this.z) * 256; },
+  ensure(w, cp, rad) {
+    const R_ = Math.min(rad, 640), a = w.proj.toLL(cp.x - R_, cp.z - R_), b = w.proj.toLL(cp.x + R_, cp.z + R_);
+    const tx0 = Math.floor(this.mx(a.lon) / 256), tx1 = Math.floor(this.mx(b.lon) / 256), ty0 = Math.floor(this.my(a.lat) / 256), ty1 = Math.floor(this.my(b.lat) / 256);
+    const key = [tx0, ty0, tx1, ty1].join(','); if (key === this.key) return this;
+    const nx = tx1 - tx0 + 1, ny = ty1 - ty0 + 1; if (nx * ny > 100) { this.ok = false; return this; }
+    this.key = key; this.tx0 = tx0; this.ty0 = ty0; this.W = nx * 256; this.H = ny * 256; this.ok = true;
+    const c = document.createElement('canvas'); c.width = this.W; c.height = this.H; const x = c.getContext('2d'); x.fillStyle = '#8D8E8A'; x.fillRect(0, 0, c.width, c.height);
+    if (!this.tex) { this.tex = new THREE.CanvasTexture(c); this.tex.anisotropy = 8; this.mat = new THREE.MeshLambertMaterial({ map: this.tex, side: THREE.DoubleSide }); }
+    else { this.tex.image = c; this.tex.needsUpdate = true; }
+    const myKey = key;
+    for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) {
+      const img = new Image(); img.crossOrigin = 'anonymous';
+      img.onload = () => { if (this.key !== myKey) return; x.drawImage(img, i * 256, j * 256); this.tex.needsUpdate = true; };
+      img.src = SAT_URL.replace('{z}', this.z).replace('{x}', tx0 + i).replace('{y}', ty0 + j);
+    }
+    return this;
+  },
+  uv(w, x, z) { if (!this.ok) return null; const ll = w.proj.toLL(x, z), u = (this.mx(ll.lon) - this.tx0 * 256) / this.W, v = 1 - (this.my(ll.lat) - this.ty0 * 256) / this.H; return u < 0 || u > 1 || v < 0 || v > 1 ? null : [u, v]; }
+};
+
 const City = {
   mesh: null, busy: false, lastKey: '', night: 0,
   FLOOR: 3.0, BAY: 3.2,
@@ -66,6 +91,7 @@ const City = {
     return { map: t, lit: e };
   },
   mat(style) {
+    if (style === 'taksat') return SatAtlas.mat;
     if (City.tex[style]) return City.tex[style].m;
     const T = City.makeTex(style), m = new THREE.MeshLambertMaterial({ map: T.map, vertexColors: true, side: THREE.DoubleSide, emissive: 0xffffff, emissiveMap: style === 'tak' || style === 'tegltak' ? null : T.lit, emissiveIntensity: 0 });
     City.tex[style] = { m, T }; return m;
@@ -88,7 +114,7 @@ const City = {
         for (let k = 0; k < 6; k++) { g.n.push(nx, 0, nz); g.c.push(cr.r, cr.g, cr.b); }
         g.uv.push(0, v0, u1, v0, u1, v1, 0, v0, u1, v1, 0, v1);
       };
-      let n = 0;
+      let n = 0; const atlas = SatAtlas.ensure(w, cp, rad);
       for (const f of feats) {
         if (n > 4500) break;
         const pr = f.properties || {}; if (pr.hide_3d) continue;
@@ -124,28 +150,79 @@ const City = {
             const ax = along ? [ca, sa] : [-sa, ca], ay = along ? [-sa, ca] : [ca, sa];
             const Pt = (u, v) => [r.cx + ax[0] * u + ay[0] * v, r.cz + ax[1] * u + ay[1] * v];
             const roofCol = new THREE.Color(['#9A4A36', '#7E3E30', '#4E5256', '#5D4A42', '#A35A40', '#3E4448'][Math.floor(hsh * 61) % 6]);
-            const g = get('tegltak'), tri = (p1, p2, p3, y1, y2, y3) => { g.p.push(p1[0], y1, p1[1], p2[0], y2, p2[1], p3[0], y3, p3[1]); for (let k = 0; k < 3; k++) { g.n.push(0, 1, 0); g.c.push(roofCol.r, roofCol.g, roofCol.b); } g.uv.push(p1[0] / 4, p1[1] / 4, p2[0] / 4, p2[1] / 4, p3[0] / 4, p3[1] / 4); };
+            const sat = atlas.uv(w, r.cx, r.cz), g = get(sat ? 'taksat' : 'tegltak'), tri = (p1, p2, p3, y1, y2, y3) => { g.p.push(p1[0], y1, p1[1], p2[0], y2, p2[1], p3[0], y3, p3[1]); for (let k = 0; k < 3; k++) { g.n.push(0, 1, 0); g.c.push(roofCol.r, roofCol.g, roofCol.b); } for (const q of [p1, p2, p3]) { const t = sat && atlas.uv(w, q[0], q[1]); if (t) g.uv.push(t[0], t[1]); else g.uv.push(q[0] / 4, q[1] / 4); } };
             const a1 = Pt(-hw, -hd), a2 = Pt(hw, -hd), a3 = Pt(hw, hd), a4 = Pt(-hw, hd), r1 = Pt(-hw, 0), r2 = Pt(hw, 0), top = H + rh;
             tri(a1, a2, r2, H, H, top); tri(a1, r2, r1, H, top, top); tri(a4, r1, r2, H, top, top); tri(a4, r2, a3, H, top, H);
             const gw = get(st); for (const [p, q, sg] of [[a1, a4, -1], [a2, a3, 1]]) { gw.p.push(p[0], H, p[1], q[0], H, q[1], (p[0] + q[0]) / 2, top, (p[1] + q[1]) / 2); for (let k = 0; k < 3; k++) { gw.n.push(ax[0] * sg, 0, ax[1] * sg); gw.c.push(col.r, col.g, col.b); } gw.uv.push(0, 0, 1, 0, .5, rh / City.FLOOR); }   // gavler
           } else {
-            const tris = THREE.ShapeUtils.triangulateShape(P.map(p => new THREE.Vector2(p[0], p[1])), []), g = get('tak'), tc = 0.85 + hsh * 0.15;
-            for (const t of tris) for (const j of t) { g.p.push(P[j][0], H + .05, P[j][1]); g.n.push(0, 1, 0); g.c.push(tc, tc, tc * 0.98); g.uv.push(P[j][0] / 12, P[j][1] / 12); }
+            const tris = THREE.ShapeUtils.triangulateShape(P.map(p => new THREE.Vector2(p[0], p[1])), []), sat = atlas.uv(w, cx, cz), g = get(sat ? 'taksat' : 'tak'), tc = 0.85 + hsh * 0.15;
+            for (const t of tris) for (const j of t) { g.p.push(P[j][0], H + .05, P[j][1]); g.n.push(0, 1, 0); g.c.push(tc, tc, tc * 0.98); const q = sat && atlas.uv(w, P[j][0], P[j][1]); if (q) g.uv.push(q[0], q[1]); else g.uv.push(P[j][0] / 12, P[j][1] / 12); }
+            if (H - H0 > 6) { const gp = get('tak'); for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length]; gp.p.push(a[0], H, a[1], b[0], H, b[1], b[0], H + .7, b[1], a[0], H, a[1], b[0], H + .7, b[1], a[0], H + .7, a[1]); for (let k = 0; k < 6; k++) { gp.n.push(0, 1, 0); gp.c.push(col.r * .9, col.g * .9, col.b * .9); } gp.uv.push(0, 0, 1, 0, 1, .1, 0, 0, 1, .1, 0, .1); } }   // takkant
           }
         }
       }
       City.clear();
       const grp = new THREE.Group();
+      City.trees(grp, w, cp, rad);
       for (const st in B) {
         const d = B[st]; if (!d.p.length) continue; const geo = new THREE.BufferGeometry();
         geo.setAttribute('position', new THREE.Float32BufferAttribute(d.p, 3)); geo.setAttribute('normal', new THREE.Float32BufferAttribute(d.n, 3));
         geo.setAttribute('uv', new THREE.Float32BufferAttribute(d.uv, 2)); geo.setAttribute('color', new THREE.Float32BufferAttribute(d.c, 3));
-        const m = new THREE.Mesh(geo, City.mat(st)); m.frustumCulled = false; grp.add(m);
+        const m = new THREE.Mesh(geo, City.mat(st)); m.frustumCulled = false; m.castShadow = true; m.receiveShadow = st !== 'taksat'; grp.add(m);
       }
       City.mesh = grp; R.scene.add(grp); City.lastKey = key; City.setNight(City.night);
       if (R.roofs && R.roofs.mesh) R.roofs.mesh.visible = false;   // saltakene over er nå en del av husene
     } catch (e) { console.warn('bygg', e); }
     City.busy = false;
+  },
+  /** Trær i parker og skog (fra kartdataene), farget etter årstid. */
+  trees(grp, w, cp, rad) {
+    const map = R.map, pts = [], R2 = Math.min(rad, 900);
+    for (const [layer, filt, dens] of [['park', () => true, 1 / 260], ['landcover', p => p.class === 'wood', 1 / 140], ['landcover', p => p.class === 'grass', 1 / 1400]]) {
+      let feats = []; try { feats = map.querySourceFeatures('om', { sourceLayer: layer }); } catch (e) { continue; }
+      for (const f of feats) {
+        if (!filt(f.properties || {}) || !f.geometry) continue; const g = f.geometry;
+        for (const poly of (g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [])) {
+          const ring = poly[0].map(q => { const p = w.proj.toXZ(q[1], q[0]); return [p.x, p.z]; }); let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+          for (const q of ring) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); z0 = Math.min(z0, q[1]); z1 = Math.max(z1, q[1]); }
+          x0 = Math.max(x0, cp.x - R2); x1 = Math.min(x1, cp.x + R2); z0 = Math.max(z0, cp.z - R2); z1 = Math.min(z1, cp.z + R2); if (x1 <= x0 || z1 <= z0) continue;
+          let nT = Math.min(600, Math.round((x1 - x0) * (z1 - z0) * dens)), seed = Math.abs(Math.round(x0 * 13 + z0 * 7)) + 1; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+          for (let k = 0; k < nT && pts.length < 3500; k++) { const px = x0 + rnd() * (x1 - x0), pz = z0 + rnd() * (z1 - z0); let c = false; for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const a = ring[i], b = ring[j]; if ((a[1] > pz) !== (b[1] > pz) && px < (b[0] - a[0]) * (pz - a[1]) / (b[1] - a[1]) + a[0]) c = !c; } if (c) pts.push([px, pz, rnd(), rnd()]); }
+        }
+      }
+    }
+    if (!pts.length) return;
+    const season = R.seasonIdx || 0, N = pts.length;
+    const trunk = new THREE.InstancedMesh(R.geo('trunkT', () => new THREE.CylinderGeometry(0.18, 0.28, 1, 6)), R.mat(0x6B4F36), N);
+    const crown = new THREE.InstancedMesh(R.geo('crownT', () => new THREE.IcosahedronGeometry(1, 1)), new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), N);
+    const cone = new THREE.InstancedMesh(R.geo('coneT', () => new THREE.ConeGeometry(1, 2.4, 7)), new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), N);
+    const cols = [['#8DBB5A', '#A3C96B', '#7FAE4E'], ['#4F7F3A', '#5D8C3F', '#46733A', '#66944A'], ['#D98A2B', '#E3B23C', '#B9542B', '#8F9A3E', '#C9772B'], ['#7A6A58', '#857463']][season];
+    const c = new THREE.Color(); let nd = 0, nc = 0;
+    for (const [x, z, r1, r2] of pts) {
+      const h = 6 + r1 * 9, conifer = r2 < 0.28;
+      _v3.set(x, h * 0.25, z); _q.identity(); _s3.set(1 + r1 * .4, h * 0.5, 1 + r1 * .4); _m4.compose(_v3, _q, _s3); trunk.setMatrixAt(nd + nc, _m4);
+      if (conifer) { _v3.set(x, h * 0.62, z); _s3.set(1.8 + r1 * 1.4, h * 0.32, 1.8 + r1 * 1.4); _m4.compose(_v3, _q, _s3); cone.setMatrixAt(nc, _m4); c.set(season === 3 ? '#3E5C44' : '#355E3B').offsetHSL(0, 0, r1 * .06 - .03); cone.setColorAt(nc, c); nc++; }
+      else { const cr = season === 3 ? 0.001 : 2.6 + r1 * 2.2; _v3.set(x, h * 0.7, z); _s3.set(cr, cr * 0.9, cr); _m4.compose(_v3, _q, _s3); crown.setMatrixAt(nd, _m4); c.set(cols[Math.floor(r2 * 97) % cols.length]).offsetHSL(0, 0, r1 * .08 - .04); crown.setColorAt(nd, c); nd++; }
+    }
+    crown.count = nd; cone.count = nc; trunk.count = Math.min(N, nd + nc);
+    for (const m of [trunk, crown, cone]) { m.frustumCulled = false; m.castShadow = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; grp.add(m); }
+  },
+  /** Skygger fra sola: lyset følger kameraet, bakken under byen tar imot skygger. */
+  shadows() {
+    const r = R.renderer; if (!r || City.shadowInit) return; City.shadowInit = true;
+    r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap;
+    const L = R.sun; L.castShadow = true; L.shadow.mapSize.set(Game.lowGfx ? 1024 : 2048, Game.lowGfx ? 1024 : 2048); L.shadow.bias = -0.0006; L.shadow.normalBias = 0.6;
+    R.scene.add(L.target);
+    const g = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShadowMaterial({ opacity: 0.32 })); g.rotation.x = -Math.PI / 2; g.position.y = 0.12; g.receiveShadow = true; g.frustumCulled = false; g.renderOrder = 1; City.ground = g; R.scene.add(g);
+  },
+  frame() {
+    if (!R.renderer || !R.world) return; City.shadows();
+    const L = R.sun, on = !Game.lowGfx && (R.env.daylight || 0) > 0.3 && R.map.getZoom() > 14.5; L.castShadow = on; City.ground.visible = on; if (!on) return;
+    const span = clamp(R.mpp * Math.max(R.w, R.h) * 0.75, 120, 900), d = _v3.copy(L.position).normalize(), tx = R.cam.tx, tz = R.cam.tz;
+    if (d.y < 0.15) d.y = 0.15; d.normalize();
+    L.target.position.set(tx, 0, tz); L.position.set(tx + d.x * 1200, d.y * 1200, tz + d.z * 1200);
+    const sc = L.shadow.camera; sc.left = -span; sc.right = span; sc.top = span; sc.bottom = -span; sc.near = 10; sc.far = 3000; sc.updateProjectionMatrix();
+    City.ground.position.set(tx, 0.12, tz); City.ground.scale.set(span * 2.4, span * 2.4, 1);
   },
   clear() { if (City.mesh) { R.scene.remove(City.mesh); City.mesh.traverse(o => o.geometry && o.geometry.dispose()); City.mesh = null; } City.lastKey = ''; }
 };

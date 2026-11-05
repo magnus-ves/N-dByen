@@ -60,7 +60,7 @@ R.style = function (offline) {
     layers.push({ id: 'place', type: 'symbol', source: 'om', 'source-layer': 'place', filter: ['in', 'class', 'suburb', 'neighbourhood', 'quarter'], layout: { 'text-field': nm, 'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-transform': 'uppercase', 'text-letter-spacing': 0.08 }, paint: { 'text-color': '#7A8776', 'text-halo-color': '#F6F0E0', 'text-halo-width': 1.4 } });
     layers.push({ id: 'street-name', type: 'symbol', source: 'om', 'source-layer': 'transportation_name', minzoom: 15.5, layout: { 'text-field': nm, 'text-font': ['Noto Sans Regular'], 'text-size': 11, 'symbol-placement': 'line' }, paint: { 'text-color': '#7B7566', 'text-halo-color': '#FBF7EC', 'text-halo-width': 1.2 } });
   }
-  const style = { version: 8, name: 'NødByen pastell', glyphs: GLYPHS, sources: offline ? {} : { om: { type: 'vector', url: TILE_URL, attribution: 'OpenFreeMap © OpenMapTiles Data from OpenStreetMap' }, sat: { type: 'raster', tiles: [SAT_URL], tileSize: 256, maxzoom: 18, attribution: SAT_CREDIT } }, layers, light: { anchor: 'viewport', color: '#fff6e6', intensity: 0.38, position: [1.2, 200, 38] } };
+  const style = { version: 8, name: 'NødByen pastell', glyphs: GLYPHS, sky: { 'sky-color': '#8FBBE3', 'horizon-color': '#E6EEF2', 'fog-color': '#DCE5EA', 'fog-ground-blend': 0.55, 'horizon-fog-blend': 0.7, 'sky-horizon-blend': 0.6, 'atmosphere-blend': 0.8 }, sources: offline ? {} : { om: { type: 'vector', url: TILE_URL, attribution: 'OpenFreeMap © OpenMapTiles Data from OpenStreetMap' }, sat: { type: 'raster', tiles: [SAT_URL], tileSize: 256, maxzoom: 18, attribution: SAT_CREDIT } }, layers, light: { anchor: 'viewport', color: '#fff6e6', intensity: 0.38, position: [1.2, 200, 38] } };
   return style;
 };
 R.setSeason = function (si) {
@@ -189,7 +189,7 @@ R.init = function (container, opts) {
       render(gl, matrix) {
         if (!R.world) return;
         R.mvp.fromArray(matrix).multiply(R.L); R.camera.projectionMatrix.copy(R.mvp); R.camera.projectionMatrixInverse.copy(R.mvp).invert();
-        R.renderer.resetState(); R.renderer.render(R.scene, R.camera);
+        R.renderer.resetState(); R.renderer.setViewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight); R.renderer.render(R.scene, R.camera);
       }
     };
     map.on('styleimagemissing', e => { if (map.hasImage(e.id)) return; if (/^win-/.test(e.id)) map.addImage(e.id, R.makeWindows(e.id), { pixelRatio: 2 }); else if (e.id === 'water-anim') map.addImage(e.id, R.makeWater(0), { pixelRatio: 1 }); });
@@ -564,7 +564,7 @@ R.initTraffic = function () {
   T.under = new THREE.InstancedMesh(R.geo('box'), R.mat(0x1E2124), N);
   const col = new THREE.Color();
   for (let i = 0; i < N; i++) { col.setHex(CIV_COL[i % CIV_COL.length]); T.body.setColorAt(i, col); T.cars.push({ e: null, s: 0, dir: 1, sp: 0 }); }
-  for (const m of [T.body, T.glass, T.under]) { m.frustumCulled = false; m.count = N; R.scene.add(m); }
+  for (const m of [T.body, T.glass, T.under]) { m.frustumCulled = false; m.count = N; m.castShadow = true; R.scene.add(m); }
   T.body.instanceColor.needsUpdate = true;
 };
 R.clearTraffic = function () { const T = R.traffic; for (const m of [T.body, T.glass, T.under]) if (m) R.scene.remove(m); T.cars = []; T.body = T.glass = T.under = null; };
@@ -701,6 +701,7 @@ R.setEnv = function (e, force) {
   const nightPat = night > 0.55 ? '-n' : ''; if (R.nightPat !== nightPat && R.map.getLayer('bld-low-0')) { R.nightPat = nightPat; for (let k = 0; k < 5; k++) for (const t of ['low', 'high']) R.map.setPaintProperty('bld-' + t + '-' + k, 'fill-extrusion-pattern', 'win-' + t + '-' + k + nightPat); }
   R.wxMode = wet ? (wx === 'storm' ? 'storm' : 'regn') : snow ? 'snø' : '';
   City.setNight(smooth(0.35, 0.75, night));
+  if (R.map.setSky && R.ready) { const k = night, mix = (a, b) => '#' + new THREE.Color(a).lerp(new THREE.Color(b), k).getHexString(); try { R.map.setSky({ 'sky-color': mix('#8FBBE3', '#141B33'), 'horizon-color': mix(wet ? '#C9D1D6' : '#E6EEF2', '#2B3350'), 'fog-color': mix(wet ? '#C3CBD0' : '#DCE5EA', '#1E2438'), 'fog-ground-blend': wet ? 0.35 : 0.55, 'horizon-fog-blend': 0.7, 'sky-horizon-blend': 0.6, 'atmosphere-blend': 0.8 }); } catch (e) { /* eldre MapLibre */ } }
 };
 
 /* ---------- overlegg: valgring, rutelinje, plasseringsringer ---------- */
@@ -728,7 +729,7 @@ R.makePin = function (iconName, bg, size, ring) {
 };
 R.pinAt = (pin, x, y, z, px) => { pin.position.set(x, Math.min(y, 30), z); pin.material.uniforms.uSize.value = px; pin.material.uniforms.uLift.value = px * 0.62; };
 R.addStationView = function (st) {
-  const lot = R.world.lotById.get(st.lotId), T = ST[st.type], grp = new THREE.Group(); const model = stationModel(st.type); grp.add(model); grp.scale.setScalar(SS); grp.rotation.y = lot.face || 0; grp.position.set(lot.x, 0, lot.z); R.dyn.add(grp);
+  const lot = R.world.lotById.get(st.lotId), T = ST[st.type], grp = new THREE.Group(); const model = stationModel(st.type); grp.add(model); grp.scale.setScalar(SS); grp.rotation.y = lot.face || 0; grp.position.set(lot.x, 0, lot.z); grp.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } }); R.dyn.add(grp);
   const pin = R.makePin(T.ikon, T.rolle === 'helse' ? '#8FB59A' : (AGENCIES[T.org] || AGENCIES.bistand).farge, 1); R.dyn.add(pin); R.views.stations[st.id] = { grp, pin, lot, h: (st.type === 'sykehus' ? 24 : 16) };
 };
 R.addMastView = function (m) {
@@ -739,6 +740,7 @@ R.addUnitView = function (u) {
   const T = UT[u.type], org = u.org === 'bistand' ? 'bistand' : T.org, grp = new THREE.Group(), model = vehicleModel(u.type, org); grp.add(model); grp.scale.setScalar(VS);
   const col = (AGENCIES[org] || AGENCIES.bistand).farge, pin = R.makePin((AGENCIES[org] || AGENCIES.bistand).ikon, col, 1); let halo = null;
   if (org === 'rk' || org === 'nf' || org === 'strand') { halo = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.4, 20), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false })); halo.rotation.x = -Math.PI / 2; halo.position.y = 0.2; grp.add(halo); }
+  grp.traverse(o => { if (o.isMesh) o.castShadow = true; });
   R.dyn.add(grp); R.dyn.add(pin); R.views.units[u.id] = { grp, model, pin, halo, lights: model.userData.lights || [], rotor: model.userData.rotor, rotor2: model.userData.rotor2, h: u.h || 0 };
 };
 R.addIncidentView = function (inc) {
@@ -858,7 +860,7 @@ R.updateLabels = function () {
 R.frame = function (dt, simDt, S) {
   if (!R.ready || !R.world) return;
   R.time += dt; R.updateCam();
-  R.waterTick(dt); R.updateTraffic(S ? simDt : dt * MIN_PER_SEC);
+  R.waterTick(dt); R.updateTraffic(S ? simDt : dt * MIN_PER_SEC); City.frame();
   R._bfx = (R._bfx || 0) + dt; if (R._bfx > 2) { R._bfx = 0; R.fixBeaches(); }
   if (S) R.sync(S, dt);
   R.fxUpdate(dt, S); R.updateLabels();
