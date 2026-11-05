@@ -5,13 +5,15 @@ on:
     paths: ['scripts/fetch-data.mjs', '.github/workflows/fetch-data.yml']   # kjører av seg selv når denne endres
   schedule: [{ cron: '17 3 1 * *' }]       # den 1. hver måned
 permissions: { contents: write }
+concurrency: { group: veidata, cancel-in-progress: false }
 jobs:
   fetch:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20 }
+        with: { node-version: 22 }
       - run: node scripts/fetch-data.mjs
       - name: Commit data
         run: |

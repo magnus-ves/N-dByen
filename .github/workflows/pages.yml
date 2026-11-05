@@ -1,18 +1,104 @@
 name: Publiser til GitHub Pages
+# Sjekker koden, bygger en ren mappe med spillet og publiserer den til GitHub Pages.
+# Pages må være slått på én gang: Settings → Pages → Source: «GitHub Actions».
+# Er det ikke slått på, blir jobben grønn med en tydelig melding om hva som må gjøres (i stedet for å feile).
 on:
-  push: { branches: [main, master] }
+  push:
+    branches: [main, master]
+    paths-ignore: ['README.md', 'data/README.md', 'legacy/**']
   workflow_dispatch:
+  workflow_run:                       # publiser på nytt når veidata er oppdatert av «Hent veidata»
+    workflows: ['Hent veidata fra OpenStreetMap']
+    types: [completed]
+    branches: [main, master]
 permissions: { contents: read, pages: write, id-token: write }
 concurrency: { group: pages, cancel-in-progress: true }
+
 jobs:
-  deploy:
+  bygg:
+    runs-on: ubuntu-latest
+    outputs:
+      pages: ${{ steps.pages.outputs.on }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+
+      - name: Sjekk JavaScript for syntaksfeil
+        run: |
+          for f in js/*.js scripts/*.mjs; do node --check "$f" || { echo "::error file=$f::Syntaksfeil i $f"; exit 1; }; done
+          echo "Alle skriptfiler er gyldige."
+
+      - name: Sjekk at alle filer som index.html laster finnes
+        run: |
+          missing=0
+          for f in $(grep -oE '(src|href)="(js|css)/[^"]+"' index.html | sed -E 's/.*="([^"]+)"/\1/'); do
+            [ -f "$f" ] || { echo "::error file=index.html::Mangler $f"; missing=1; }
+          done
+          [ $missing -eq 0 ] && echo "Alle lokale filer finnes."
+          exit $missing
+
+      - name: Sjekk veidata
+        run: |
+          for c in oslo bergen; do
+            f="data/$c-roads.geojson"
+            if [ -f "$f" ]; then
+              node -e "const j=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); const n=(j.features||[]).length; console.log(n<50 ? '::warning::'+process.argv[1]+' har bare '+n+' veier' : process.argv[1]+': '+n+' veier')" "$f"
+            else
+              echo "::warning::Mangler $f – spillet henter da veiene fra kartfliser (tregere første gang). Kjør workflowen «Hent veidata fra OpenStreetMap»."
+            fi
+          done
+
+      - name: Lag publiseringsmappe
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+          cp -r css js _site/
+          [ -d data ] && cp -r data _site/ || true
+          [ -d audio ] && cp -r audio _site/ || true
+          touch _site/.nojekyll
+          echo "Innhold:"; find _site -maxdepth 2 | sort | head -50
+          du -sh _site
+
+      - name: Er GitHub Pages slått på?
+        id: pages
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          if gh api "repos/${{ github.repository }}/pages" --jq '.build_type' > pages.txt 2>/dev/null; then
+            echo "on=true" >> "$GITHUB_OUTPUT"
+            echo "GitHub Pages er på (kilde: $(cat pages.txt))."
+            if [ "$(cat pages.txt)" != "workflow" ]; then
+              echo "::warning::Pages er satt til å bygge fra en gren. Velg «GitHub Actions» under Settings → Pages → Source for at denne workflowen skal publisere."
+            fi
+          else
+            echo "on=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=GitHub Pages er ikke slått på::Gå til Settings → Pages og velg Source: «GitHub Actions». Kjør deretter denne workflowen på nytt."
+            {
+              echo "## ⚠️ GitHub Pages er ikke slått på"
+              echo ""
+              echo "Spillet er sjekket og klart, men kan ikke publiseres før Pages er aktivert (kan bare gjøres av en administrator):"
+              echo ""
+              echo "1. Åpne https://github.com/${{ github.repository }}/settings/pages"
+              echo "2. Under **Build and deployment → Source**, velg **GitHub Actions**"
+              echo "3. Kjør denne workflowen på nytt (Actions → Publiser til GitHub Pages → Run workflow)"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/configure-pages@v5
+        if: steps.pages.outputs.on == 'true'
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.pages.outputs.on == 'true'
+        with: { path: _site }
+
+  publiser:
+    needs: bygg
+    if: needs.bygg.outputs.pages == 'true'
     runs-on: ubuntu-latest
     environment: { name: github-pages, url: '${{ steps.d.outputs.page_url }}' }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-        with: { enablement: true }   # prøver å slå på Pages automatisk
-      - uses: actions/upload-pages-artifact@v3
-        with: { path: . }
       - id: d
         uses: actions/deploy-pages@v4
+      - name: Ferdig
+        run: |
+          echo "## ✅ Spillet er publisert" >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.d.outputs.page_url }}" >> "$GITHUB_STEP_SUMMARY"
