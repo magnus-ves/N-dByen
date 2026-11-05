@@ -157,13 +157,14 @@ UI.menu = function () {
   const cfg = WORLD.cfg;
   UI.modal({ title: 'Meny · ' + cfg.navn, html:
     '<div class="seg" style="flex-wrap:wrap"><button data-m="help">' + icon('doc') + ' Hjelp</button><button data-m="save">' + icon('check') + ' Lagre nå</button><button data-m="auto" class="' + (S.settings.auto ? 'on' : '') + '">Autodisponering: ' + (S.settings.auto ? 'på' : 'av') + '</button></div>'
-    + '<div class="seg" style="flex-wrap:wrap"><button data-m="gfx">Grafikk: ' + (Game.lowGfx ? 'lav' : 'høy') + '</button><button data-m="city">Bytt by</button><button data-m="new">Ny runde i ' + esc(cfg.navn) + '</button></div>'
+    + '<div class="seg" style="flex-wrap:wrap"><button data-m="base">Bunnkart: ' + (R.base === 'kart' ? 'tegnet kart' : 'satellitt') + '</button><button data-m="gfx">Grafikk: ' + (Game.lowGfx ? 'lav' : 'høy') + '</button><button data-m="city">Bytt by</button><button data-m="new">Ny runde i ' + esc(cfg.navn) + '</button></div>'
     + '<p class="muted sm">Spillet lagres automatisk i nettleseren (egen lagring per by).</p>', buttons: [{ label: 'Fortsett', cls: 'primary' }],
     init: h => { $$('[data-m]', h.body).forEach(b => b.addEventListener('click', async () => {
       const m = b.dataset.m;
       if (m === 'help') { h.close(); UI.help(); }
       else if (m === 'save') { Store.save(true); UI.toast('Spillet er lagret', 'good'); }
       else if (m === 'auto') { S.settings.auto = !S.settings.auto; h.close(); UI.toast('Autodisponering ' + (S.settings.auto ? 'påslått – nærmeste enheter sendes automatisk' : 'avslått'), 'info'); }
+      else if (m === 'base') { R.setBase(R.base === 'kart' ? 'sat' : 'kart'); h.close(); }
       else if (m === 'gfx') { Game.lowGfx = !Game.lowGfx; R.setQuality(Game.lowGfx ? 1 : 2); h.close(); UI.toast('Grafikk: ' + (Game.lowGfx ? 'lav (sparer batteri)' : 'høy'), 'info'); }
       else if (m === 'city') { h.close(); Store.save(true); Game.toMenu(); }
       else if (m === 'new') { h.close(); if (await UI.ask('Ny runde?', 'Dette starter på nytt i ' + esc(cfg.navn) + ' og overskriver lagringen.', 'Start på nytt', 'Avbryt', true)) { Store.clear(S.city); Game.toMenu(S.city); } }

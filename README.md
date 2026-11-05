@@ -3,6 +3,7 @@
 Et rolig beredskapsspill i **ekte 3D-kart** av Oslo og Bergen. Du er beredskapsleder: ta imot hendelser, send brann, politi, ambulanse og frivillige, hold Nødnett oppe og bygg ut beredskapen.
 
 * **Kart:** [MapLibre GL JS](https://maplibre.org) med vektorfliser fra [OpenFreeMap](https://openfreemap.org) (`https://tiles.openfreemap.org/planet`, ingen API-nøkkel) og en egen pastellstil (salvie, krem, sand, dempet havblå). Bygg vises i 3D (`fill-extrusion` med `render_height` / `render_min_height`).
+* **Bunnkart:** satellittbilder (Esri World Imagery) ligger under 3D-byggene; veier og stedsnavn tegnes lett oppå. Bytt til tegnet pastellkart i menyen. Byggene har vindusmønster (opplyste vinduer om natten). Esri-flisene har egne bruksvilkår – sjekk dem før offentlig bruk, og bytt `SAT_URL`/`SAT_CREDIT` øverst i `js/map.js` om du vil bruke en annen leverandør.
 * **Spillobjekter:** kjøretøy, stasjoner, Nødnett-master, hendelsesmarkører, brann/røyk og dekningslag tegnes av et **Three.js custom layer** oppå kartet.
 * **Veinett:** hentes fra OpenStreetMap via Overpass, lagres som GeoJSON i `data/` og brukes til **A\*-stifinning** – bilene følger ekte gater (med geometri, ikke bare rette linjer).
 * **Steder:** badestrendene i Oslo (Sørenga sjøbad, Paradisbukta, Huk, Hovedøya, Langøyene), sykehus/legevakt, master og stasjoner ligger som punkter med ekte koordinater (`js/core.js`, `data/*-sites.geojson`).

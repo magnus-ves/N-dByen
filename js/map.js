@@ -7,6 +7,9 @@
 const _m4 = new THREE.Matrix4(), _v3 = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s3 = new THREE.Vector3(), _v4 = new THREE.Vector4();
 const VS = 2.6, SS = 5.2, MS = 5;          // modellskala (meter per modellenhet)
 const TILE_URL = 'https://tiles.openfreemap.org/planet';
+// Satellittbilder (Esri World Imagery). Bytt URL/kreditering her om du bruker en annen leverandør (se README om vilkår).
+const SAT_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+const SAT_CREDIT = 'Satellitt: Esri, Maxar, Earthstar Geographics og GIS-brukerfellesskapet';
 const GLYPHS = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf';
 const SEASON_STYLE = [
   { bg: '#F1EBD8', grass: '#C4D9B2', wood: '#A8C596', water: '#8DB4C4', bld: '#EFE4CC' },
@@ -25,6 +28,7 @@ R.box = (w, h, d, hex, x, y, z, basic) => { const m = new THREE.Mesh(R.geo('box'
 R.style = function (offline) {
   const P = SEASON_STYLE[0], layers = [{ id: 'bg', type: 'background', paint: { 'background-color': P.bg } }];
   if (!offline) {
+    layers.push({ id: 'sat', type: 'raster', source: 'sat', paint: { 'raster-saturation': -0.1, 'raster-contrast': 0.05, 'raster-fade-duration': 150 } });
     const f = (id, src, type, filter, paint, extra) => layers.push(Object.assign({ id, type, source: 'om', 'source-layer': src, paint }, filter ? { filter } : {}, extra || {}));
     f('landcover-grass', 'landcover', 'fill', ['in', 'class', 'grass', 'farmland'], { 'fill-color': P.grass });
     f('landcover-wood', 'landcover', 'fill', ['==', 'class', 'wood'], { 'fill-color': P.wood, 'fill-opacity': 0.8 });
@@ -42,18 +46,44 @@ R.style = function (offline) {
     road('r-trunk', ['motorway', 'trunk'], 3.2, '#EFD9A2', true);
     f('r-path', 'transportation', 'line', ['in', 'class', 'path', 'pedestrian'], { 'line-color': '#E4D7B8', 'line-width': 1, 'line-dasharray': [2, 2] });
     f('r-rail', 'transportation', 'line', ['==', 'class', 'rail'], { 'line-color': '#C9BFA8', 'line-width': 1.2, 'line-dasharray': [3, 2] });
-    f('building3d', 'building', 'fill-extrusion', null, { 'fill-extrusion-color': P.bld, 'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 6], 'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0], 'fill-extrusion-opacity': 0.94, 'fill-extrusion-vertical-gradient': false }, { minzoom: 14 });
+    // 3D-bygg: vindusmønster på veggene (lages i kode, se R.makeWindows). Lave hus og høyhus får hvert sitt mønster.
+    const ex = pat => ({ 'fill-extrusion-pattern': pat, 'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 6], 'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0], 'fill-extrusion-opacity': 0.97, 'fill-extrusion-vertical-gradient': true });
+    f('bld-low', 'building', 'fill-extrusion', ['<', ['coalesce', ['get', 'render_height'], 6], 14], ex('win-low'), { minzoom: 14 });
+    f('bld-high', 'building', 'fill-extrusion', ['>=', ['coalesce', ['get', 'render_height'], 6], 14], ex('win-high'), { minzoom: 14 });
     const nm = ['coalesce', ['get', 'name:nb'], ['get', 'name']];
     layers.push({ id: 'water-name', type: 'symbol', source: 'om', 'source-layer': 'water_name', layout: { 'text-field': nm, 'text-font': ['Noto Sans Italic'], 'text-size': 12 }, paint: { 'text-color': '#5F8797', 'text-halo-color': '#F1EBD8', 'text-halo-width': 1 } });
     layers.push({ id: 'place', type: 'symbol', source: 'om', 'source-layer': 'place', filter: ['in', 'class', 'suburb', 'neighbourhood', 'quarter'], layout: { 'text-field': nm, 'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-transform': 'uppercase', 'text-letter-spacing': 0.08 }, paint: { 'text-color': '#7A8776', 'text-halo-color': '#F6F0E0', 'text-halo-width': 1.4 } });
     layers.push({ id: 'street-name', type: 'symbol', source: 'om', 'source-layer': 'transportation_name', minzoom: 15.5, layout: { 'text-field': nm, 'text-font': ['Noto Sans Regular'], 'text-size': 11, 'symbol-placement': 'line' }, paint: { 'text-color': '#7B7566', 'text-halo-color': '#FBF7EC', 'text-halo-width': 1.2 } });
   }
-  const style = { version: 8, name: 'NødByen pastell', glyphs: GLYPHS, sources: offline ? {} : { om: { type: 'vector', url: TILE_URL, attribution: 'OpenFreeMap © OpenMapTiles Data from OpenStreetMap' } }, layers };
+  const style = { version: 8, name: 'NødByen pastell', glyphs: GLYPHS, sources: offline ? {} : { om: { type: 'vector', url: TILE_URL, attribution: 'OpenFreeMap © OpenMapTiles Data from OpenStreetMap' }, sat: { type: 'raster', tiles: [SAT_URL], tileSize: 256, maxzoom: 19, attribution: SAT_CREDIT } }, layers, light: { anchor: 'viewport', color: '#fff6e6', intensity: 0.38, position: [1.2, 200, 38] } };
   return style;
 };
 R.setSeason = function (si) {
   R.seasonIdx = si; const map = R.map; if (!map || !map.isStyleLoaded()) return; const P = SEASON_STYLE[si], set = (id, prop, v) => { if (map.getLayer(id)) map.setPaintProperty(id, prop, v); };
-  set('bg', 'background-color', P.bg); for (const id of ['landcover-grass', 'park']) set(id, 'fill-color', P.grass); set('landcover-wood', 'fill-color', P.wood); set('water', 'fill-color', P.water); set('waterway', 'line-color', P.water); set('building3d', 'fill-extrusion-color', P.bld);
+  set('bg', 'background-color', P.bg); for (const id of ['landcover-grass', 'park']) set(id, 'fill-color', P.grass); set('landcover-wood', 'fill-color', P.wood); set('water', 'fill-color', P.water); set('waterway', 'line-color', P.water);
+  // satellittbildet er statisk; vinter bleker det litt, høst varmer det
+  set('sat', 'raster-saturation', [-0.1, -0.1, 0.0, -0.45][si]); set('sat', 'raster-brightness-max', [1, 1, 0.95, 1][si]); set('sat', 'raster-hue-rotate', [0, 0, -12, 0][si]); set('sat', 'raster-brightness-min', si === 3 ? 0.18 : 0);
+};
+/** Bunnkart: 'sat' = satellitt (standard), 'kart' = tegnet pastellkart. */
+R.setBase = function (mode) {
+  R.base = mode; const map = R.map; if (!map || !map.getLayer('sat')) return; const sat = mode === 'sat', vis = (id, on) => { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none'); };
+  vis('sat', sat); for (const id of ['landcover-grass', 'landcover-wood', 'park', 'landuse-res', 'landuse-com', 'landuse-pitch', 'water', 'waterway']) vis(id, !sat);
+  for (const id of ['r-minor-c', 'r-tert-c', 'r-sec-c', 'r-trunk-c', 'r-minor', 'r-tert', 'r-sec', 'r-trunk', 'r-path', 'r-rail']) if (map.getLayer(id)) map.setPaintProperty(id, 'line-opacity', sat ? (id.endsWith('-c') ? 0.35 : 0.62) : 1);
+  for (const id of ['water-name', 'place', 'street-name']) if (map.getLayer(id)) { map.setPaintProperty(id, 'text-color', sat ? '#FFFFFF' : (id === 'water-name' ? '#5F8797' : id === 'place' ? '#7A8776' : '#7B7566')); map.setPaintProperty(id, 'text-halo-color', sat ? 'rgba(30,40,35,0.75)' : '#F6F0E0'); }
+  const cr = $('#credit'); if (cr) { const x = cr.querySelector('.satc'); if (x) x.style.display = sat ? '' : 'none'; }
+};
+/** Vindusmønster for 3D-bygg (tegnes på canvas). hoy = høyhus med glass, natt = opplyste vinduer. */
+R.makeWindows = function (name) {
+  const hoy = name.indexOf('high') > 0, natt = /-n$/.test(name), S_ = 64, c = document.createElement('canvas'); c.width = c.height = S_; const x = c.getContext('2d');
+  x.fillStyle = hoy ? '#CFD6D9' : natt ? '#CBB9A0' : '#EADBC1'; x.fillRect(0, 0, S_, S_);
+  const cols = hoy ? 3 : 2, rows = hoy ? 4 : 2, cw = S_ / cols, rh = S_ / rows;
+  for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
+    const lit = natt && ((i * 7 + j * 5 + name.length) % 3 !== 0), px = i * cw + cw * 0.18, py = j * rh + rh * 0.2, w = cw * 0.64, h = rh * (hoy ? 0.56 : 0.6);
+    x.fillStyle = lit ? '#FFD58A' : hoy ? '#6F8FA6' : '#7C93A3'; x.fillRect(px, py, w, h);
+    x.fillStyle = lit ? 'rgba(255,240,200,.7)' : 'rgba(255,255,255,.28)'; x.fillRect(px, py, w, h * 0.3);
+    x.fillStyle = 'rgba(80,70,60,.35)'; x.fillRect(px, py + h, w, 2);
+  }
+  const d = x.getImageData(0, 0, S_, S_); return { width: S_, height: S_, data: new Uint8Array(d.data.buffer) };
 };
 
 /* ---------- initialisering ---------- */
@@ -78,9 +108,10 @@ R.init = function (container, opts) {
         R.renderer.resetState(); R.renderer.render(R.scene, R.camera);
       }
     };
+    map.on('styleimagemissing', e => { if (/^win-/.test(e.id) && !map.hasImage(e.id)) map.addImage(e.id, R.makeWindows(e.id), { pixelRatio: 2 }); });
     let done = false, errShown = false;
     map.on('error', e => { if (!errShown && e && e.error && /tile|fetch|Failed|NetworkError|AJAX/i.test(String(e.error.message || e.error))) { errShown = true; R.tileError = true; if (R.onTileError) R.onTileError(e.error); } });
-    map.on('load', () => { map.addLayer(R.layer); R.ready = true; if (!done) { done = true; resolve(true); } });
+    map.on('load', () => { map.addLayer(R.layer); R.ready = true; R.setBase(R.base || 'sat'); if (!done) { done = true; resolve(true); } });
     map.on('click', e => { if (R.onTap) R.onTap(e.point.x, e.point.y, !!(e.originalEvent && (e.originalEvent.pointerType === 'touch' || e.originalEvent.type === 'touchend'))); });
     map.on('resize', () => R.resize());
     R.resize();
@@ -394,6 +425,7 @@ R.setEnv = function (e, force) {
   if (u >= 0 && u <= 1) { const a = u * Math.PI; R.sun.position.set(Math.cos(a) * 95, Math.sin(a) * 85 + 12, 45); } else R.sun.position.set(-60, 75, -35);
   const tw = Math.max(0, 1 - Math.abs(dl - 0.42) / 0.34), b = lerp(0.58, 1, smooth(0, 1, dl)) * (wet ? 0.92 : 1);
   R.map.getCanvas().style.filter = 'brightness(' + b.toFixed(3) + ') saturate(' + (lerp(0.75, 1, dl) * (wet ? 0.82 : 1)).toFixed(3) + ') sepia(' + (tw * 0.18).toFixed(3) + ') hue-rotate(' + (night * -12).toFixed(1) + 'deg)';
+  const nightPat = night > 0.55 ? '-n' : ''; if (R.nightPat !== nightPat && R.map.getLayer('bld-low')) { R.nightPat = nightPat; R.map.setPaintProperty('bld-low', 'fill-extrusion-pattern', 'win-low' + nightPat); R.map.setPaintProperty('bld-high', 'fill-extrusion-pattern', 'win-high' + nightPat); }
   R.wxMode = wet ? (wx === 'storm' ? 'storm' : 'regn') : snow ? 'snø' : '';
 };
 
