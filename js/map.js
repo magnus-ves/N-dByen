@@ -453,7 +453,7 @@ const VPROF = {   // sideprofil [lengde, høyde] (bak → foran), bredde, vindue
   car:     { p: [[0, .2], [2.05, .2], [2.05, .48], [1.68, .6], [1.3, .98], [.6, 1.0], [.18, .72], [0, .64]], w: 1.0, win: [.66, .93], ws: [3, 4], cab: [.32, 1.62] },
   suv:     { p: [[0, .22], [2.15, .22], [2.15, .58], [1.85, .7], [1.55, 1.15], [.15, 1.17], [0, 1.0]], w: 1.06, win: [.72, .95], ws: [3, 4], cab: [.2, 1.75] },
   van:     { p: [[0, .2], [2.45, .2], [2.45, .62], [2.25, .78], [1.98, 1.28], [1.85, 1.38], [0, 1.4]], w: 1.06, win: [.62, .86], ws: [3, 4], cab: [1.45, 2.2] },
-  ambulance: { p: [[0, .22], [2.75, .22], [2.75, .62], [2.58, .74], [2.34, 1.12], [2.16, 1.18], [2.1, 1.52], [0, 1.52]], w: 1.12, win: [.5, .7], ws: [3, 4], cab: [2.12, 2.6] },
+  ambulance: { p: [[0.02, .22], [2.66, .22], [2.78, .34], [2.79, .6], [2.66, .7], [2.42, .76], [2.14, 1.2], [2.0, 1.36], [.06, 1.38], [0, 1.3], [0, .3]], w: 1.1, win: [.58, .82], ws: [6, 7], cab: [2.02, 2.42], side: [1.0, 1.86] },
   truck:   { p: [[0, .32], [3.15, .32], [3.15, 1.2], [3.05, 1.42], [2.3, 1.46], [2.3, 1.36], [0, 1.36]], w: 1.18, win: [.7, .92], ws: [2, 3], cab: [2.35, 3.05] },
   rescue:  { p: [[0, .32], [3.0, .32], [3.0, 1.2], [2.9, 1.42], [2.2, 1.46], [2.2, 1.5], [0, 1.5]], w: 1.18, win: [.7, .92], ws: [2, 3], cab: [2.25, 2.9] },
   tanker:  { p: [[0, .32], [3.3, .32], [3.3, 1.2], [3.2, 1.42], [2.5, 1.44], [2.5, .62], [0, .62]], w: 1.18, win: [.7, .92], ws: [2, 3], cab: [2.55, 3.2] },
@@ -461,6 +461,51 @@ const VPROF = {   // sideprofil [lengde, høyde] (bak → foran), bredde, vindue
   armored: { p: [[0, .26], [2.6, .26], [2.6, .8], [2.3, 1.05], [2.1, 1.38], [0, 1.4]], w: 1.2, win: [.68, .86], ws: [3, 4], cab: [1.6, 2.2] },
   trailer: { p: [[0, .25], [1.8, .25], [1.8, 1.3], [0, 1.3]], w: 1.05, win: [.5, .7], ws: null, cab: null },
   atv:     { p: [[0, .3], [1.5, .3], [1.5, .55], [1.1, .7], [.4, .7], [0, .6]], w: .75, win: null, ws: null, cab: null }
+};
+/** Sidemerking (dekal) for én side av bilen: tegnes innenfor sideprofilen, teksten leses riktig vei på begge sider. */
+const DECAL = {
+  ambulanse: { base: '#E5DA1F', band: ['#0E7A3A', '#F7F7F2'], bandY: [.4, .47], text: 'AMBULANSE', tcol: '#0E7A3A', tY: .2, logo: '113', lcol: '#0E7A3A' },
+  politi:    { base: '#F4F5F2', band: ['#1F4E9B', '#F2D21B'], bandY: [.38, .5], text: 'POLITI', tcol: '#1F4E9B', tY: .2, logo: '112', lcol: '#1F4E9B' },
+  brann:     { base: '#C4241B', stripes: ['#F2D21B', '#F4F1E8'], bandY: [.36, .46], text: 'BRANN', tcol: '#F4F1E8', tY: .2, logo: '110', lcol: '#F2D21B' },
+  rk:        { base: '#F4F1EC', stripes: ['#C9302C', '#C9302C'], bandY: [.38, .46], text: 'HJELPEKORPS', tcol: '#C9302C', tY: .2 },
+  nf:        { base: '#F4F1EC', stripes: ['#C9302C', '#2B2B2B'], bandY: [.38, .46], text: 'SANITET', tcol: '#C9302C', tY: .2 },
+  bistand:   { base: '#B8C0BC', stripes: ['#7D8B96', '#E8ECEA'], bandY: [.38, .46], text: 'BISTAND', tcol: '#4E5A63', tY: .2 }
+};
+R.decalMat = function (org, type, model, frontRight) {
+  const D = DECAL[org]; if (!D) return null; const key = 'dec' + org + type + frontRight; if (R.mats[key]) return R.mats[key];
+  const pr = VPROF[model] || VPROF.car, L = Math.max(...pr.p.map(q => q[0])), H = Math.max(...pr.p.map(q => q[1]));
+  const Wc = 1024, Hc = Math.round(1024 * H / L), c = document.createElement('canvas'); c.width = Wc; c.height = Hc; const x = c.getContext('2d');
+  const X = v => (frontRight ? v / L : 1 - v / L) * Wc, Y = v => (1 - v / H) * Hc;
+  x.beginPath(); pr.p.forEach((q, i) => (i ? x.lineTo(X(q[0]), Y(q[1])) : x.moveTo(X(q[0]), Y(q[1])))); x.closePath(); x.save(); x.clip();
+  x.fillStyle = D.base; x.fillRect(0, 0, Wc, Hc);
+  const sh = x.createLinearGradient(0, 0, 0, Hc); sh.addColorStop(0, 'rgba(255,255,255,.22)'); sh.addColorStop(.5, 'rgba(255,255,255,0)'); sh.addColorStop(1, 'rgba(0,0,0,.16)'); x.fillStyle = sh; x.fillRect(0, 0, Wc, Hc);
+  const yA = Y(H * D.bandY[1]), yB = Y(H * D.bandY[0]), bh = yB - yA, front = pr.cab ? pr.cab[1] + .25 : L, x0 = Math.min(X(0), X(front)), x1 = Math.max(X(0), X(front));
+  if (D.band) { const n = Math.round((x1 - x0) / (bh / 2)), cw = (x1 - x0) / n; for (let r = 0; r < 2; r++) for (let i = 0; i < n; i++) { x.fillStyle = (i + r) % 2 ? D.band[0] : D.band[1]; x.fillRect(x0 + i * cw, yA + r * bh / 2, cw + .6, bh / 2 + .6); } }
+  if (D.stripes) { x.fillStyle = D.stripes[0]; x.fillRect(0, yA, Wc, bh * .55); x.fillStyle = D.stripes[1]; x.fillRect(0, yA + bh * .66, Wc, bh * .3); }
+  // vinduer: førerhus og sidevindu
+  const glass = (a, b, y0, y1, light) => { const gx0 = Math.min(X(a), X(b)), gx1 = Math.max(X(a), X(b)); x.fillStyle = light ? '#A9C7DA' : '#15191C'; x.beginPath(); (x.roundRect || x.rect).call(x, gx0, Y(H * y1), gx1 - gx0, Y(H * y0) - Y(H * y1), 14); x.fill(); x.fillStyle = 'rgba(255,255,255,.25)'; x.fillRect(gx0 + 8, Y(H * y1) + 6, (gx1 - gx0) * .3, (Y(H * y0) - Y(H * y1)) * .3); x.strokeStyle = 'rgba(0,0,0,.6)'; x.lineWidth = 4; x.strokeRect(gx0, Y(H * y1), gx1 - gx0, Y(H * y0) - Y(H * y1)); };
+  if (pr.cab && pr.win) glass(pr.cab[0] + .04, pr.cab[1] - .02, pr.win[0], pr.win[1], true);
+  if (pr.side) glass(pr.side[0], pr.side[1], pr.win[0] + .02, pr.win[1] + .02, false);
+  if (!pr.side && model !== 'truck' && model !== 'rescue' && model !== 'tanker' && model !== 'ladder' && pr.cab) glass(pr.cab[0] - (pr.cab[1] - pr.cab[0]) * .9, pr.cab[0] - .06, pr.win[0], pr.win[1], true);
+  if (model === 'truck' || model === 'rescue') { x.strokeStyle = 'rgba(0,0,0,.4)'; x.lineWidth = 3; for (let i = 0; i < 3; i++) { const a = .1 + i * .68; x.strokeRect(Math.min(X(a), X(a + .6)), Y(H * .92), Math.abs(X(a + .6) - X(a)), Y(H * .52) - Y(H * .92)); } }
+  // dørlinjer, håndtak og sidemarkører
+  x.strokeStyle = 'rgba(0,0,0,.3)'; x.lineWidth = 3; const door = v => { x.beginPath(); x.moveTo(X(v), Y(H * .2)); x.lineTo(X(v), Y(H * .92)); x.stroke(); };
+  if (pr.cab) door(pr.cab[0] - .02); if (pr.side) { door(pr.side[0] - .05); door(pr.side[1] + .08); }
+  x.fillStyle = '#1A1A1A'; if (pr.cab) { x.fillRect(Math.min(X(pr.cab[0] + .05), X(pr.cab[0] + .2)), Y(H * .55), Math.abs(X(pr.cab[0] + .2) - X(pr.cab[0] + .05)), 7); }
+  x.fillStyle = '#F28C1B'; for (const v of [.15, L * .5, L - .3]) x.fillRect(X(v) - 8, Y(H * .26), 16, 9);
+  // tekst og nødnummer (aldri speilvendt)
+  const fs = Math.round(Hc * .13); x.font = '900 ' + fs + 'px Arial Black, Arial, sans-serif'; x.fillStyle = D.tcol; x.textAlign = 'center'; x.textBaseline = 'middle';
+  const label = type === 'legebil' ? 'LEGEBIL' : type === 'luftambulanse' ? 'LUFTAMBULANSE' : D.text, mid = (X(L * .45) + X(L * .45)) / 2;
+  x.fillText(label, mid, Y(H * D.tY));
+  if (D.logo) {
+    const lx = X(L * (pr.side ? .2 : .25)), ly = Y(H * .7), r = Hc * .085; x.lineWidth = 6; x.strokeStyle = D.lcol; x.beginPath(); x.arc(lx - r * 2.6, ly, r, 0, TAU); x.stroke();
+    x.font = '900 ' + Math.round(r * 1.2) + 'px Arial'; x.fillStyle = D.lcol; x.fillText('✆', lx - r * 2.6, ly + 2);
+    for (let i = 0; i < 3; i++) { const bx = lx - r * 1.2 + i * r * 1.9; x.fillStyle = D.lcol; x.fillRect(bx - r * .8, ly - r * .9, r * 1.6, r * 1.8); x.fillStyle = D.base; x.font = '900 ' + Math.round(r * 1.4) + 'px Arial'; x.fillText(D.logo[i], bx, ly + 2); }
+  }
+  // hjulbuer
+  x.restore(); x.globalCompositeOperation = 'destination-out'; for (const f of (model === 'ladder' || model === 'tanker' ? [.15, .3, .82] : model === 'truck' || model === 'rescue' ? [.17, .8] : [.18, .8])) { x.beginPath(); x.arc(X(L * f), Y(.27), Hc * .23 * (1.35 / H) * .95, 0, TAU); x.fill(); }
+  const t = new THREE.CanvasTexture(c); t.anisotropy = 8;
+  return (R.mats[key] = new THREE.MeshLambertMaterial({ map: t, alphaTest: 0.5, transparent: false }));
 };
 R.livery = function (org, model, L, H, base) {
   const key = 'liv' + org + model + (base || ''); if (R.mats[key]) return R.mats[key];
@@ -522,8 +567,12 @@ function vehicleBase(type, org) {
   }
   const pr = VPROF[model] || VPROF.car, L = Math.max(...pr.p.map(q => q[0])), H = Math.max(...pr.p.map(q => q[1]));
   const civ = org === 'sivil';
-  const bodyMats = [R.livery(org, model, L, H), R.mat(roofHex)];
+  const D = !civ && DECAL[org], baseHex = D ? parseInt(D.base.slice(1), 16) : null;
+  const bodyMats = D ? [R.mat(baseHex), R.mat(baseHex)] : [R.livery(org, model, L, H), R.mat(roofHex)];
   const body = new THREE.Mesh(R.geo('vp' + model, () => profileGeo(pr)), bodyMats); g.add(body);
+  if (D) for (const sd of [1, -1]) {   // sidemerking som egne flater, riktig vei på hver side
+    const m = new THREE.Mesh(R.geo('decq', () => new THREE.PlaneGeometry(1, 1)), R.decalMat(org, type, model, sd < 0)); m.scale.set(L, H, 1); m.rotation.y = sd * Math.PI / 2; m.position.set(sd * (pr.w / 2 + .052), H / 2, 0); g.add(m);
+  }
   // frontrute (skrå glassflate mellom to profilpunkter)
   if (pr.ws) { const a = pr.p[pr.ws[0]], b = pr.p[pr.ws[1]], len = Math.hypot(b[0] - a[0], b[1] - a[1]), ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
     const ws = new THREE.Mesh(R.geo('box', () => new THREE.BoxGeometry(1, 1, 1)), glassM); ws.scale.set(pr.w * .9, .02, len * .86); ws.position.set(0, (a[1] + b[1]) / 2 + .02, (a[0] + b[0]) / 2 - L / 2 + .02); ws.rotation.x = ang; g.add(ws); }
