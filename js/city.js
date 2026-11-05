@@ -304,8 +304,8 @@ const City = {
     if (!pts.length) return;
     const season = R.seasonIdx || 0, N = pts.length;
     const trunk = new THREE.InstancedMesh(R.geo('trunkT', () => new THREE.CylinderGeometry(0.18, 0.28, 1, 6)), R.mat(0x6B4F36), N);
-    const crown = new THREE.InstancedMesh(R.geo('crownT', () => new THREE.IcosahedronGeometry(1, 1)), new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), N);
-    const cone = new THREE.InstancedMesh(R.geo('coneT', () => new THREE.ConeGeometry(1, 2.4, 7)), new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), N);
+    const crown = new THREE.InstancedMesh(R.geo('crownT2', () => { const g = new THREE.Group(); for (const [x, y, z, r] of [[0, 0, 0, .78], [.45, -.12, .2, .55], [-.4, -.05, -.25, .6], [.1, .38, -.15, .5], [-.15, -.3, .42, .5]]) { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), R.mat(0xffffff)); m.position.set(x, y, z); g.add(m); } return R.mergeGroup(g); }), City.leafMat || (City.leafMat = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true })), N);
+    const cone = new THREE.InstancedMesh(R.geo('coneT2', () => { const g = new THREE.Group(); for (const [y, r, h] of [[-.5, 1, 1.3], [.15, .78, 1.1], [.7, .52, .9]]) { const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, 8), R.mat(0xffffff)); m.position.y = y; g.add(m); } return R.mergeGroup(g); }), City.leafMat || (City.leafMat = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true })), N);
     const cols = [['#8DBB5A', '#A3C96B', '#7FAE4E'], ['#4F7F3A', '#5D8C3F', '#46733A', '#66944A'], ['#D98A2B', '#E3B23C', '#B9542B', '#8F9A3E', '#C9772B'], ['#7A6A58', '#857463']][season];
     const c = new THREE.Color(); let nd = 0, nc = 0;
     for (const [x, z, r1, r2] of pts) {

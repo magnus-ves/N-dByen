@@ -431,14 +431,31 @@ function stationModel(type) {
   }
   return g;
 }
+/** Bjelke mellom to punkter (brukes til gittermaster). */
+function beam(g, a, b, t, hex) { const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), L = d.length(), m = new THREE.Mesh(R.geo('box', () => new THREE.BoxGeometry(1, 1, 1)), R.mat(hex)); m.scale.set(t, L, t); m.position.set((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); g.add(m); }
+/** Nødnett-basestasjon i meter: gittermast med sektorantenner og radiolinje, teknisk skap og gjerde. Mobil: tilhenger med teleskopmast. */
 function mastModel(mobile) {
-  const g = new THREE.Group(), H = mobile ? 4.6 : 7;
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.2, H, 6), R.mat(0x9a96a8)); pole.position.y = H / 2; g.add(pole);
-  for (const [y, w] of [[H * 0.78, 1.1], [H * 0.88, 0.85], [H * 0.97, 0.6]]) g.add(R.box(w, 0.1, 0.1, 0xa99bcb, 0, y, 0));
-  for (const s of [-1, 1]) g.add(R.box(0.14, 0.7, 0.12, 0xcfc6e6, s * 0.58, H * 0.86, 0));
-  const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), new THREE.MeshBasicMaterial({ color: 0xe8a0a0 })); beacon.position.y = H + 0.25; g.add(beacon);
-  if (mobile) { g.add(R.box(1.6, 0.3, 1.0, 0x6b706d, 0, 0.2, 0)); g.add(R.box(0.3, 0.3, 0.3, 0x2f3331, -0.7, 0.05, 0.5)); g.add(R.box(0.3, 0.3, 0.3, 0x2f3331, 0.7, 0.05, 0.5)); }
-  else g.add(R.box(1.2, 0.3, 1.2, 0x8a8f8c, 0, 0.15, 0));
+  const g = new THREE.Group(), steel = 0xA7ACB0;
+  if (mobile) {
+    g.add(R.box(2.4, 1.6, 5, 0xE9E9E6, 0, 1.3, 0)); g.add(R.box(2.5, .15, 5.1, 0x3B3F42, 0, .5, 0)); for (const sx of [-1, 1]) { const wh = new THREE.Mesh(R.wheelGeo(), R.mat(0x1E2124)); wh.scale.setScalar(2.4); wh.position.set(sx * 1.25, .55, .4); g.add(wh); }
+    g.add(R.box(2.42, .3, 5.02, 0xA99BCB, 0, 1.6, 0)); g.add(R.box(.15, .15, 1.8, 0x3B3F42, 0, .5, 3.3));
+    for (const [r, y0, y1] of [[.16, 2.1, 7], [.12, 7, 11.5], [.09, 11.5, 15]]) { const c = new THREE.Mesh(R.geo('mcyl' + r, () => new THREE.CylinderGeometry(r, r, 1, 10)), R.mat(steel)); c.scale.y = y1 - y0; c.position.set(0, (y0 + y1) / 2, -1.5); g.add(c); }
+    for (let k = 0; k < 3; k++) { const a = k * TAU / 3, p = R.box(.32, 1.4, .12, 0xF2F2F0, Math.sin(a) * .35, 14, -1.5 + Math.cos(a) * .35); p.rotation.y = a; g.add(p); }
+    const bc = new THREE.Mesh(R.geo('ico', () => new THREE.SphereGeometry(1, 16, 12)), new THREE.MeshBasicMaterial({ color: 0xff4040 })); bc.scale.setScalar(.15); bc.position.set(0, 15.2, -1.5); g.add(bc); g.userData.beacon = bc; return g;
+  }
+  const H = 34, b0 = 1.9, b1 = .65, leg = (sx, sz, y) => { const f = y / H, w = b0 + (b1 - b0) * f; return [sx * w, y, sz * w]; };
+  for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) beam(g, leg(sx, sz, 0), leg(sx, sz, H), .16, steel);
+  const faces = [[[-1, -1], [1, -1]], [[1, -1], [1, 1]], [[1, 1], [-1, 1]], [[-1, 1], [-1, -1]]];
+  for (let y = 0; y < H - .1; y += 3.4) for (const [p, q] of faces) { beam(g, leg(p[0], p[1], y), leg(q[0], q[1], y + 3.4), .07, steel); beam(g, leg(q[0], q[1], y), leg(p[0], p[1], y + 3.4), .07, steel); beam(g, leg(p[0], p[1], y), leg(q[0], q[1], y), .07, steel); }
+  // toppramme med tre sektorantenner, radiolinje-parabol og lynavleder
+  g.add(R.box(2.4, .12, 2.4, steel, 0, H - 2.2, 0)); for (let k = 0; k < 3; k++) { const a = k * TAU / 3 + .3, p = R.box(.45, 2.6, .18, 0xF2F2F0, Math.sin(a) * 1.15, H - .9, Math.cos(a) * 1.15); p.rotation.y = a; g.add(p); }
+  const dish = new THREE.Mesh(R.geo('dish', () => { const c = new THREE.CylinderGeometry(.55, .4, .3, 18); c.rotateX(Math.PI / 2); return c; }), R.mat(0xEDEDEA)); dish.position.set(0, H - 4.5, 1.05); g.add(dish);
+  g.add(R.box(.05, 3, .05, steel, 0, H + 1.5, 0));
+  const beacon = new THREE.Mesh(R.geo('ico', () => new THREE.SphereGeometry(1, 16, 12)), new THREE.MeshBasicMaterial({ color: 0xff4040 })); beacon.scale.setScalar(.22); beacon.position.y = H + 3.1; g.add(beacon);
+  // teknisk skap, kabelbru og gjerde
+  g.add(R.box(2.6, 2.3, 1.8, 0xD9DCDA, 3.2, 1.15, 0)); g.add(R.box(2.7, .12, 1.9, 0x8E9496, 3.2, 2.36, 0)); beam(g, [2.2, 2.2, 0], [.9, 4.5, 0], .25, 0x6E7378);
+  const fence = 0x9AA0A2, fs = 5.2; for (const [p, q] of [[[-fs, -fs], [fs, -fs]], [[fs, -fs], [fs, fs]], [[fs, fs], [-fs, fs]], [[-fs, fs], [-fs, -fs]]]) { g.add(R.box(Math.abs(q[0] - p[0]) + .05, 1.8, Math.abs(q[1] - p[1]) + .05, fence, (p[0] + q[0]) / 2, .9, (p[1] + q[1]) / 2)); }
+  g.traverse(o => { if (o.isMesh && o.scale.y === 1.8) { o.material = R.fenceMat || (R.fenceMat = new THREE.MeshLambertMaterial({ color: 0x9AA0A2, transparent: true, opacity: .35, side: THREE.DoubleSide })); } });
   g.userData.beacon = beacon; return g;
 }
 
@@ -457,8 +474,10 @@ const LIVERY = {
   sivil:     { base: '#888888', band: 'none', c1: '#888', c2: '#888', roof: '#888' }
 };
 const VPROF = {   // sideprofil [lengde, høyde] (bak → foran), bredde, vinduer (andel av høyden), frontrute-segment
-  car:     { p: [[0, .2], [2.05, .2], [2.05, .48], [1.68, .6], [1.3, .98], [.6, 1.0], [.18, .72], [0, .64]], w: 1.0, win: [.66, .93], ws: [3, 4], cab: [.32, 1.62] },
-  suv:     { p: [[0, .22], [2.15, .22], [2.15, .58], [1.85, .7], [1.55, 1.15], [.15, 1.17], [0, 1.0]], w: 1.06, win: [.72, .95], ws: [3, 4], cab: [.2, 1.75] },
+  car:     { p: [[0, .2], [2.05, .2], [2.05, .48], [1.68, .6], [1.3, .98], [.6, 1.0], [.18, .72], [0, .64]], w: 1.0, win: [.66, .93], ws: [3, 4], rw: [5, 6], cab: [.32, 1.62] },
+  hatch:   { p: [[0, .2], [1.85, .2], [1.86, .5], [1.52, .62], [1.14, 1.0], [.22, 1.02], [0, .84]], w: .98, win: [.66, .94], ws: [3, 4], rw: [5, 6], cab: [.28, 1.45] },
+  bus:     { p: [[0, .25], [4.6, .25], [4.64, .55], [4.6, 1.3], [4.48, 1.34], [0, 1.34]], w: .98, win: [.5, .9], ws: [2, 3], cab: [.25, 4.45], band: true },
+  suv:     { p: [[0, .22], [2.15, .22], [2.15, .58], [1.85, .7], [1.55, 1.15], [.15, 1.17], [0, 1.0]], w: 1.06, win: [.72, .95], ws: [3, 4], rw: [5, 6], cab: [.2, 1.75] },
   van:     { p: [[0, .2], [2.45, .2], [2.45, .62], [2.25, .78], [1.98, 1.28], [1.85, 1.38], [0, 1.4]], w: 1.06, win: [.62, .86], ws: [3, 4], cab: [1.45, 2.2] },
   ambulance: { p: [[0.02, .22], [2.66, .22], [2.78, .34], [2.79, .6], [2.66, .7], [2.42, .76], [2.14, 1.2], [2.0, 1.36], [.06, 1.38], [0, 1.3], [0, .3]], w: 1.1, win: [.58, .82], ws: [6, 7], cab: [2.02, 2.42], side: [1.0, 1.86] },
   truck:   { p: [[0, .32], [3.15, .32], [3.15, 1.2], [3.05, 1.42], [2.3, 1.46], [2.3, 1.36], [0, 1.36]], w: 1.18, win: [.7, .92], ws: [2, 3], cab: [2.35, 3.05] },
@@ -494,7 +513,11 @@ R.decalMat = function (org, type, model, frontRight) {
   if (pr.cab && pr.win) glass(pr.cab[0] + .04, pr.cab[1] - .02, pr.win[0], pr.win[1], true);
   if (pr.side) glass(pr.side[0], pr.side[1], pr.win[0] + .02, pr.win[1] + .02, false);
   if (!pr.side && model !== 'truck' && model !== 'rescue' && model !== 'tanker' && model !== 'ladder' && pr.cab) glass(pr.cab[0] - (pr.cab[1] - pr.cab[0]) * .9, pr.cab[0] - .06, pr.win[0], pr.win[1], true);
-  if (model === 'truck' || model === 'rescue') { x.strokeStyle = 'rgba(0,0,0,.4)'; x.lineWidth = 3; for (let i = 0; i < 3; i++) { const a = .1 + i * .68; x.strokeRect(Math.min(X(a), X(a + .6)), Y(H * .92), Math.abs(X(a + .6) - X(a)), Y(H * .52) - Y(H * .92)); } }
+  if (model === 'truck' || model === 'rescue' || model === 'tanker' || model === 'ladder') {   // rulleporter i aluminium på utstyrsrommene
+    const end = pr.cab ? pr.cab[0] - .08 : L * .7, n = Math.max(2, Math.round(end / .7)), wd = (end - .1) / n;
+    for (let i = 0; i < n; i++) { const a = .08 + i * wd, x0 = Math.min(X(a), X(a + wd - .05)), ww = Math.abs(X(a + wd - .05) - X(a)), y0 = Y(H * .93), hh = Y(H * .5) - y0;
+      const g = x.createLinearGradient(x0, 0, x0 + ww, 0); g.addColorStop(0, '#C9CDD0'); g.addColorStop(.5, '#E9ECEE'); g.addColorStop(1, '#B9BDC0'); x.fillStyle = g; x.fillRect(x0, y0, ww, hh);
+      x.fillStyle = 'rgba(0,0,0,.18)'; for (let yy = y0 + 6; yy < y0 + hh; yy += 7) x.fillRect(x0, yy, ww, 1.5); x.fillStyle = '#5B5F62'; x.fillRect(x0 + ww * .4, y0 + hh - 10, ww * .2, 5); x.strokeStyle = 'rgba(0,0,0,.45)'; x.lineWidth = 2; x.strokeRect(x0, y0, ww, hh); } }
   // dørlinjer, håndtak og sidemarkører
   x.strokeStyle = 'rgba(0,0,0,.3)'; x.lineWidth = 3; const door = v => { x.beginPath(); x.moveTo(X(v), Y(H * .2)); x.lineTo(X(v), Y(H * .92)); x.stroke(); };
   if (pr.cab) door(pr.cab[0] - .02); if (pr.side) { door(pr.side[0] - .05); door(pr.side[1] + .08); }
@@ -538,47 +561,57 @@ R.livery = function (org, model, L, H, base) {
 };
 function profileGeo(pr) {
   const sh = new THREE.Shape(); pr.p.forEach((q, i) => (i ? sh.lineTo(q[0], q[1]) : sh.moveTo(q[0], q[1])));
-  const g = new THREE.ExtrudeGeometry(sh, { depth: pr.w, bevelEnabled: true, bevelThickness: .05, bevelSize: .04, bevelSegments: 2, steps: 1 });
+  const g = new THREE.ExtrudeGeometry(sh, { depth: pr.w, bevelEnabled: true, bevelThickness: .07, bevelSize: .05, bevelSegments: 3, steps: 1 });
   g.rotateY(-Math.PI / 2); const L = Math.max(...pr.p.map(q => q[0])); g.translate(pr.w / 2, 0, -L / 2); g.computeVertexNormals(); return g;
 }
 R.wheelGeo = () => R.geo('tyre', () => { const g = new THREE.CylinderGeometry(.27, .27, .2, 18); g.rotateZ(Math.PI / 2); return g; });
 R.rimGeo = () => R.geo('rim', () => { const g = new THREE.CylinderGeometry(.15, .15, .215, 12); g.rotateZ(Math.PI / 2); return g; });
-function vehicleBase(type, org) {
-  const T = UT[type], model = T.model, g = new THREE.Group(), lights = [];
+function vehicleBase(type, org, modelOverride) {
+  const T = UT[type] || { model: modelOverride }, model = T.model, g = new THREE.Group(), lights = [];
   const dark = 0x2A2E31, glassM = R.matG || (R.matG = new THREE.MeshPhongMaterial({ color: 0x22313b, shininess: 90, specular: 0x9fb8c8, side: THREE.DoubleSide }));
   const P = LIVERY[org] || LIVERY.bistand, roofHex = parseInt(P.roof.slice(1), 16);
   const blue = () => R.mats.blueL || (R.mats.blueL = new THREE.MeshBasicMaterial({ color: 0x3d7dff }));
   const bar = (x0, y, z, w) => { const base = R.box(w * 2 + .3, .07, .22, 0x2a2e31, 0, y - .04, z); g.add(base); for (const s of [-1, 1]) { const m = new THREE.Mesh(R.geo('box', () => new THREE.BoxGeometry(1, 1, 1)), blue()); m.scale.set(.3, .13, .2); m.position.set(s * w, y + .05, z); g.add(m); lights.push(m); } };
-  if (model === 'heli') {
-    const body = new THREE.Mesh(R.geo('ico', () => new THREE.SphereGeometry(1, 16, 12)), R.mat(0xE53935)); body.scale.set(.62, .58, 1.25); body.position.y = .9; g.add(body);
-    const nose = new THREE.Mesh(R.geo('ico'), glassM); nose.scale.set(.5, .38, .5); nose.position.set(0, 1.05, .8); g.add(nose);
-    g.add(R.box(.16, .2, 2.3, 0xE53935, 0, 1.05, -1.9)); g.add(R.box(.08, .7, .5, 0xF4F1EC, 0, 1.35, -2.95)); g.add(R.box(.9, .06, .14, 0xF4F1EC, 0, 1.12, -2.9));
-    for (const s of [-1, 1]) { g.add(R.box(.07, .07, 1.9, 0x3b3f42, s * .55, .22, 0)); g.add(R.box(.06, .4, .06, 0x3b3f42, s * .5, .45, .45)); g.add(R.box(.06, .4, .06, 0x3b3f42, s * .5, .45, -.45)); }
-    const rotor = new THREE.Group(); rotor.position.y = 1.62; rotor.add(R.box(5.4, .04, .2, 0x3b3f42, 0, 0, 0), R.box(.2, .04, 5.4, 0x3b3f42, 0, 0, 0), R.box(.3, .2, .3, 0x3b3f42, 0, -.1, 0)); rotor.name = 'rotor'; g.add(rotor);
-    const tr = new THREE.Group(); tr.position.set(.1, 1.4, -2.95); tr.add(R.box(.02, 1.0, .1, 0x3b3f42, 0, 0, 0)); tr.name = 'rotor2'; g.add(tr);
-    g.add(R.box(.7, .06, .5, 0xF4F1EC, 0, 1.4, .1)); return { g, lights };
+  if (model === 'heli') {   // luftambulanse: kropp, glasskuppel, halebom med fenestron, meier og fire rotorblader
+    const red = R.mat(0xD52B1E), white = R.mat(0xF4F2EE), darkM = R.mat(0x2F3335);
+    const body = new THREE.Mesh(R.geo('ico', () => new THREE.SphereGeometry(1, 16, 12)), red); body.scale.set(.66, .62, 1.35); body.position.set(0, .95, .1); g.add(body);
+    const belly = new THREE.Mesh(R.geo('ico'), white); belly.scale.set(.64, .3, 1.25); belly.position.set(0, .62, .1); g.add(belly);
+    const nose = new THREE.Mesh(R.geo('ico'), glassM); nose.scale.set(.56, .44, .62); nose.position.set(0, 1.08, .85); g.add(nose);
+    for (const sd of [-1, 1]) { const w = new THREE.Mesh(R.geo('box', () => new THREE.BoxGeometry(1, 1, 1)), glassM); w.scale.set(.02, .3, .55); w.position.set(sd * .63, 1.08, .05); g.add(w); }
+    const boom = new THREE.Mesh(R.geo('boom', () => { const c = new THREE.CylinderGeometry(.09, .2, 2.4, 10); c.rotateX(Math.PI / 2); return c; }), red); boom.position.set(0, 1.08, -1.95); g.add(boom);
+    const fen = new THREE.Mesh(R.geo('fen', () => { const c = new THREE.CylinderGeometry(.34, .34, .14, 16); c.rotateZ(Math.PI / 2); return c; }), red); fen.position.set(0, 1.25, -3.15); g.add(fen);
+    g.add(R.box(.06, .7, .5, 0xD52B1E, 0, 1.55, -3.2)); g.add(R.box(1.0, .05, .26, 0xF4F2EE, 0, 1.12, -2.75));
+    for (const sd of [-1, 1]) { g.add(R.box(.07, .07, 2.1, 0x3b3f42, sd * .58, .12, .1)); for (const zz of [.6, -.4]) { const st = R.box(.05, .5, .05, 0x3b3f42, sd * .5, .36, zz); st.rotation.z = sd * .25; g.add(st); } }
+    g.add(R.box(.5, .25, .7, 0xD52B1E, 0, 1.5, -.1));
+    const rotor = new THREE.Group(); rotor.position.y = 1.72; for (let k = 0; k < 4; k++) { const bl = new THREE.Mesh(R.geo('box'), darkM); bl.scale.set(2.8, .03, .17); bl.position.x = 1.4; const arm = new THREE.Group(); arm.rotation.y = k * Math.PI / 2; arm.add(bl); rotor.add(arm); } rotor.add(R.box(.3, .2, .3, 0x3b3f42, 0, -.08, 0)); rotor.name = 'rotor'; g.add(rotor);
+    const tr = new THREE.Group(); tr.position.set(.1, 1.25, -3.15); tr.add(R.box(.02, .6, .08, 0x3b3f42, 0, 0, 0)); tr.name = 'rotor2'; g.add(tr);
+    bar(0, 1.6, -.6, .2); return { g, lights };
   }
-  if (model === 'boat') {
-    const sh = new THREE.Shape(); sh.moveTo(-.55, -1.3); sh.lineTo(.55, -1.3); sh.lineTo(.6, .6); sh.quadraticCurveTo(.4, 1.3, 0, 1.6); sh.quadraticCurveTo(-.4, 1.3, -.6, .6); sh.closePath();
-    const hull = new THREE.Mesh(R.geo('hull', () => { const h = new THREE.ExtrudeGeometry(sh, { depth: .5, bevelEnabled: true, bevelSize: .06, bevelThickness: .06, bevelSegments: 2 }); h.rotateX(Math.PI / 2); h.translate(0, .55, 0); return h; }), R.mat(parseInt(P.base.slice(1), 16)));
-    g.add(hull); g.add(R.box(1.15, .08, 2.6, 0xF4F1EC, 0, .58, .1)); g.add(R.box(.9, .55, .9, 0xF4F1EC, 0, .9, -.2));
-    const gl = new THREE.Mesh(R.geo('box', () => new THREE.BoxGeometry(1, 1, 1)), glassM); gl.scale.set(.92, .22, .7); gl.position.set(0, 1.0, -.15); g.add(gl);
-    g.add(R.box(.06, .7, .06, 0xd0d0d0, 0, 1.5, -.3)); bar(0, 1.25, -.2, .25); g.add(R.box(1.2, .14, .14, 0x1E3A5F, 0, .45, -1.25));
-    return { g, lights };
+  if (model === 'boat') {   // redningsbåt: skrog, dekk, styrhus med vinduer, rekkverk, mast med radar
+    const sh = new THREE.Shape(); sh.moveTo(-.55, -1.35); sh.lineTo(.55, -1.35); sh.lineTo(.62, .55); sh.quadraticCurveTo(.42, 1.35, 0, 1.7); sh.quadraticCurveTo(-.42, 1.35, -.62, .55); sh.closePath();
+    const hull = new THREE.Mesh(R.geo('hull2', () => { const h = new THREE.ExtrudeGeometry(sh, { depth: .55, bevelEnabled: true, bevelSize: .07, bevelThickness: .08, bevelSegments: 3 }); h.rotateX(Math.PI / 2); h.translate(0, .6, 0); return h; }), R.mat(parseInt(P.base.slice(1), 16)));
+    g.add(hull); g.add(R.box(1.22, .05, 2.9, 0xD9D6CE, 0, .62, .1)); g.add(R.box(1.26, .12, .1, 0x1E2124, 0, .12, -1.36));
+    g.add(R.box(.95, .62, 1.05, 0xF4F1EC, 0, .95, -.25));
+    for (const sd of [-1, 1]) { const w = new THREE.Mesh(R.geo('box', () => new THREE.BoxGeometry(1, 1, 1)), glassM); w.scale.set(.02, .22, .8); w.position.set(sd * .48, 1.08, -.25); g.add(w); }
+    const fw = new THREE.Mesh(R.geo('box'), glassM); fw.scale.set(.85, .24, .02); fw.position.set(0, 1.08, .28); g.add(fw);
+    for (const sd of [-1, 1]) { g.add(R.box(.03, .03, 2.4, 0xD0D0D0, sd * .58, .95, .2)); for (let k = 0; k < 6; k++) g.add(R.box(.025, .3, .025, 0xD0D0D0, sd * .58, .8, -1.0 + k * .45)); g.add(R.box(.06, .18, .3, 0x1E2124, sd * .66, .55, .3)); }
+    g.add(R.box(.05, .9, .05, 0xD0D0D0, 0, 1.7, -.4)); g.add(R.box(.6, .05, .1, 0xD0D0D0, 0, 1.95, -.4)); g.add(R.box(.5, .06, .12, 0x2F3335, 0, 2.2, -.4));
+    bar(0, 1.32, -.25, .22); return { g, lights };
   }
-  if (model === 'foot') {   // livredder: rød/gul uniform og redningsbøye
-    g.add(R.box(.36, .5, .24, 0xE2452F, 0, .78, 0)); g.add(R.box(.38, .12, .26, 0xF2D21B, 0, .98, 0));
-    const hd = new THREE.Mesh(R.geo('ico', () => new THREE.SphereGeometry(1, 16, 12)), R.mat(0xE9C2A0)); hd.scale.setScalar(.15); hd.position.y = 1.18; g.add(hd);
-    g.add(R.box(.32, .06, .3, 0xF2D21B, 0, 1.3, 0)); for (const s of [-1, 1]) { g.add(R.box(.12, .52, .14, 0x1E3A5F, s * .1, .27, 0)); g.add(R.box(.09, .45, .1, 0xE9C2A0, s * .24, .74, 0)); }
-    g.add(R.box(.14, .5, .08, 0xE2452F, .3, .62, .12)); return { g, lights };
+  if (model === 'foot') {   // livredder: rød trøye, gule shorts, solhatt og redningsbøye
+    const skin = R.mat(0xE3B48F); g.add(R.box(.38, .48, .22, 0xE2452F, 0, .86, 0)); g.add(R.box(.36, .22, .22, 0xF2D21B, 0, .55, 0));
+    for (const sd of [-1, 1]) { g.add(R.box(.13, .46, .14, 0xE3B48F, sd * .1, .22, 0)); g.add(R.box(.1, .42, .1, 0xE3B48F, sd * .25, .82, 0)); g.add(R.box(.13, .05, .2, 0x2F3335, sd * .1, .02, .03)); }
+    const hd = new THREE.Mesh(R.geo('ico', () => new THREE.SphereGeometry(1, 16, 12)), skin); hd.scale.setScalar(.14); hd.position.y = 1.24; g.add(hd);
+    const hat = new THREE.Mesh(R.geo('hatb', () => new THREE.CylinderGeometry(.24, .24, .03, 16)), R.mat(0xF2D21B)); hat.position.y = 1.36; g.add(hat); g.add(R.box(.17, .1, .17, 0xF2D21B, 0, 1.41, 0));
+    const tube = R.box(.12, .6, .08, 0xE2452F, .34, .62, .1); tube.rotation.z = .2; g.add(tube); return { g, lights };
   }
   const pr = VPROF[model] || VPROF.car, L = Math.max(...pr.p.map(q => q[0])), H = Math.max(...pr.p.map(q => q[1]));
   const civ = org === 'sivil';
   const D = !civ && DECAL[org], baseHex = D ? parseInt(D.base.slice(1), 16) : null;
-  const bodyMats = D ? [R.mat(baseHex), R.mat(baseHex)] : [R.livery(org, model, L, H), R.mat(roofHex)];
+  const bodyMats = D ? [R.mat(baseHex), R.mat(baseHex)] : civ ? [R.mat(0xffffff), R.mat(0xffffff)] : [R.livery(org, model, L, H), R.mat(roofHex)];
   const body = new THREE.Mesh(R.geo('vp' + model, () => profileGeo(pr)), bodyMats); g.add(body);
   if (D) for (const sd of [1, -1]) {   // sidemerking som egne flater, riktig vei på hver side
-    const m = new THREE.Mesh(R.geo('decq', () => new THREE.PlaneGeometry(1, 1)), R.decalMat(org, type, model, sd < 0)); m.scale.set(L, H, 1); m.rotation.y = sd * Math.PI / 2; m.position.set(sd * (pr.w / 2 + .052), H / 2, 0); g.add(m);
+    const m = new THREE.Mesh(R.geo('decq', () => new THREE.PlaneGeometry(1, 1)), R.decalMat(org, type, model, sd < 0)); m.scale.set(L, H, 1); m.rotation.y = sd * Math.PI / 2; m.position.set(sd * (pr.w / 2 + .085), H / 2, 0); g.add(m);
   }
   // frontrute (skrå glassflate mellom to profilpunkter)
   if (pr.ws) { const a = pr.p[pr.ws[0]], b = pr.p[pr.ws[1]], len = Math.hypot(b[0] - a[0], b[1] - a[1]), ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
@@ -586,13 +619,28 @@ function vehicleBase(type, org) {
   // støtfangere, grill, lykter
   g.add(R.box(pr.w + .06, .16, .1, dark, 0, pr.p[1][1] + .06, L / 2 + .03)); g.add(R.box(pr.w + .06, .16, .1, dark, 0, pr.p[0][1] + .06, -L / 2 - .03));
   for (const s of [-1, 1]) { g.add(R.box(.2, .1, .04, 0xFFF4C8, s * pr.w * .33, pr.p[1][1] + .22, L / 2 + .06, true)); g.add(R.box(.14, .14, .04, 0xD7262B, s * pr.w * .4, pr.p[0][1] + .28, -L / 2 - .06, true)); g.add(R.box(.04, .1, .14, dark, s * (pr.w / 2 + .07), H * .72, L / 2 - (model === 'truck' || model === 'rescue' || model === 'tanker' || model === 'ladder' ? .25 : .7))); }
-  // hjul med felg
-  const rimM = R.mat(0xC9CDD0), tyreM = R.mat(0x1E2124), axles = model === 'ladder' || model === 'tanker' ? [.15, .3, .82] : model === 'truck' || model === 'rescue' ? [.17, .8] : [.18, .8];
-  for (const f of axles) for (const s of [-1, 1]) { const tyre = new THREE.Mesh(R.wheelGeo(), tyreM), rim = new THREE.Mesh(R.rimGeo(), rimM); tyre.position.set(s * (pr.w / 2 + .02), .27, -L / 2 + f * L); rim.position.copy(tyre.position); g.add(tyre, rim); }
+  // detaljer: bakrute, sideruter på sivile biler, speil, nummerskilt, kjørelys
+  const glassSeg = (i, j, inset) => { const a = pr.p[i], b = pr.p[j], len = Math.hypot(b[0] - a[0], b[1] - a[1]), ang = Math.atan2(b[1] - a[1], b[0] - a[0]); const m = new THREE.Mesh(R.geo('box', () => new THREE.BoxGeometry(1, 1, 1)), glassM); m.scale.set(pr.w * .88, .02, len * (inset || .82)); m.position.set(0, (a[1] + b[1]) / 2 + .03, (a[0] + b[0]) / 2 - L / 2); m.rotation.x = ang; g.add(m); };
+  if (pr.rw) glassSeg(pr.rw[0], pr.rw[1], .78);
+  else if (model === 'van' || model === 'ambulance' || model === 'bus') for (const s of [-1, 1]) g.add(R.box(pr.w * .36, H * .25, .02, 0x22313b, s * pr.w * .21, H * .72, -L / 2 - .08));
+  if (civ && pr.win && pr.cab) for (const s of [-1, 1]) {   // sideruter med stolper
+    const y0 = H * pr.win[0], y1 = H * pr.win[1] - .04, len = pr.cab[1] - pr.cab[0];
+    const gl = new THREE.Mesh(R.geo('box'), glassM); gl.scale.set(.02, y1 - y0, len); gl.position.set(s * (pr.w / 2 + .08), (y0 + y1) / 2, (pr.cab[0] + pr.cab[1]) / 2 - L / 2); g.add(gl);
+    const posts = pr.band ? 8 : 2; for (let k = 1; k < posts; k++) g.add(R.box(.025, y1 - y0, .05, 0x1E2124, s * (pr.w / 2 + .085), (y0 + y1) / 2, pr.cab[0] + len * k / posts - L / 2));
+  }
+  if (pr.ws && model !== 'bus') { const a = pr.p[pr.ws[0]]; for (const s of [-1, 1]) { g.add(R.box(.16, .1, .05, 0x1E2124, s * (pr.w / 2 + .16), a[1] + .1, a[0] - L / 2 - .06)); g.add(R.box(.1, .03, .03, 0x1E2124, s * (pr.w / 2 + .08), a[1] + .08, a[0] - L / 2 - .06)); } }
+  for (const zf of [1, -1]) { const y = pr.p[zf > 0 ? 1 : 0][1] + .2; g.add(R.box(.42, .11, .02, 0xF4F4F4, 0, y, zf * (L / 2 + .1), true)); g.add(R.box(.04, .11, .021, 0x1F4E9B, -.19, y, zf * (L / 2 + .1), true)); }
+  for (const s of [-1, 1]) g.add(R.box(pr.w * .22, .03, .03, 0xFFFDF0, s * pr.w * .3, pr.p[1][1] + .32, L / 2 + .09, true));   // LED-kjørelys
+  // hjul med felg og nav
+  const rimM = R.mat(civ ? 0xA9AEB2 : 0xC9CDD0), tyreM = R.mat(0x1E2124), hubM = R.mat(0x6E7378), axles = model === 'ladder' || model === 'tanker' ? [.15, .3, .82] : model === 'truck' || model === 'rescue' ? [.17, .8] : model === 'bus' ? [.17, .78] : [.18, .8];
+  for (const f of axles) for (const s of [-1, 1]) { const tyre = new THREE.Mesh(R.wheelGeo(), tyreM), rim = new THREE.Mesh(R.rimGeo(), rimM), hub = new THREE.Mesh(R.geo('hub', () => { const h = new THREE.CylinderGeometry(.06, .06, .23, 8); h.rotateZ(Math.PI / 2); return h; }), hubM); tyre.position.set(s * (pr.w / 2 + .03), .27, -L / 2 + f * L); rim.position.copy(tyre.position); hub.position.copy(tyre.position); g.add(tyre, rim, hub);
+    g.add(R.box(.06, .06, .62, 0x1E2124, s * (pr.w / 2 + .06), .55, -L / 2 + f * L)); }   // hjulbue
   // påbygg per type
   if (model === 'tanker') { const tk = new THREE.Mesh(R.geo('cyl', () => new THREE.CylinderGeometry(.58, .58, 1, 20)), R.mat(0xC8281E)); tk.rotation.x = Math.PI / 2; tk.scale.set(1, 2.3, 1); tk.position.set(0, 1.05, -L / 2 + 1.25); g.add(tk); g.add(R.box(1.2, .05, 2.3, 0xF2D21B, 0, .78, -L / 2 + 1.25)); }
-  if (model === 'ladder') { g.add(R.box(.36, .12, 3.4, 0xD8D6D0, 0, 1.12, -.25)); for (let i = 0; i < 9; i++) g.add(R.box(.36, .03, .04, 0x9a9890, 0, 1.19, -1.8 + i * .38)); g.add(R.box(.5, .3, .5, 0x3b3f42, 0, 1.05, -L / 2 + .4)); }
-  if (model === 'rescue' || model === 'truck') { g.add(R.box(pr.w * .8, .08, 1.6, 0xB9B7B0, 0, H + .04, -.4)); for (let i = 0; i < 4; i++) g.add(R.box(pr.w * .82, .02, .02, 0x8a8880, 0, H + .1, -1.1 + i * .45)); }
+  if (model === 'ladder') { const tt = new THREE.Mesh(R.geo('turn', () => new THREE.CylinderGeometry(.42, .46, .22, 18)), R.mat(0x3B3F42)); tt.position.set(0, 1.07, -L / 2 + .55); g.add(tt);
+    for (const s of [-1, 1]) g.add(R.box(.05, .1, 3.5, 0xD8D6D0, s * .17, 1.28, -.25)); for (let i = 0; i < 16; i++) g.add(R.box(.34, .025, .03, 0xB9B7B0, 0, 1.26, -1.95 + i * .22)); g.add(R.box(.5, .4, .3, 0xC4241B, 0, 1.22, 1.45)); }
+  if (model === 'rescue' || model === 'truck') { g.add(R.box(pr.w * .8, .08, 1.6, 0xB9B7B0, 0, H + .04, -.4)); for (let i = 0; i < 4; i++) g.add(R.box(pr.w * .82, .02, .02, 0x8a8880, 0, H + .1, -1.1 + i * .45));
+    g.add(R.box(.5, .08, 2.2, 0xD8D6D0, -pr.w * .2, H + .16, -.6)); for (const s of [-1, 1]) g.add(R.box(.1, .1, .1, 0x3d7dff, s * (pr.w / 2 + .02), H - .1, -L / 2 + .1, true)); }   // stige på taket og blålys bak
   if (model === 'armored') g.add(R.box(.5, .25, .5, 0x3b4450, 0, H + .12, -.2));
   if (!civ && org !== 'strand') { const top = pr.cab ? Math.max(...pr.p.filter(q => q[0] >= pr.cab[0] - .05 && q[0] <= pr.cab[1] + .05).map(q => q[1])) : H, zc = pr.cab ? (pr.cab[0] + pr.cab[1]) / 2 - L / 2 : 0; bar(0, top + .06, zc, model === 'car' || model === 'suv' ? .22 : .3); if (model === 'ambulance' || model === 'van') for (const s of [-1, 1]) { const m = new THREE.Mesh(R.geo('box'), blue()); m.scale.set(.12, .1, .12); m.position.set(s * .45, H + .02, -L / 2 + .1); g.add(m); lights.push(m); } }
   return { g, lights };
@@ -609,27 +657,39 @@ function vehicleModel(type, org) {
 
 /* ---------- sivil trafikk: biler som kjører rundt på veinettet nær kameraet ---------- */
 const CIV_COL = [0xE8E6E1, 0x23262A, 0x8A9096, 0x2D4E7A, 0x8C2A2A, 0xC9CDD0, 0x3F5B45, 0x5A4636, 0xD9D4C7, 0x1F3346];
-R.traffic = { cars: [], body: null, glass: null, under: null };
+/** Slår sammen en modellgruppe til én geometri med farger per hjørne (brukes til instanser av sivile biler og trær). */
+R.mergeGroup = function (g) {
+  g.updateMatrixWorld(true); const pos = [], nor = [], col = [], c = new THREE.Color(), nm = new THREE.Matrix3(), v = new THREE.Vector3();
+  g.traverse(o => {
+    if (!o.isMesh) return; const geo = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry, P = geo.attributes.position, N = geo.attributes.normal; nm.getNormalMatrix(o.matrixWorld);
+    const mats = Array.isArray(o.material) ? o.material : [o.material], groups = geo.groups.length ? geo.groups : [{ start: 0, count: P.count, materialIndex: 0 }];
+    for (const gr of groups) { const m = mats[gr.materialIndex] || mats[0]; if (m.map || !m.color) c.set(0xffffff); else c.copy(m.color);
+      for (let i = gr.start; i < Math.min(P.count, gr.start + gr.count); i++) { v.fromBufferAttribute(P, i).applyMatrix4(o.matrixWorld); pos.push(v.x, v.y, v.z); if (N) v.fromBufferAttribute(N, i).applyMatrix3(nm).normalize(); else v.set(0, 1, 0); nor.push(v.x, v.y, v.z); col.push(c.r, c.g, c.b); } }
+  });
+  const out = new THREE.BufferGeometry(); out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); return out;
+};
+const CIV_MODELS = [['car', .4], ['hatch', .22], ['suv', .18], ['van', .12], ['bus', .08]];
+R.traffic = { cars: [], models: [] };
 R.initTraffic = function () {
   R.clearTraffic(); const w = R.world; if (!w || !w.edges.length) return;
-  const N = Game.lowGfx ? 45 : 120, T = R.traffic;
+  const N = Game.lowGfx ? 45 : 130, T = R.traffic, col = new THREE.Color();
   T.cand = w.edges.filter(e => w.comp[e.a] === w.mainComp && HW_MUL[e.hw] >= 0.85 && e.len > 25);
-  const civMat = R.mats.civ || (R.mats.civ = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide }));
-  T.body = new THREE.InstancedMesh(R.geo('vpcar', () => profileGeo(VPROF.car)), civMat, N);
-  T.glass = new THREE.InstancedMesh(R.geo('box', () => new THREE.BoxGeometry(1, 1, 1)), R.matG || (R.matG = new THREE.MeshPhongMaterial({ color: 0x22313b, shininess: 90, specular: 0x9fb8c8 })), N);
-  T.under = new THREE.InstancedMesh(R.geo('box'), R.mat(0x1E2124), N);
-  const col = new THREE.Color();
-  for (let i = 0; i < N; i++) { col.setHex(CIV_COL[i % CIV_COL.length]); T.body.setColorAt(i, col); T.cars.push({ e: null, s: 0, dir: 1, sp: 0 }); }
-  for (const m of [T.body, T.glass, T.under]) { m.frustumCulled = false; m.count = N; m.castShadow = true; R.scene.add(m); }
-  T.body.instanceColor.needsUpdate = true;
+  const mat = R.mats.civV || (R.mats.civV = new THREE.MeshLambertMaterial({ vertexColors: true }));
+  T.models = CIV_MODELS.map(([m]) => ({ m, geo: R.geo('civ' + m, () => R.mergeGroup(vehicleBase(null, 'sivil', m).g)), mesh: null, list: [] }));
+  for (let i = 0; i < N; i++) { let r = Math.random(), mi = 0; for (; mi < CIV_MODELS.length - 1; mi++) { r -= CIV_MODELS[mi][1]; if (r < 0) break; } const md = T.models[mi]; T.cars.push({ e: null, s: 0, dir: 1, sp: 0, mi, k: md.list.length }); md.list.push(i); }
+  for (const md of T.models) {
+    if (!md.list.length) continue; md.mesh = new THREE.InstancedMesh(md.geo, mat, md.list.length);
+    md.list.forEach((ci, k) => { col.setHex(md.m === 'bus' ? 0xD6261E : CIV_COL[(ci * 7) % CIV_COL.length]); md.mesh.setColorAt(k, col); });
+    md.mesh.frustumCulled = false; md.mesh.castShadow = true; md.mesh.instanceColor.needsUpdate = true; R.scene.add(md.mesh);
+  }
 };
-R.clearTraffic = function () { const T = R.traffic; for (const m of [T.body, T.glass, T.under]) if (m) R.scene.remove(m); T.cars = []; T.body = T.glass = T.under = null; };
+R.clearTraffic = function () { const T = R.traffic; for (const md of (T.models || [])) if (md.mesh) R.scene.remove(md.mesh); T.cars = []; T.models = []; };
 R.spawnCar = function (c) {
   const T = R.traffic, cx = R.cam.tx, cz = R.cam.tz, rad = clamp(R.mpp * Math.max(R.w, R.h) * 0.7, 300, 1600);
   for (let k = 0; k < 40; k++) { const e = T.cand[Math.floor(Math.random() * T.cand.length)], p = e.geom[e.geom.length >> 1]; if (Math.hypot(p[0] - cx, p[1] - cz) < rad || k === 39) { c.e = e; c.dir = Math.random() < 0.5 ? 1 : -1; c.s = Math.random() * e.len; c.sp = 430 * e.mul * rr(0.8, 1.1); return; } }
 };
 R.updateTraffic = function (dtGame) {
-  const T = R.traffic, w = R.world; if (!T.body || !w) return;
+  const T = R.traffic, w = R.world; if (!T.models || !T.models.length || !w) return;
   const cx = R.cam.tx, cz = R.cam.tz, rad = clamp(R.mpp * Math.max(R.w, R.h) * 0.9, 400, 2000), nav = w.nav;
   for (let i = 0; i < T.cars.length; i++) {
     const c = T.cars[i]; if (!c.e) R.spawnCar(c);
@@ -637,17 +697,15 @@ R.updateTraffic = function (dtGame) {
     if (c.s > c.e.len || c.s < 0) {   // neste veistrekning i krysset (ikke snu hvis mulig)
       const node = c.s > c.e.len ? c.e.b : c.e.a, opts = w.adj[node].filter(x => x.edge !== c.e && HW_MUL[x.edge.hw] >= 0.85);
       const nx = opts.length ? opts[Math.floor(Math.random() * opts.length)] : { edge: c.e };
-      const ne = nx.edge; c.dir = ne.a === node ? 1 : -1; c.s = c.dir > 0 ? 0 : ne.len; c.e = ne; c.sp = 430 * ne.mul * rr(0.8, 1.1);
+      const ne = nx.edge; c.dir = ne.a === node ? 1 : -1; c.s = c.dir > 0 ? 0 : ne.len; c.e = ne; c.sp = 430 * ne.mul * rr(0.8, 1.1) * (CIV_MODELS[c.mi][0] === 'bus' ? .8 : 1);
     }
     const p = nav.pointAt(c.e, c.s), q = nav.pointAt(c.e, clamp(c.s + c.dir * 3, 0, c.e.len)), dx = q[0] - p[0], dz = q[1] - p[1], d = Math.hypot(dx, dz) || 1;
     const ux = dx / d, uz = dz / d, px = p[0] - uz * 1.9, pz = p[1] + ux * 1.9;   // høyre kjørefelt
     if (Math.hypot(px - cx, pz - cz) > rad) { c.e = null; R.spawnCar(c); }
     const h = Math.atan2(ux, uz);
-    _q.setFromAxisAngle(_up, h); _v3.set(px, 0, pz); _s3.set(VS * 0.95, VS * 0.95, VS * 0.95); _m4.compose(_v3, _q, _s3); T.body.setMatrixAt(i, _m4);
-    _v3.set(px + Math.sin(h) * 0.2 * VS, 0.8 * VS, pz + Math.cos(h) * 0.2 * VS); _s3.set(0.92 * VS, 0.3 * VS, 0.95 * VS); _m4.compose(_v3, _q, _s3); T.glass.setMatrixAt(i, _m4);
-    _v3.set(px, 0.3 * VS, pz); _s3.set(0.95 * VS, 0.25 * VS, 1.7 * VS); _m4.compose(_v3, _q, _s3); T.under.setMatrixAt(i, _m4);
+    _q.setFromAxisAngle(_up, h); _v3.set(px, 0, pz); _s3.set(VS * 0.95, VS * 0.95, VS * 0.95); _m4.compose(_v3, _q, _s3); T.models[c.mi].mesh.setMatrixAt(c.k, _m4);
   }
-  T.body.instanceMatrix.needsUpdate = T.glass.instanceMatrix.needsUpdate = T.under.instanceMatrix.needsUpdate = true;
+  for (const md of T.models) if (md.mesh) md.mesh.instanceMatrix.needsUpdate = true;
 };
 const _up = new THREE.Vector3(0, 1, 0);
 
@@ -804,8 +862,8 @@ R.addStationView = function (st) {
   const pin = R.makePin(T.ikon, T.rolle === 'helse' ? '#8FB59A' : (AGENCIES[T.org] || AGENCIES.bistand).farge, 1); R.dyn.add(pin); R.views.stations[st.id] = { grp, pin, lot, h: real ? real.h + 6 : (st.type === 'sykehus' ? 30 : 18) };
 };
 R.addMastView = function (m) {
-  const g = mastModel(m.mobile); g.scale.setScalar(MS * (m.mobile ? 0.7 : 1)); g.position.set(m.x, 0, m.z); R.dyn.add(g);
-  const pin = R.makePin('mast', '#A99BCB', 1); R.dyn.add(pin); R.views.masts[m.id] = { grp: g, pin, beacon: g.userData.beacon, h: (m.mobile ? 24 : 40) };
+  const g = mastModel(m.mobile); g.position.set(m.x, 0, m.z); g.traverse(o => { if (o.isMesh) o.castShadow = true; }); R.dyn.add(g);
+  const pin = R.makePin('mast', '#A99BCB', 1); R.dyn.add(pin); R.views.masts[m.id] = { grp: g, pin, beacon: g.userData.beacon, h: (m.mobile ? 20 : 42) };
 };
 R.addUnitView = function (u) {
   const T = UT[u.type], org = u.org === 'bistand' ? 'bistand' : T.org, grp = new THREE.Group(), model = vehicleModel(u.type, org); grp.add(model); grp.scale.setScalar(VS);
