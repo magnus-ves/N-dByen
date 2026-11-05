@@ -70,7 +70,7 @@ Game.beginFirstStation = async function (cityId, agency) {
     Game.mode = 'place0'; UI.hideScreen();
     $('#hud').classList.remove('hidden'); $('#topbar').classList.add('hidden'); $('#mapTools').classList.add('hidden'); $('#miniLog').classList.add('hidden'); $('#panel').classList.add('hidden'); UI.layout();
     const lots = Sim.freeLots();
-    UI.beginPlacement({ title: 'Plasser første stasjon (' + AGENCIES[agency].navn + ')', hint: 'Trykk hvor som helst nær en vei der det er ledig plass (grønne ringer er forslag). De lilla feltene viser Nødnett-dekning.', lots, costText: 'gratis',
+    UI.beginPlacement({ title: 'Plasser første stasjon (' + AGENCIES[agency].navn + ')', hint: 'Trykk hvor som helst nær en vei (grønne ringer er forslag). Bygget som står der rives. De lilla feltene viser dekning.', lots, costText: 'gratis',
       onConfirm: lotId => { const r = Sim.firstStation(lotId); if (!r.ok) { UI.toast(r.msg, 'bad'); return false; } Game.enterPlay(true); } });
     R.map.easeTo({ pitch: 50, duration: 600 });
     Game.starting = false;

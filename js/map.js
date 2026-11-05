@@ -25,6 +25,7 @@ R.geo = (k, f) => R.geos[k] || (R.geos[k] = f());
 R.box = (w, h, d, hex, x, y, z, basic) => { const m = new THREE.Mesh(R.geo('box', () => new THREE.BoxGeometry(1, 1, 1)), basic ? R.matB(hex) : R.mat(hex)); m.scale.set(w, h, d); m.position.set(x || 0, y || 0, z || 0); return m; };
 
 /** Kartstil i «organisk» pastellpalett. Bruker OpenMapTiles-skjemaet fra OpenFreeMap. offline = bare bakgrunn. */
+R.bldBase = {};
 R.style = function (offline) {
   const P = SEASON_STYLE[0], layers = [{ id: 'bg', type: 'background', paint: { 'background-color': P.bg } }];
   if (!offline) {
@@ -52,8 +53,10 @@ R.style = function (offline) {
     // fem fasadevarianter per type, fordelt etter bygningens id (datadrevne mønstre støttes ikke godt, så hver variant er et eget lag)
     const vk = ['%', ['floor', ['to-number', ['coalesce', ['id'], ['*', ['to-number', ['get', 'render_height'], 6], 7]], 0]], 5];
     for (let k = 0; k < 5; k++) {
-      f('bld-low-' + k, 'building', 'fill-extrusion', ['all', ['!=', ['get', 'hide_3d'], true], ['<', ['coalesce', ['get', 'render_height'], 6], 14], ['==', vk, k]], ex('win-low-' + k), { minzoom: 14 });
-      f('bld-high-' + k, 'building', 'fill-extrusion', ['all', ['!=', ['get', 'hide_3d'], true], ['>=', ['coalesce', ['get', 'render_height'], 6], 14], ['==', vk, k]], ex('win-high-' + k), { minzoom: 14 });
+      R.bldBase['bld-low-' + k] = ['all', ['!=', ['get', 'hide_3d'], true], ['<', ['coalesce', ['get', 'render_height'], 6], 14], ['==', vk, k]];
+      R.bldBase['bld-high-' + k] = ['all', ['!=', ['get', 'hide_3d'], true], ['>=', ['coalesce', ['get', 'render_height'], 6], 14], ['==', vk, k]];
+      f('bld-low-' + k, 'building', 'fill-extrusion', R.bldBase['bld-low-' + k], ex('win-low-' + k), { minzoom: 14 });
+      f('bld-high-' + k, 'building', 'fill-extrusion', R.bldBase['bld-high-' + k], ex('win-high-' + k), { minzoom: 14 });
     }
     const nm = ['coalesce', ['get', 'name:nb'], ['get', 'name']];
     layers.push({ id: 'water-name', type: 'symbol', source: 'om', 'source-layer': 'water_name', layout: { 'text-field': nm, 'text-font': ['Noto Sans Italic'], 'text-size': 12 }, paint: { 'text-color': '#5F8797', 'text-halo-color': '#F1EBD8', 'text-halo-width': 1 } });
@@ -794,8 +797,11 @@ R.makePin = function (iconName, bg, size, ring) {
 };
 R.pinAt = (pin, x, y, z, px) => { pin.position.set(x, Math.min(y, 30), z); pin.material.uniforms.uSize.value = px; pin.material.uniforms.uLift.value = px * 0.62; };
 R.addStationView = function (st) {
-  const lot = R.world.lotById.get(st.lotId), T = ST[st.type], grp = new THREE.Group(); const model = stationModel(st.type); grp.add(model); grp.scale.setScalar(SS); grp.rotation.y = lot.face || 0; grp.position.set(lot.x, 0, lot.z); grp.traverse(o => { if (o.isMesh) o.castShadow = true; }); R.dyn.add(grp);
-  const pin = R.makePin(T.ikon, T.rolle === 'helse' ? '#8FB59A' : (AGENCIES[T.org] || AGENCIES.bistand).farge, 1); R.dyn.add(pin); R.views.stations[st.id] = { grp, pin, lot, h: (st.type === 'sykehus' ? 24 : 16) };
+  const lot = R.world.lotById.get(st.lotId), T = ST[st.type], grp = new THREE.Group(), real = Stations.build(st);
+  // ekte bygg i meter; ekte sykehus/legevakt i byen får bare nål (bygget står allerede i kartet)
+  if (real) grp.add(real.grp);
+  grp.rotation.y = lot.face || 0; grp.position.set(lot.x, 0, lot.z); R.dyn.add(grp);
+  const pin = R.makePin(T.ikon, T.rolle === 'helse' ? '#8FB59A' : (AGENCIES[T.org] || AGENCIES.bistand).farge, 1); R.dyn.add(pin); R.views.stations[st.id] = { grp, pin, lot, h: real ? real.h + 6 : (st.type === 'sykehus' ? 30 : 18) };
 };
 R.addMastView = function (m) {
   const g = mastModel(m.mobile); g.scale.setScalar(MS * (m.mobile ? 0.7 : 1)); g.position.set(m.x, 0, m.z); R.dyn.add(g);

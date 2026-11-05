@@ -248,7 +248,7 @@ Sim.mastLots = () => WORLD.lots.filter(isFree);
 Sim.stationList = org => Object.values(S.stations).filter(s => ST[s.type].org === org && (ST[s.type].rolle === 'etat' || ST[s.type].rolle === 'frivillig'));
 Sim.stationCap = st => ST[st.type].cap + 2 * st.up.garasje;
 Sim.unitsAt = id => Object.values(S.units).filter(u => u.stationId === id);
-/** Finner ledig plass nær en vei ved (x,z): sidene av nærmeste vei, 12–30 m fra midtlinjen, uten bygg/vann. */
+/** Finner plass nær en vei ved (x,z): sidene av nærmeste vei, 14–34 m fra midtlinjen, ikke i vannet. Bygget som står der fjernes. */
 Sim.findSpot = function (x, z) {
   const nav = WORLD.nav, r = nav.nearestRP(x, z, true); if (!r || r.dist > 160) return null;
   const rp0 = { a: r.a, b: r.b, e: r.e, t: r.t }, e = nav.edgeFor(rp0), s0 = r.t * e.len, out = [];
@@ -260,7 +260,7 @@ Sim.findSpot = function (x, z) {
   for (const c of out) {
     const rr_ = nav.nearestRP(c.x, c.z, true); if (!rr_ || rr_.dist < 10) continue;                  // ikke oppå en annen vei
     if (WORLD.lots.some(l => (!l.free || (S && S.occ[l.id])) && Math.hypot(l.x - c.x, l.z - c.z) < 14)) continue;                 // ikke oppå sykehus, master, stasjoner eller andre bygg
-    if (R.blockedAt(c.x, c.z, 7)) continue;
+    if (R.isWater(c.x, c.z)) continue;   // bygg som står der fjernes når stasjonen settes opp, men ikke i vannet
     return { x: c.x, z: c.z };
   }
   return null;

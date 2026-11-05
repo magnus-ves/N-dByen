@@ -47,7 +47,7 @@ const City = {
   tex: {},
   /* Fasadeteksturer: ett felt = 2 vindusfag × 3 etasjer, med variasjon per vindu (persienner, gardiner, lys inne)
      så mønsteret ikke gjentar seg. specularMap = glassmaske (glass speiler himmelen), lit = vinduer som lyser om natten. */
-  COLS: { butikk: 2, tak: 1, tegltak: 1, sokkel: 1, gesims: 1 }, ROWS: { butikk: 1, tak: 1, tegltak: 1, sokkel: 1, gesims: 1 },
+  COLS: { butikk: 2, tak: 1, tegltak: 1, sokkel: 1, gesims: 1, port: 1, portamb: 1, inngang: 1 }, ROWS: { butikk: 1, tak: 1, tegltak: 1, sokkel: 1, gesims: 1, port: 1, portamb: 1, inngang: 1 },
   cols: st => City.COLS[st] || 2, rows: st => City.ROWS[st] || 3,
   makeTex(style) {
     const CW = 256, cols = City.cols(style), rows = City.rows(style), W = CW * cols, H = CW * rows;
@@ -99,6 +99,17 @@ const City = {
           const g = x.createLinearGradient(0, 64, 0, 250); g.addColorStop(0, '#B3C8D2'); g.addColorStop(1, '#3E4E58'); x.fillStyle = g; x.fillRect(14, 64, 228, 192); sp.fillStyle = '#c0c0c0'; sp.fillRect(14, 64, 228, 192);
           x.fillStyle = 'rgba(255,214,150,.35)'; x.fillRect(14, 150, 228, 106); x.fillStyle = 'rgba(0,0,0,.4)'; x.fillRect(124, 64, 8, 192);
           l.fillStyle = 'rgba(255,220,160,1)'; l.fillRect(14, 64, 228, 192); l.fillRect(0, 0, CW, 44); }); break;
+      case 'port':      // seksjonsport til garasje (tones med vertexColors, f.eks. rød på brannstasjonen)
+      case 'portamb': { // hvit port med gult/grønt rutebånd (ambulanse)
+        x.fillStyle = '#3A3B3C'; x.fillRect(0, 0, W, H); x.fillStyle = style === 'port' ? '#ffffff' : '#F2F1EC'; x.fillRect(14, 20, W - 28, H - 20);
+        for (let k = 0; k < 6; k++) { const y = 20 + k * (H - 20) / 6; x.fillStyle = 'rgba(0,0,0,.18)'; x.fillRect(14, y, W - 28, 3); x.fillStyle = 'rgba(255,255,255,.25)'; x.fillRect(14, y + 3, W - 28, 2); }
+        for (let i = 0; i < 4; i++) { x.fillStyle = '#4A6372'; x.fillRect(30 + i * 52, 70, 40, 26); sp.fillStyle = '#c0c0c0'; sp.fillRect(30 + i * 52, 70, 40, 26); l.fillStyle = 'rgba(255,225,170,1)'; l.fillRect(30 + i * 52, 70, 40, 26); }
+        if (style === 'portamb') for (let i = 0; i < 16; i++) for (let r = 0; r < 2; r++) { x.fillStyle = (i + r) % 2 ? '#0E7A3A' : '#F2D21B'; x.fillRect(14 + i * (W - 28) / 16, 150 + r * 10, (W - 28) / 16 + 1, 10); }
+        x.fillStyle = 'rgba(0,0,0,.35)'; x.fillRect(W - 40, 170, 14, 6); break; }
+      case 'inngang':   // inngangsparti i glass med dør
+        { const g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#A9C2CE'); g.addColorStop(1, '#4A5C66'); x.fillStyle = g; x.fillRect(0, 0, W, H); sp.fillStyle = '#d0d0d0'; sp.fillRect(0, 0, W, H);
+          x.fillStyle = '#E4E6E6'; x.fillRect(0, 0, W, 10); x.fillRect(0, 0, 8, H); x.fillRect(W - 8, 0, 8, H); x.fillRect(W / 2 - 4, 30, 8, H - 30); x.fillRect(60, 30, W - 120, 8);
+          l.fillStyle = 'rgba(255,230,190,1)'; l.fillRect(8, 10, W - 16, H - 10); } break;
       case 'sokkel':
         x.fillStyle = '#8E8B85'; x.fillRect(0, 0, W, H); noise(.15, 1500); x.fillStyle = 'rgba(0,0,0,.15)'; for (let i = 0; i < W; i += 64) x.fillRect(i, 0, 2, H); break;
       case 'gesims':
@@ -132,12 +143,49 @@ const City = {
   },
   setNight(n) { City.night = n; for (const k in City.tex) { const m = City.tex[k].m; m.emissiveIntensity = m.emissiveMap ? n * 0.85 : 0; } },
   hash(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return (h >>> 0) / 4294967296; },
+  /* ---------- bygg som fjernes der spilleren har satt opp en stasjon ---------- */
+  footprints() {
+    if (typeof S === 'undefined' || !S || !R.world) return [];
+    const out = []; for (const id in S.stations) { const st = S.stations[id], l = R.world.lotById.get(st.lotId), r = Stations.RADIUS[st.type]; if (l && r && !st.gift) out.push({ x: l.x, z: l.z, r }); }
+    return out;
+  },
+  /** Treffer bygningsomrisset stasjonens tomt? (sentrum inne i bygget, eller bygget nær nok tomta) */
+  hits(pts, cx, cz, fps) {
+    for (const f of fps) {
+      if (Math.hypot(cx - f.x, cz - f.z) < f.r) return true;
+      let inside = false; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) { const a = pts[i], b = pts[j]; if ((a[1] > f.z) !== (b[1] > f.z) && f.x < (b[0] - a[0]) * (f.z - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside; }
+      if (inside) return true;
+      let near = 0; for (const p of pts) if (Math.hypot(p[0] - f.x, p[1] - f.z) < f.r * 0.85) near++; if (near >= Math.max(2, pts.length * 0.5)) return true;
+    }
+    return false;
+  },
+  removed: new Set(), removedKey: '',
+  /** Skjuler de samme byggene i kartets egne 3D-bygg (via bygnings-id i kartflisene). */
+  applyRemoved(ids) {
+    const key = [...ids].sort().join(','); if (key === City.removedKey) return; City.removedKey = key; City.removed = new Set(ids);
+    const map = R.map; if (!map) return; const list = [...ids].filter(v => v != null);
+    for (const lid in R.bldBase) if (map.getLayer(lid)) map.setFilter(lid, list.length ? ['all', R.bldBase[lid], ['!', ['in', ['id'], ['literal', list]]]] : R.bldBase[lid]);
+  },
+  /** Finner byggene under stasjonene (kalles også når nærbildet ikke er aktivt). */
+  removalPass(feats, w) {
+    const fps = City.footprints(), ids = new Set(); if (!fps.length) { City.applyRemoved(ids); return fps; }
+    for (const f of feats) {
+      if (f.id == null || !f.geometry) continue; const g = f.geometry;
+      for (const poly of (g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [])) {
+        const q0 = w.proj.toXZ(poly[0][0][1], poly[0][0][0]); if (!fps.some(fp => Math.hypot(q0.x - fp.x, q0.z - fp.z) < fp.r + 120)) continue;
+        const pts = poly[0].slice(0, -1).map(q => { const p = w.proj.toXZ(q[1], q[0]); return [p.x, p.z]; }); let cx = 0, cz = 0; for (const p of pts) { cx += p[0]; cz += p[1]; } cx /= pts.length; cz /= pts.length;
+        if (City.hits(pts, cx, cz, fps)) ids.add(f.id);
+      }
+    }
+    City.applyRemoved(ids); return fps;
+  },
   /** Bygg (eller bygg om) husene rundt kartsenteret. */
   update() {
     const map = R.map, w = R.world; if (!map || !w || !R.ready || City.busy || !map.getSource('om')) return;
+    let fps = []; try { fps = City.removalPass(map.querySourceFeatures('om', { sourceLayer: 'building' }), w); } catch (e) { /* ignorer */ }
     const z = map.getZoom(); if (z < 14.3) { City.clear(); return; }
     const c = map.getCenter(), cp = w.proj.toXZ(c.lat, c.lng), rad = clamp(R.mpp * Math.max(R.w, R.h) * 1.1, 400, 1700);
-    const key = Math.round(cp.x / 60) + ',' + Math.round(cp.z / 60) + ',' + Math.round(rad / 100);
+    const key = Math.round(cp.x / 60) + ',' + Math.round(cp.z / 60) + ',' + Math.round(rad / 100) + '|' + fps.map(f => Math.round(f.x) + ':' + Math.round(f.z)).join(';');
     if (key === City.lastKey && City.mesh) return; City.busy = true;
     try {
       const feats = map.querySourceFeatures('om', { sourceLayer: 'building' }), seen = new Set(), B = {};
@@ -161,6 +209,7 @@ const City = {
           const pts = ring.slice(0, -1).map(q => { const p = w.proj.toXZ(q[1], q[0]); return [p.x, p.z]; });
           let cx = 0, cz = 0, area = 0; for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; const cr = a[0] * b[1] - b[0] * a[1]; area += cr; cx += (a[0] + b[0]) * cr; cz += (a[1] + b[1]) * cr; }
           if (Math.abs(area) < 8) continue; cx /= 3 * area; cz /= 3 * area;
+          if (fps.length && City.hits(pts, cx, cz, fps)) continue;   // her står en av stasjonene dine
           const k = (f.id || 0) + ':' + Math.round(cx) + ':' + Math.round(cz); if (seen.has(k)) continue; seen.add(k); n++;
           const H = Math.max(3, +pr.render_height || 6), H0 = Math.max(0, +pr.render_min_height || 0), A = Math.abs(area) / 2, hsh = City.hash(k), dens = w.dens(cx, cz);
           const ccw = area > 0;

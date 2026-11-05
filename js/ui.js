@@ -53,6 +53,7 @@ UI.init = function () {
   Bus.on('incident', inc => { UI.dirty = true; if (Game.mode === 'play') UI.renderTab(true); if (UI.sheet === 0 && window.innerWidth < 900) UI.pulseTab('hendelser'); });
   Bus.on('alarm', al => { UI.dirty = true; UI.alarmBar(); R.focus(S.units[al.unitId].x, S.units[al.unitId].z, 80); });
   Bus.on('incidentDone', () => { UI.dirty = true; });
+  Bus.on('built', () => setTimeout(() => { City.lastKey = ''; City.update(); }, 50));   // fjern bygget som sto på tomta
   Bus.on('call', c => { UI.dirty = true; if (Game.mode === 'play') { UI.renderTab(true); if (UI.sheet === 0 && window.innerWidth < 900) UI.pulseTab('hendelser'); } });
   UI.layout();
 };
@@ -259,7 +260,7 @@ UI.placeTap = function (px, py, touch) {
   const hit = R.pick(px, py, touch, S || { incidents: {}, units: {}, stations: {}, net: { masts: {} } });
   if (!hit) {   // fri plassering: trykk hvor som helst nær en vei – spillet finner ledig plass ved siden av
     const g = R.terrainPoint(px, py), spot = g && Sim.findSpot(g.x, g.z), nr = spot && WORLD.nav.nearestRP(spot.x, spot.z, true);
-    if (!spot || !nr) { UI.toast('Ingen ledig plass her – prøv nærmere en vei, bort fra bygg og vann.', 'warn'); return; }
+    if (!spot || !nr) { UI.toast('Ingen plass her – prøv nærmere en vei, og ikke i vannet.', 'warn'); return; }
     const q = Net.quality(Net.signalAt(spot.x, spot.z));
     p.sel = { dyn: true, x: spot.x, z: spot.z, addr: WORLD.addrOf({ a: nr.a, b: nr.b, e: nr.e, t: nr.t }, 0), cov: 'Nødnett: ' + (q === 'bra' ? 'god dekning' : q === 'svak' ? 'svak dekning' : 'ingen dekning') };
     UI.markPlace(spot.x, spot.z); UI.placeBar(); return;
