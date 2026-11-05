@@ -171,7 +171,7 @@ const AGENCIES = {
   politi:    { id: 'politi',    navn: 'Politi',           kort: 'Politi',    nr: '112', sentral: 'Operasjonssentral 112',   tg: 'POLITI',  farge: '#6F8FB5', ikon: 'shield', tekst: 'Prioriter P1–P4, håndter innbrudd, slagsmål og savnede, og led søk og redning.' },
   ambulanse: { id: 'ambulanse', navn: 'Ambulanse',        kort: 'Ambulanse', nr: '113', sentral: 'AMK-sentral 113',         tg: 'HELSE',   farge: '#B3BE68', ikon: 'ambulance',  tekst: 'Akutt, haster, vanlig: hjertestans, fall, fødsel og drukningsulykker.' },
   rk:        { id: 'rk',        navn: 'Røde Kors Hjelpekorps',  kort: 'Hjelpekorps', nr: '', sentral: '', tg: 'REDNING', farge: '#D98A82', ikon: 'hand', tekst: 'Søk etter savnede, førstehjelp, sanitetsvakt og fjellredning.' },
-  nf:        { id: 'nf',        navn: 'Norsk Folkehjelp Sanitet', kort: 'Folkehjelp', nr: '', sentral: '', tg: 'REDNING', farge: '#C97C74', ikon: 'hand', tekst: 'Sanitetsvakt, søk og redning, støtte ved store ulykker.' },
+  nf:        { id: 'nf',        navn: 'Norsk Folkehjelp Sanitet', kort: 'Folkehjelp', nr: '', sentral: '', tg: 'REDNING', farge: '#5E9B76', ikon: 'hand', tekst: 'Sanitetsvakt, søk og redning, støtte ved store ulykker.' },
   rs:        { id: 'rs',        navn: 'Redningsselskapet',      kort: 'RS', nr: '', sentral: '', tg: 'REDNING', farge: '#E0874A', ikon: 'anchor', tekst: 'Redningsskøyter i Oslofjorden – henter folk på øyene og på sjøen.' },
   strand:    { id: 'strand',    navn: 'Strandlivreddere',       kort: 'Livredder', nr: '', sentral: '', tg: 'REDNING', farge: '#E5A267', ikon: 'buoy', tekst: 'Faste livreddere på badestrendene i Oslo – om sommeren.' },
   bistand:   { id: 'bistand',   navn: 'Nabodistrikt (bistand)', kort: 'Bistand',   nr: '', sentral: '', tg: 'SENTRAL', farge: '#9AA5A0', ikon: 'people', tekst: '' }
@@ -222,7 +222,7 @@ const ST = {
   helikopterbase:   { navn: 'Helikopterbase',   org: 'ambulanse', cost: 450000, run: 35, cap: 2, lvl: 5, ikon: 'heli',   farge: '#C9CF8A', rolle: 'etat' },
   rk_base:          { navn: 'Hjelpekorpsbase',  org: 'rk',        cost: 90000,  run: 8,  cap: 3, lvl: 1, ikon: 'hand',   farge: '#D98A82', rolle: 'frivillig' },
   rs_base:          { navn: 'Redningsstasjon',  org: 'rs',        cost: 85000,  run: 7,  cap: 2, lvl: 1, ikon: 'anchor', farge: '#E0874A', rolle: 'frivillig' },
-  nf_base:          { navn: 'Sanitetsbase',     org: 'nf',        cost: 80000,  run: 7,  cap: 3, lvl: 1, ikon: 'hand',   farge: '#C97C74', rolle: 'frivillig' }
+  nf_base:          { navn: 'Sanitetsbase',     org: 'nf',        cost: 80000,  run: 7,  cap: 3, lvl: 1, ikon: 'hand',   farge: '#5E9B76', rolle: 'frivillig' }
 };
 const STATION_FOR_ORG = { brann: 'brannstasjon', politi: 'politistasjon', ambulanse: 'ambulansestasjon', rk: 'rk_base', nf: 'nf_base', rs: 'rs_base' };
 

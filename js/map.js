@@ -381,8 +381,9 @@ function windowRow(g, n, y, z, w, col) { for (let i = 0; i < n; i++) g.add(R.box
 /** Skilt med tekst (bare forsiden, så teksten aldri blir speilvendt). */
 R.signMat = function (text, bg, fg) {
   const key = 'sign' + text + bg; if (R.mats[key]) return R.mats[key];
-  const c = document.createElement('canvas'); c.width = 512; c.height = 96; const x = c.getContext('2d');
-  x.fillStyle = bg; x.fillRect(0, 0, 512, 96); x.fillStyle = fg; x.font = '800 54px Nunito, Arial, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(text, 256, 52);
+  const W = text.length > 12 ? 1024 : 512, c = document.createElement('canvas'); c.width = W; c.height = 96; const x = c.getContext('2d');
+  x.fillStyle = bg; x.fillRect(0, 0, W, 96); x.fillStyle = fg; let fs = 58; x.font = '900 ' + fs + 'px Nunito, Arial, sans-serif'; const tw = x.measureText(text).width; if (tw > W * .9) { fs = Math.floor(fs * W * .9 / tw); x.font = '900 ' + fs + 'px Nunito, Arial, sans-serif'; }
+  x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(text, W / 2, 52);
   const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return (R.mats[key] = new THREE.MeshBasicMaterial({ map: t }));
 };
 const SIGN = { brannstasjon: ['BRANNSTASJON', '#C8281E', '#fff'], politistasjon: ['POLITI', '#1F4E9B', '#fff'], ambulansestasjon: ['AMBULANSE', '#2E8B3E', '#fff'], sykehus: ['SYKEHUS', '#F4F1EA', '#2E8B3E'],
@@ -467,7 +468,7 @@ const LIVERY = {
   politi:    { base: '#F4F5F2', band: 'check', c1: '#1F4E9B', c2: '#F2D21B', roof: '#F4F5F2' },
   ambulanse: { base: '#F2D21B', band: 'check', c1: '#2E8B3E', c2: '#F2D21B', roof: '#F6F2E2' },
   rk:        { base: '#F4F1EC', band: 'stripe', c1: '#C9302C', c2: '#F4F1EC', roof: '#F4F1EC' },
-  nf:        { base: '#F4F1EC', band: 'stripe', c1: '#C9302C', c2: '#2B2B2B', roof: '#F4F1EC' },
+  nf:        { base: '#F4F1EC', band: 'stripe', c1: '#00843D', c2: '#F4F1EC', roof: '#F4F1EC' },
   rs:        { base: '#E9701E', band: 'stripe', c1: '#F4F1EC', c2: '#1E3A5F', roof: '#F4F1EC' },
   strand:    { base: '#E2452F', band: 'none', c1: '#F2D21B', c2: '#F2D21B', roof: '#F2D21B' },
   bistand:   { base: '#B8C0BC', band: 'stripe', c1: '#7D8B96', c2: '#B8C0BC', roof: '#C9CFCB' },
@@ -494,7 +495,7 @@ const DECAL = {
   politi:    { base: '#F4F5F2', band: ['#1F4E9B', '#F2D21B'], bandY: [.38, .5], text: 'POLITI', tcol: '#1F4E9B', tY: .2, logo: '112', lcol: '#1F4E9B' },
   brann:     { base: '#C4241B', stripes: ['#F2D21B', '#F4F1E8'], bandY: [.36, .46], text: 'BRANN', tcol: '#F4F1E8', tY: .2, logo: '110', lcol: '#F2D21B' },
   rk:        { base: '#F4F1EC', stripes: ['#C9302C', '#C9302C'], bandY: [.38, .46], text: 'HJELPEKORPS', tcol: '#C9302C', tY: .2 },
-  nf:        { base: '#F4F1EC', stripes: ['#C9302C', '#2B2B2B'], bandY: [.38, .46], text: 'SANITET', tcol: '#C9302C', tY: .2 },
+  nf:        { base: '#F4F1EC', stripes: ['#00843D', '#00843D'], bandY: [.38, .46], text: 'SANITET', tcol: '#00843D', tY: .2 },
   bistand:   { base: '#B8C0BC', stripes: ['#7D8B96', '#E8ECEA'], bandY: [.38, .46], text: 'BISTAND', tcol: '#4E5A63', tY: .2 }
 };
 R.decalMat = function (org, type, model, frontRight) {

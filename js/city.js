@@ -146,7 +146,7 @@ const City = {
   /* ---------- bygg som fjernes der spilleren har satt opp en stasjon ---------- */
   footprints() {
     if (typeof S === 'undefined' || !S || !R.world) return [];
-    const out = []; for (const id in S.stations) { const st = S.stations[id], l = R.world.lotById.get(st.lotId), r = Stations.RADIUS[st.type]; if (l && r && !st.gift) out.push({ x: l.x, z: l.z, r }); }
+    const out = []; for (const id in S.stations) { const st = S.stations[id], l = R.world.lotById.get(st.lotId), r = Stations.RADIUS[st.type]; if (l && r) out.push({ x: l.x, z: l.z, r }); }
     return out;
   },
   /** Treffer bygningsomrisset stasjonens tomt? (sentrum inne i bygget, eller bygget nær nok tomta) */
@@ -301,6 +301,7 @@ const City = {
         }
       }
     }
+    const fpT = City.footprints(); if (fpT.length) for (let i = pts.length - 1; i >= 0; i--) if (fpT.some(f => Math.hypot(pts[i][0] - f.x, pts[i][1] - f.z) < f.r + 2)) pts.splice(i, 1);   // ingen trær inni stasjonene
     if (!pts.length) return;
     const season = R.seasonIdx || 0, N = pts.length;
     const trunk = new THREE.InstancedMesh(R.geo('trunkT', () => new THREE.CylinderGeometry(0.18, 0.28, 1, 6)), R.mat(0x6B4F36), N);
@@ -322,6 +323,7 @@ const City = {
     const R2 = Math.min(rad, Game.lowGfx ? 600 : 1100), out = [];
     for (const e of w.edges) { if (out.length >= 1600) break; if (w.comp[e.a] !== w.mainComp || e.len < 20) continue; const m = e.geom[e.geom.length >> 1]; if (Math.abs(m[0] - cp.x) > R2 || Math.abs(m[1] - cp.z) > R2) continue;
       const step = HW_MUL[e.hw] >= 1.05 ? 32 : 40; for (let s0 = 10, k = 0; s0 < e.len - 5; s0 += step, k++) { const p = w.nav.pointAt(e, s0), q = w.nav.pointAt(e, Math.min(e.len, s0 + 2)), dx = q[0] - p[0], dz = q[1] - p[1], d = Math.hypot(dx, dz) || 1, sd = k % 2 ? 1 : -1, off = HW_MUL[e.hw] >= 1.05 ? 9 : 7; out.push([p[0] - dz / d * off * sd, p[1] + dx / d * off * sd, Math.atan2(dx, dz) + (sd > 0 ? Math.PI / 2 : -Math.PI / 2)]); } }
+    const fpL = City.footprints(); if (fpL.length) for (let i = out.length - 1; i >= 0; i--) if (fpL.some(f => Math.hypot(out[i][0] - f.x, out[i][1] - f.z) < f.r)) out.splice(i, 1);   // ingen lyktestolper inni stasjonene
     City.lamps = out.map(o => [o[0] + Math.sin(o[2]) * 1.2, o[1] + Math.cos(o[2]) * 1.2]); if (!out.length) return;
     const pole = new THREE.InstancedMesh(R.geo('box', () => new THREE.BoxGeometry(1, 1, 1)), R.mat(0x4E5356), out.length * 2);
     out.forEach((o, i) => { _q.setFromAxisAngle(_up, o[2]); _v3.set(o[0], 3.4, o[1]); _s3.set(.16, 6.8, .16); _m4.compose(_v3, _q, _s3); pole.setMatrixAt(i * 2, _m4); _v3.set(o[0] + Math.sin(o[2]) * .7, 6.75, o[1] + Math.cos(o[2]) * .7); _s3.set(.12, .1, 1.5); _m4.compose(_v3, _q, _s3); pole.setMatrixAt(i * 2 + 1, _m4); });
