@@ -7,28 +7,43 @@
    Lenger unna tegner MapLibre byggene som enkle blokker med vindusmønster.
    ========================================================================== */
 /** Satellittbilder (samme som bakkekartet) samlet i én tekstur rundt kameraet, slik at takene viser de ekte takene. */
+/** Flybilder til takene: ett stort bilde (atlas) av området rundt kameraet.
+    Et nytt atlas lastes ferdig i bakgrunnen og tas i bruk i ett jafs sammen med en ny bygging av takene,
+    så takene aldri viser et halvferdig eller feil bilde, og bildet lastes opp til skjermkortet bare én gang. */
 const SatAtlas = {
-  z: 17, key: '', tex: null, mat: null, tx0: 0, ty0: 0, W: 1, H: 1, ok: false,
+  z: 17, cur: null, prev: null, pend: null,
+  get ok() { return !!this.cur; },
+  get mat() { return this.cur ? this.cur.mat : null; },
   mx(lon) { return (lon + 180) / 360 * Math.pow(2, this.z) * 256; },
   my(lat) { const r = lat * Math.PI / 180; return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * Math.pow(2, this.z) * 256; },
+  range(w, cp, R_) { const a = w.proj.toLL(cp.x - R_, cp.z - R_), b = w.proj.toLL(cp.x + R_, cp.z + R_); return [Math.floor(this.mx(a.lon) / 256), Math.floor(this.my(a.lat) / 256), Math.floor(this.mx(b.lon) / 256), Math.floor(this.my(b.lat) / 256)]; },
   ensure(w, cp, rad) {
-    const R_ = Math.min(rad, 640), a = w.proj.toLL(cp.x - R_, cp.z - R_), b = w.proj.toLL(cp.x + R_, cp.z + R_);
-    const tx0 = Math.floor(this.mx(a.lon) / 256), tx1 = Math.floor(this.mx(b.lon) / 256), ty0 = Math.floor(this.my(a.lat) / 256), ty1 = Math.floor(this.my(b.lat) / 256);
-    const key = [tx0, ty0, tx1, ty1].join(','); if (key === this.key) return this;
-    const nx = tx1 - tx0 + 1, ny = ty1 - ty0 + 1; if (nx * ny > 100) { this.ok = false; return this; }
-    this.key = key; this.tx0 = tx0; this.ty0 = ty0; this.W = nx * 256; this.H = ny * 256; this.ok = true;
-    const c = document.createElement('canvas'); c.width = this.W; c.height = this.H; const x = c.getContext('2d'); x.fillStyle = '#8D8E8A'; x.fillRect(0, 0, c.width, c.height);
-    if (!this.tex) { this.tex = new THREE.CanvasTexture(c); this.tex.anisotropy = 8; this.mat = new THREE.MeshLambertMaterial({ map: this.tex, side: THREE.DoubleSide, color: 0xd0d0d0 }); }
-    else { this.tex.image = c; this.tex.needsUpdate = true; }
-    const myKey = key;
-    for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) {
-      const img = new Image(); img.crossOrigin = 'anonymous';
-      img.onload = () => { if (this.key !== myKey) return; x.drawImage(img, i * 256, j * 256); this.tex.needsUpdate = true; };
-      img.src = SAT_URL.replace('{z}', this.z).replace('{x}', tx0 + i).replace('{y}', ty0 + j);
-    }
+    const R_ = Math.min(rad, 640), cur = this.cur, [ix0, iy0, ix1, iy1] = this.range(w, cp, R_ * .6);   // det nærmeste må være dekket; ellers lastes et nytt atlas
+    if (cur && ix0 >= cur.tx0 && iy0 >= cur.ty0 && ix1 < cur.tx0 + cur.nx && iy1 < cur.ty0 + cur.ny) return this;
+    const [tx0, ty0, tx1, ty1] = this.range(w, cp, R_), nx = tx1 - tx0 + 1, ny = ty1 - ty0 + 1, key = [tx0, ty0, tx1, ty1].join(',');
+    if (nx * ny <= 100 && (!this.pend || this.pend.key !== key)) this.load(tx0, ty0, nx, ny, key);
     return this;
   },
-  uv(w, x, z) { if (!this.ok) return null; const ll = w.proj.toLL(x, z), u = (this.mx(ll.lon) - this.tx0 * 256) / this.W, v = 1 - (this.my(ll.lat) - this.ty0 * 256) / this.H; return u < 0 || u > 1 || v < 0 || v > 1 ? null : [u, v]; }
+  load(tx0, ty0, nx, ny, key) {
+    const c = document.createElement('canvas'); c.width = nx * 256; c.height = ny * 256; const x = c.getContext('2d'); x.fillStyle = '#8D8E8A'; x.fillRect(0, 0, c.width, c.height);
+    const job = { key, tx0, ty0, nx, ny, W: c.width, H: c.height, c, left: nx * ny }; this.pend = job;
+    const done = () => { if (this.pend === job && --job.left <= 0) this.commit(job); };
+    for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) {
+      const img = new Image(); img.crossOrigin = 'anonymous';
+      img.onload = () => { if (this.pend !== job) return; x.drawImage(img, i * 256, j * 256); done(); }; img.onerror = done;
+      img.src = SAT_URL.replace('{z}', this.z).replace('{x}', tx0 + i).replace('{y}', ty0 + j);
+    }
+    setTimeout(() => { if (this.pend === job && job.left <= job.nx * job.ny * .15) this.commit(job); }, 9000);   // noen få fliser som henger: bruk det vi har
+  },
+  commit(job) {
+    if (this.pend !== job) return; this.pend = null;
+    const tex = new THREE.CanvasTexture(job.c); tex.anisotropy = 8;
+    const mat = new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide, color: 0xd0d0d0 });
+    if (this.prev) { this.prev.tex.dispose(); this.prev.mat.dispose(); }   // to atlas tilbake brukes ikke lenger av noen tak
+    this.prev = this.cur; this.cur = { key: job.key, tx0: job.tx0, ty0: job.ty0, nx: job.nx, ny: job.ny, W: job.W, H: job.H, tex, mat };
+    City.lastKey = ''; City.update();   // bygg takene på nytt med det nye bildet
+  },
+  uv(w, x, z) { const A = this.cur; if (!A) return null; const ll = w.proj.toLL(x, z), u = (this.mx(ll.lon) - A.tx0 * 256) / A.W, v = 1 - (this.my(ll.lat) - A.ty0 * 256) / A.H; return u < 0 || u > 1 || v < 0 || v > 1 ? null : [u, v]; }
 };
 
 const City = {
