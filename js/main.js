@@ -97,6 +97,7 @@ Game.continueCity = async function (id) {
     // eldre lagringer: kø, personell og nye felter
     S.calls = S.calls || []; S.staff = S.staff || []; S.vol.rs = !!S.vol.rs;
     for (const u of Object.values(S.units)) if (Staff.needs(u) && !Staff.of(u).length) Staff.crewFor(u, true);
+    for (const u of Object.values(S.units)) if (u.status === 'ledig' && u.stationId && S.stations[u.stationId] && !UT[u.type].foot && !UT[u.type].boat) Sim.park(u);   // kjøretøy hjemme står i vognhallen
     Vol.seasonSync(); Game.enterPlay(false);
   } catch (e) {
     console.error(e); S = null; Game.mode = 'menu'; UI.screenCities();

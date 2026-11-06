@@ -8,6 +8,63 @@
 const Stations = {
   /** Fotavtrykk (radius i meter) brukt til å fjerne bygget som sto der fra før. */
   RADIUS: { brannstasjon: 22, politistasjon: 19, ambulansestasjon: 17, rk_base: 16, nf_base: 16, rs_base: 17, arrest: 15, helikopterbase: 20, sykehus: 36, legevakt: 18 },
+  /** Vognhaller med porter (lokale koordinater): x/w = hallens midte og bredde, z = portflaten, d = dybde, n = porter, h = porthøyde,
+      col = portfarge, wall = farge på søyler og overligger, gear = farge på skapene innerst. */
+  GARAGE: {
+    brannstasjon:     { x: -5, w: 24, z: 4, d: 16, n: 4, h: 4.8, col: '#C4241B', wall: '#A8553F', gear: '#B23A2E' },
+    ambulansestasjon: { x: -4, w: 22, z: 4, d: 14, n: 3, h: 4.5, col: '#F1F2EF', wall: '#ECEAE2', gear: '#3F7A4A' },
+    politistasjon:    { x: -16, w: 8, z: -1, d: 12, n: 2, h: 4.2, col: '#D9DCDD', wall: '#9EA6AD', gear: '#2F4E78' },
+    rk_base:          { x: -2, w: 20, z: 3.5, d: 13, n: 3, h: 4.4, col: '#D52B1E', wall: '#F6F4EF', gear: '#C9302C' },
+    nf_base:          { x: -2, w: 20, z: 3.5, d: 13, n: 3, h: 4.4, col: '#00843D', wall: '#F6F6F2', gear: '#00843D' }
+  },
+  /** Plass k i vognhallen: x på tvers, zin der bilen står inne, zout ute foran porten. null når hallen er full. */
+  slot(type, k) {
+    const G = Stations.GARAGE[type]; if (!G || k < 0 || k >= G.n) return null;
+    const bw = G.w / G.n; return { x: G.x - G.w / 2 + bw * (k + .5), zin: G.z - Math.min(7, G.d * .45), zout: G.z + 7 };
+  },
+  /** Vognhallen sett innenfra (vegger, tak, gulv med gule felt, lysrør og skap), søyler, overligger og leddporter med glassfelt.
+      Portene ruller opp når en bil skal ut eller inn (R.sync → Stations.doorFrame). */
+  garage(grp, type) {
+    const G = Stations.GARAGE[type]; if (!G) return null;
+    const bw = G.w / G.n, x0 = G.x - G.w / 2, dh = G.h - .35, wall = parseInt(G.wall.slice(1), 16), col = parseInt(G.col.slice(1), 16), frame = 0x3A3F43, zc = G.z - G.d / 2;
+    const inner = new THREE.Mesh(R.geo('garIn', () => {
+      const g = new THREE.BoxGeometry(1, 1, 1), c = new THREE.Color(), cols = [];
+      for (const hex of [0x9DA3A6, 0x9DA3A6, 0xD5D8D9, 0x7E8285, 0x9DA3A6, 0xB0B5B8]) { c.set(hex); for (let i = 0; i < 4; i++) cols.push(c.r, c.g, c.b); }   // +x -x tak gulv front bakvegg
+      g.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3)); return g;
+    }), R.mats.garIn || (R.mats.garIn = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
+    inner.scale.set(G.w - .3, G.h - .05, G.d - .3); inner.position.set(G.x, (G.h - .05) / 2, zc); inner.userData.noShadow = true; grp.add(inner);
+    const doors = [];
+    for (let k = 0; k < G.n; k++) {
+      const bx = x0 + bw * (k + .5);
+      for (const sx of [-1, 1]) { const ln = R.box(.12, .02, G.d * .7, 0xE8C53A, bx + sx * (bw / 2 - .7), .03, zc + G.d * .1, true); ln.userData.noShadow = true; grp.add(ln); }   // gule felt
+      const lamp = R.box(.3, .06, G.d * .6, 0xF4F6F0, bx, G.h - .2, zc, true); lamp.userData.noShadow = true; grp.add(lamp);
+      grp.add(R.box(bw * .62, 2.1, .55, parseInt(G.gear.slice(1), 16), bx, 1.05, G.z - G.d + .5));   // skap og utstyr innerst
+      // leddport: tett nedre del, glassfelt over med sprosser; dreiepunkt i overkant så porten kan rulle opp
+      const w = bw - .5, solid = dh * .4, gl = dh - solid, door = new THREE.Group(), parts = new THREE.Group();
+      parts.add(R.box(w, solid, .08, col, 0, -dh + solid / 2, 0));
+      parts.add(R.box(w + .02, .05, .1, new THREE.Color(col).multiplyScalar(.75).getHex(), 0, -dh + solid / 2, 0));
+      for (const yy of [-dh + solid, -dh + solid + gl / 2, -.05]) parts.add(R.box(w, .1, .11, frame, 0, yy, 0));
+      for (const xx of [-w / 2 + .05, -w / 6, w / 6, w / 2 - .05]) parts.add(R.box(.09, gl, .11, frame, xx, -gl / 2, 0));
+      const body = new THREE.Mesh(R.mergeGroup(parts), R.mats.vcolL || (R.mats.vcolL = new THREE.MeshLambertMaterial({ vertexColors: true })));
+      const glass = new THREE.Mesh(R.geo('plane1', () => new THREE.PlaneGeometry(1, 1)), Stations.glassMat()); glass.scale.set(w, gl, 1); glass.position.y = -gl / 2; glass.userData.noShadow = true; glass.renderOrder = 2;
+      door.add(body, glass); door.position.set(bx, dh, G.z + .12); door.userData.open = 0; grp.add(door); doors.push(door);
+    }
+    for (let i = 0; i <= G.n; i++) grp.add(R.box(.5, G.h, .4, wall, x0 + i * bw, G.h / 2, G.z + .1));   // søyler mellom portene
+    grp.add(R.box(G.w + .5, .38, .4, wall, G.x, G.h - .19, G.z + .1));   // overligger
+    return doors;
+  },
+  glassMat() { return R.mats.doorGlass || (R.mats.doorGlass = new THREE.MeshPhongMaterial({ color: 0xA9C3CF, transparent: true, opacity: .3, shininess: 100, specular: 0xffffff, depthWrite: false, side: THREE.DoubleSide })); },
+  /** Portene åpnes når en bil skal ut (varslet/mobiliserer) eller kommer hjem, og når stasjonen er valgt. */
+  doorFrame(v, st, S, dt) {
+    const G = Stations.GARAGE[st.type]; if (!G || !v.doors) return;
+    const sel = R.sel && R.sel.type === 'station' && R.sel.id === st.id, want = v.doors.map(() => sel);
+    for (const u of Sim.unitsAt(st.id)) {
+      if (u.status === 'ledig' || u.status === 'ute' || u.vis === false) continue; const k = Sim.bayOf(u); if (k < 0 || k >= G.n) continue;
+      const g = Sim.garageSpot(st, k); if (g && (u.status === 'varslet' || u.status === 'mobiliserer' || Math.hypot(u.x - g.x, u.z - g.z) < 32)) want[k] = true;
+    }
+    const sp = dt * .8 * (S.paused ? 1 : Math.max(1, S.speed || 1));
+    v.doors.forEach((d, k) => { const o = d.userData.open, n = o + clamp((want[k] ? 1 : 0) - o, -sp, sp); if (n === o) return; d.userData.open = n; d.scale.y = 1 - .94 * n; });
+  },
   /** Vegger og flatt tak for én bygningskropp. o: {x,z,w,d,h,y0,style,col,front:{style,h,col,bays},parapet} */
   box(acc, o) {
     const get = st => acc[st] || (acc[st] = { p: [], n: [], uv: [], c: [] }), y0 = o.y0 || 0, y1 = y0 + o.h, col = new THREE.Color(o.col || '#ffffff');
@@ -22,7 +79,7 @@ const Stations = {
     for (const [a, b, nx, nz, tag] of walls) {
       const L = Math.hypot(b[0] - a[0], b[1] - a[1]), bays = Math.max(1, Math.round(L / City.BAY));
       if (tag === 'front' && o.front) {
-        const F = o.front, fc = new THREE.Color(F.col || '#ffffff'); quad(F.style, a, b, y0, y0 + F.h, F.bays || bays, 1, fc, nx, nz, true);
+        const F = o.front, fc = new THREE.Color(F.col || '#ffffff'); if (!F.open) quad(F.style, a, b, y0, y0 + F.h, F.bays || bays, 1, fc, nx, nz, true);   // åpen vognhall: portene lages i Stations.garage
         if (o.h > F.h + 0.5) quad(o.style, a, b, y0 + F.h, y1, bays, Math.max(1, Math.round((o.h - F.h) / City.FLOOR)), col, nx, nz);
       } else quad(o.style, a, b, y0, y1, bays, Math.max(1, Math.round(o.h / City.FLOOR)), col, nx, nz, y0 < 1);
     }
@@ -77,7 +134,7 @@ const Stations = {
     switch (st.type) {
       case 'brannstasjon':
         // vognhall med fire røde porter, kontorfløy og øvingstårn
-        B({ x: -5, z: -4, w: 24, d: 16, h: 8, style: 'murgard', col: '#A8553F', front: { style: 'port', h: 4.8, col: '#C4241B', bays: 4 } });
+        B({ x: -5, z: -4, w: 24, d: 16, h: 8, style: 'murgard', col: '#A8553F', front: { style: 'port', h: 4.8, col: '#C4241B', bays: 4, open: true } });
         B({ x: 12, z: -5, w: 10, d: 14, h: 11, style: 'moderne', col: '#E3DED3', front: { style: 'inngang', h: 3.2, bays: 2 } });
         B({ x: 15, z: -14.5, w: 4.5, d: 4.5, h: 21, style: 'murgard', col: '#93442F', parapet: false });
         Stations.apron(grp, 36, 2, 4, 13, 4, -17, 6);
@@ -87,7 +144,7 @@ const Stations = {
       case 'politistasjon':
         // fire etasjer med glassinngang, blått bånd, vognport og sambandsmast
         B({ x: 1, z: -5, w: 26, d: 16, h: 14.5, style: 'moderne', col: '#CBD0D3', front: { style: 'inngang', h: 3.6, bays: 4 } });
-        B({ x: -16, z: -7, w: 8, d: 12, h: 4.8, style: 'moderne', col: '#9EA6AD', front: { style: 'port', h: 4.2, col: '#D9DCDD', bays: 2 } });
+        B({ x: -16, z: -7, w: 8, d: 12, h: 4.8, style: 'moderne', col: '#9EA6AD', front: { style: 'port', h: 4.2, col: '#D9DCDD', bays: 2, open: true } });
         grp.add(R.box(26.2, 0.7, 0.35, 0x1F4E9B, 1, 3.95, 3.2, true));
         grp.add(R.box(9, 0.35, 3.4, 0xE4E6E6, 3, 3.75, 4.6)); for (const px of [-1, 7]) grp.add(R.box(0.25, 3.6, 0.25, 0xC9CDD0, px, 1.8, 6));
         grp.add(R.box(0.25, 8, 0.25, 0xB8BCBF, -8, 18.5, -9)); grp.add(R.box(1.6, 0.15, 0.15, 0xB8BCBF, -8, 21.5, -9));
@@ -95,21 +152,21 @@ const Stations = {
         Stations.plate(grp, 34, 9, -2, 7.5, 0x7C8084); Stations.flag(grp, 14, 6.5, 9); Stations.roofUnits(grp, 2, -9, 15.1, 3); Stations.bollards(grp, -10, 12, 11.6); Stations.parking(grp, -3, -18.5, 8, 0); h = 22; break;
       case 'ambulansestasjon':
         // garasje med tre ambulanseporter og kontorfløy
-        B({ x: -4, z: -3, w: 22, d: 14, h: 6.2, style: 'puss', col: '#ECEAE2', front: { style: 'portamb', h: 4.5, bays: 3 } });
+        B({ x: -4, z: -3, w: 22, d: 14, h: 6.2, style: 'puss', col: '#ECEAE2', front: { style: 'portamb', h: 4.5, bays: 3, open: true } });
         B({ x: 11.5, z: -4, w: 9, d: 12, h: 7.5, style: 'moderne', col: '#DDE3D6', front: { style: 'inngang', h: 3.2, bays: 2 } });
         Stations.apron(grp, 32, 1, 4, 12, 3, -15, 7.33);
         Stations.sign(grp, 'AMBULANSE', '#F2D21B', '#0E7A3A', -4, 5.3, 4.05, 7, 1.0);
         Stations.sign(grp, '113', '#0E7A3A', '#ffffff', 11.5, 5.8, 2.06, 2, 1); Stations.roofUnits(grp, -4, -6, 6.8, 2); Stations.bench(grp, 14, 4, 0); Stations.hedge(grp, 17, -5, 1, 11); h = 14; break;
       case 'rk_base': {   // Røde Kors Hjelpekorps: hvitt bygg, rødt bånd og røde porter (korset er et beskyttet kjennetegn og brukes ikke)
-        B({ x: -2, z: -3, w: 20, d: 13, h: 7.6, style: 'puss', col: '#F6F4EF', front: { style: 'port', h: 4.4, col: '#D52B1E', bays: 3 } });
+        B({ x: -2, z: -3, w: 20, d: 13, h: 7.6, style: 'puss', col: '#F6F4EF', front: { style: 'port', h: 4.4, col: '#D52B1E', bays: 3, open: true } });
         B({ x: 12.5, z: -4, w: 9, d: 11, h: 7.6, style: 'moderne', col: '#F1EFEA', front: { style: 'inngang', h: 3.2, bays: 2 } });
         grp.add(R.box(29.2, 1.2, .3, 0xD52B1E, 2.5, 6.6, 3.62)); Stations.sign(grp, 'RØDE KORS HJELPEKORPS', '#D52B1E', '#ffffff', 2.5, 6.6, 3.8, 16, 1.0);
         Stations.apron(grp, 30, 0, 3.5, 11, 3, -12, 6.67); Stations.atv(grp, 13, 8, 0xD52B1E); Stations.container(grp, -16.5, -2, 0xD52B1E, Math.PI / 2);
         Stations.flag(grp, 17.5, 4.5, 8); Stations.hedge(grp, 17, -11, 1.2, 10); Stations.bench(grp, 15, 5.2, 0); h = 13; break; }
       case 'nf_base': {   // Norsk Folkehjelp Sanitet: hvitt bygg med grønne porter, grønt bånd og grønn sokkel
-        B({ x: -2, z: -3, w: 20, d: 13, h: 7.2, style: 'moderne', col: '#F6F6F2', front: { style: 'port', h: 4.4, col: '#00843D', bays: 3 } });
+        B({ x: -2, z: -3, w: 20, d: 13, h: 7.2, style: 'moderne', col: '#F6F6F2', front: { style: 'port', h: 4.4, col: '#00843D', bays: 3, open: true } });
         B({ x: 12.5, z: -4, w: 9, d: 11, h: 7.2, style: 'moderne', col: '#F6F6F2', front: { style: 'inngang', h: 3.2, bays: 2 } });
-        grp.add(R.box(20.2, .8, 13.2, 0x00843D, -2, .4, -3)); grp.add(R.box(9.2, .8, 11.2, 0x00843D, 12.5, .4, -4));
+        for (const [w, d, x, z] of [[20.3, .3, -2, -9.5], [.3, 13.2, -12.05, -3], [.3, 13.2, 8.05, -3]]) grp.add(R.box(w, .8, d, 0x00843D, x, .4, z)); grp.add(R.box(9.2, .8, 11.2, 0x00843D, 12.5, .4, -4));   // grønn sokkel (ikke foran portene)
         Stations.parapet(grp, -2, -3, 20.3, 13.3, 7.2, .6, 0x00843D); Stations.parapet(grp, 12.5, -4, 9.3, 11.3, 7.2, .6, 0x00843D);
         Stations.sign(grp, 'NORSK FOLKEHJELP', '#FFFFFF', '#00843D', -2, 6.1, 3.56, 12, 1.0); Stations.sign(grp, 'SANITET', '#00843D', '#FFFFFF', 12.5, 5.8, 1.56, 5, .9);
         Stations.apron(grp, 30, 0, 3.5, 11, 3, -12, 6.67); Stations.container(grp, -16.5, -2, 0x00843D, Math.PI / 2); Stations.flag(grp, 17.5, 4.5, 8); Stations.bench(grp, 15, 5.2, 0); Stations.hedge(grp, 17.5, -11, 1.2, 9); h = 13; break; }
@@ -144,9 +201,9 @@ const Stations = {
         Stations.parking(grp, -10, 9, 5, 0); Stations.roofUnits(grp, -4, -6, 12.6, 2); Stations.bollards(grp, 1, 11, 9.8); h = 18; break; }
       default: return null;
     }
-    Stations.meshes(acc, grp);
+    Stations.meshes(acc, grp); const doors = Stations.garage(grp, st.type);
     if (st.type === 'sykehus') { tree(grp, -24, 2, 8); tree(grp, 34, 8, 7); } else { tree(grp, -19, -12, 8); tree(grp, 20, 9, 7); }   // trærne skal ikke stå under baldakinen
-    grp.traverse(o => { if (o.isMesh) o.castShadow = true; });
-    return { grp, h };
+    grp.traverse(o => { if (o.isMesh) o.castShadow = !o.userData.noShadow; });
+    return { grp, h, doors };
   }
 };

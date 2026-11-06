@@ -950,8 +950,9 @@ R.addStationView = function (st) {
   const lot = R.world.lotById.get(st.lotId), T = ST[st.type], grp = new THREE.Group(), real = Stations.build(st);
   // ekte bygg i meter; ekte sykehus/legevakt i byen får bare nål (bygget står allerede i kartet)
   if (real) grp.add(real.grp);
+  if (real && real.doors) grp.updateMatrixWorld(true);
   grp.rotation.y = lot.face || 0; grp.position.set(lot.x, 0, lot.z); R.dyn.add(grp);
-  const pin = R.makePin(T.ikon, T.rolle === 'helse' ? '#8FB59A' : (AGENCIES[T.org] || AGENCIES.bistand).farge, 1); R.dyn.add(pin); R.views.stations[st.id] = { grp, pin, lot, h: real ? real.h + 6 : (st.type === 'sykehus' ? 30 : 18) };
+  const pin = R.makePin(T.ikon, T.rolle === 'helse' ? '#8FB59A' : (AGENCIES[T.org] || AGENCIES.bistand).farge, 1); R.dyn.add(pin); R.views.stations[st.id] = { grp, pin, lot, h: real ? real.h + 6 : (st.type === 'sykehus' ? 30 : 18), doors: real && real.doors };
 };
 R.addMastView = function (m) {
   const g = mastModel(m.mobile); g.position.set(m.x, 0, m.z); g.traverse(o => { if (o.isMesh) o.castShadow = true; }); R.dyn.add(g);
@@ -978,7 +979,7 @@ R.sync = function (S, dt) {
   const V = R.views, t = R.time, mpp = R.mpp, far = R.cam.dist;
   for (const id in S.stations) if (!V.stations[id]) R.addStationView(S.stations[id]);
   for (const id in V.stations) if (!S.stations[id]) { R.dyn.remove(V.stations[id].grp); R.dyn.remove(V.stations[id].pin); delete V.stations[id]; }
-  for (const id in V.stations) { const v = V.stations[id]; v.pin.visible = far > 45; R.pinAt(v.pin, v.lot.x, v.h, v.lot.z, pinPx.station); }
+  for (const id in V.stations) { const v = V.stations[id]; v.pin.visible = far > 45; R.pinAt(v.pin, v.lot.x, v.h, v.lot.z, pinPx.station); if (v.doors && S.stations[id]) Stations.doorFrame(v, S.stations[id], S, dt); }
   const masts = S.net.masts;
   for (const id in masts) if (!V.masts[id]) R.addMastView(masts[id]);
   for (const id in V.masts) if (!masts[id]) { R.dyn.remove(V.masts[id].grp); R.dyn.remove(V.masts[id].pin); delete V.masts[id]; }
@@ -994,7 +995,9 @@ R.sync = function (S, dt) {
       gh.visible = true; R.pinAt(gh, u.lastKnown.x, 6, u.lastKnown.z, pinPx.ghost);
     } else if (V.ghosts[id]) V.ghosts[id].visible = false;
     if (!show) { v.pin.visible = false; continue; }
-    const hx = Math.sin(u.h || 0), hz = Math.cos(u.h || 0), lane = (u.status === 'ledig' || T.foot || (u.status === 'pastedet' && T.model !== 'heli')) ? 0 : 2.1;
+    const cp = u.path && u.path[u.pi], home = u.status === 'ledig' || u.status === 'varslet' || u.status === 'mobiliserer' || (cp && cp.g);   // i og ved vognhallen: midt i porten
+    const ln = (home || T.foot || (u.status === 'pastedet' && T.model !== 'heli')) ? 0 : 2.1; v.lane = v.lane == null ? ln : v.lane + (ln - v.lane) * Math.min(1, dt * 5);
+    const hx = Math.sin(u.h || 0), hz = Math.cos(u.h || 0), lane = v.lane;
     const px = u.x - hz * lane, pz = u.z + hx * lane, alt = (u.alt || 0) * 6;
     v.grp.position.set(px, alt, pz); v.h = lerpAngle(v.h, u.h || 0, 0.25); v.grp.rotation.y = v.h;
     const siren = u.siren && T.model !== 'foot';

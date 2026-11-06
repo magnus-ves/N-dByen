@@ -289,9 +289,42 @@ Sim.buildStation = function (type, lotId, opts) {
   Bus.emit('built', st);
   return { ok: true, msg: T.navn + ' er bygget.', st };
 };
+/* ---------- vognhallen: fast plass inne i garasjen, ut og inn gjennom porten ---------- */
+/** Enhetens faste plass i vognhallen (rekkefølge blant stasjonens kjøretøy), -1 for båt, helikopter og livredder til fots. */
+Sim.bayOf = function (u) {
+  const T = UT[u.type]; if (!u.stationId || T.boat || T.foot || T.model === 'heli') return -1;
+  return Sim.unitsAt(u.stationId).filter(o => { const t = UT[o.type]; return !t.boat && !t.foot && t.model !== 'heli'; }).sort((a, b) => a.id.localeCompare(b.id)).findIndex(o => o.id === u.id);
+};
+/** Lokale stasjonskoordinater (+z mot veien) → kartet. */
+Sim.lotXZ = (lot, x, z) => { const a = lot.face || 0, c = Math.cos(a), s = Math.sin(a); return { x: lot.x + x * c + z * s, z: lot.z - x * s + z * c }; };
+/** Plass k i vognhallen: inne (x, z, h – fronten mot porten) og ute foran porten (ox, oz). null når stasjonen ikke har plass k. */
+Sim.garageSpot = function (st, k) {
+  const sl = typeof Stations !== 'undefined' && Stations.slot(st.type, k), lot = sl && WORLD.lotById.get(st.lotId); if (!lot) return null;
+  const a = Sim.lotXZ(lot, sl.x, sl.zin), b = Sim.lotXZ(lot, sl.x, sl.zout); return { x: a.x, z: a.z, ox: b.x, oz: b.z, h: lot.face || 0 };
+};
+/** Står enheten inne i vognhallen sin nå? */
+Sim.inGarage = function (u) {
+  const st = u.stationId && S.stations[u.stationId], k = st ? Sim.bayOf(u) : -1, g = k >= 0 && Sim.garageSpot(st, k);
+  return g && Math.hypot(u.x - g.x, u.z - g.z) < 2 ? g : null;
+};
+/** Ut av garasjen: rolig ut gjennom porten før ruten starter. */
+Sim.exitPath = function (u, pts) { const g = Sim.inGarage(u); return g ? [{ x: g.ox, z: g.oz, m: .3, g: 1 }, ...pts] : pts; };
+/** Hjem: kjør litt forbi innkjørselen og rygg inn i vognhallen. */
+Sim.entryPath = function (u, pts) {
+  const st = S.stations[u.stationId], k = st ? Sim.bayOf(u) : -1, g = k >= 0 && Sim.garageSpot(st, k); if (!g || !pts.length) return pts;
+  const P = pts[pts.length - 1], Q = pts.length > 1 ? pts[pts.length - 2] : { x: u.x, z: u.z }; let dx = P.x - Q.x, dz = P.z - Q.z; const d = Math.hypot(dx, dz);
+  const past = d > .5 ? [{ x: P.x + dx / d * 9, z: P.z + dz / d * 9, m: .5, g: 1 }] : [];
+  return [...pts, ...past, { x: g.ox, z: g.oz, m: .25, g: 1, rv: 1 }, { x: g.x, z: g.z, m: .2, g: 1, rv: 1 }];
+};
 Sim.parkPos = function (st, k) {
   const lot = WORLD.lotById.get(st.lotId), nav = WORLD.nav;
   if (st.type === 'helikopterbase') return { x: lot.x, z: lot.z, h: 0 };
+  const G = typeof Stations !== 'undefined' && Stations.GARAGE[st.type];
+  if (G) {
+    const g = Sim.garageSpot(st, k); if (g) return { x: g.x, z: g.z, h: g.h };   // inne i vognhallen
+    if (k < 2 * G.n) { const sl = Stations.slot(st.type, k - G.n), p = Sim.lotXZ(lot, sl.x, G.z + 5.5); return { x: p.x, z: p.z, h: lot.face || 0 }; }   // fullt inne: på oppstillingsplassen foran porten
+    k -= 2 * G.n - 1;
+  }
   const rp = lot.rp, P = nav.rpXZ(rp), d = nav.dirAt(rp), off = (k - 1) * 9;
   // parkert langs veikanten på siden mot tomta
   const sx = Math.sign((lot.x - P.x) * -d[1] + (lot.z - P.z) * d[0]) || 1;
@@ -311,7 +344,9 @@ Sim.addUnit = function (type, stationId, opts) {
   if (st.type === 'helikopterbase') u.alt = 0.3;
   if (T.boat) { const lot = WORLD.lotById.get(st.lotId), d = Sim.nearestPier(lot.x, lot.z), k = Object.values(S.units).filter(o => o.dock && Math.hypot(o.dock.x - d.x, o.dock.z - d.z) < 60).length; u.dock = { x: d.x + (k % 3) * 14, z: d.z + Math.floor(k / 3) * 8 }; u.x = u.dock.x; u.z = u.dock.z; }   // båtene ligger side om side ved nærmeste kai
   if (!opts.noCrew) Staff.crewFor(u, !!opts.freeCrew);
-  S.units[id] = u; Bus.emit('unitAdded', u); return u;
+  S.units[id] = u;
+  if (!T.boat && st.type !== 'helikopterbase') { const p = Sim.parkPos(st, Math.max(0, Sim.bayOf(u))); u.x = p.x; u.z = p.z; u.h = p.h; u.lastKnown = { x: p.x, z: p.z }; }   // egen plass i vognhallen
+  Bus.emit('unitAdded', u); return u;
 };
 Sim.buyUnit = function (type, stationId) {
   const T = UT[type], st = S.stations[stationId];
@@ -388,7 +423,7 @@ const Staff = {
 
 /* ---------- bevegelse og statusmaskin ---------- */
 Sim.unitRP = function (u) {
-  if (u.status === 'ledig' && u.stationId && S.stations[u.stationId]) return WORLD.lotById.get(S.stations[u.stationId].lotId).rp;
+  if (u.stationId && S.stations[u.stationId] && (u.status === 'ledig' || Sim.inGarage(u))) return WORLD.lotById.get(S.stations[u.stationId].lotId).rp;
   const r = WORLD.nav.nearestRP(u.x, u.z, true) || WORLD.nav.nearestRP(u.x, u.z, false); if (r) return { a: r.a, b: r.b, e: r.e, t: r.t };
   const st = u.stationId && S.stations[u.stationId], l = st && WORLD.lotById.get(st.lotId); return l ? l.rp : WORLD.lots[0].rp;   // utenfor kartet: bruk stasjonens veipunkt
 };
@@ -412,8 +447,9 @@ Sim.moveUnit = function (u, dt) {
     u.onFerry = !!p.f;
     const dx = p.x - u.x, dz = p.z - u.z, d = Math.hypot(dx, dz), v = sp * (p.m || 1);
     if (d < 1e-4) { u.pi++; continue; }
-    if (d / v <= left) { u.x = p.x; u.z = p.z; left -= d / v; u.h = Math.atan2(dx, dz); u.pi++; }
-    else { u.x += dx / d * v * left; u.z += dz / d * v * left; u.h = Math.atan2(dx, dz); left = 0; }
+    const hd = p.rv ? Math.atan2(-dx, -dz) : Math.atan2(dx, dz);   // rygger: fronten peker motsatt vei
+    if (d / v <= left) { u.x = p.x; u.z = p.z; left -= d / v; u.h = hd; u.pi++; }
+    else { u.x += dx / d * v * left; u.z += dz / d * v * left; u.h = hd; left = 0; }
   }
   if (UT[u.type].model === 'heli' && u.path.length) { // stige og lande
     const last = u.path[u.path.length - 1], dEnd = Math.hypot(last.x - u.x, last.z - u.z);
@@ -455,7 +491,7 @@ Sim.startDrive = function (u) {
   if (T.boat) { u.path = [{ x: inc.loc.x, z: inc.loc.z, m: 1 }]; u.pi = 0; return; }   // rett over vannet
   const r = WORLD.nav.route(Sim.unitRP(u), inc.loc.rp);
   if (!r.ok) { Log.add(tgOf(u), u.name, 'Finner ingen vei til stedet – avbryter', 'warn'); Sim.detach(u); Sim.sendHome(u); return; }
-  u.path = r.pts; u.pi = 0;
+  u.path = Sim.exitPath(u, r.pts); u.pi = 0;
 };
 Sim.sendHome = function (u) {
   const T = UT[u.type]; u.siren = false; u.job = null; u.onFerry = false;
@@ -469,17 +505,17 @@ Sim.sendHome = function (u) {
   if (T.foot) { const b = WORLD.beaches[u.beach]; u.path = [{ x: b.tower.x, z: b.tower.z, m: 1 }]; u.pi = 0; return; }
   if (T.model === 'heli') { const p = Sim.parkPos(st, 0); u.path = [{ x: p.x, z: p.z, m: 1 }]; u.pi = 0; return; }
   if (T.boat) { u.path = [{ x: u.dock.x, z: u.dock.z, m: 1 }]; u.pi = 0; return; }
+  if (Sim.inGarage(u)) { Sim.park(u); return; }   // kalt tilbake før den kom ut av garasjen
   const r = WORLD.nav.route(Sim.unitRP(u), WORLD.lotById.get(st.lotId).rp);
   if (!r.ok) { const p = Sim.parkPos(st, 0); u.x = p.x; u.z = p.z; u.path = []; Sim.park(u); return; }
-  u.path = r.pts; u.pi = 0;
+  u.path = Sim.entryPath(u, r.pts); u.pi = 0;
 };
 Sim.park = function (u) {
   const st = S.stations[u.stationId], T = UT[u.type];
   u.status = 'ledig'; u.phase = null; u.job = null; u.path = []; u.pi = 0; u.siren = false; u.dest = null; u.onFerry = false;
   if (T.foot) { const b = WORLD.beaches[u.beach]; u.x = b.tower.x; u.z = b.tower.z; u.h = 0; return; }
   if (T.boat && u.dock) { u.x = u.dock.x; u.z = u.dock.z; return; }
-  const k = Sim.unitsAt(u.stationId).sort((a, b) => a.id.localeCompare(b.id)).findIndex(x => x.id === u.id);
-  const p = Sim.parkPos(st, Math.max(0, k)); u.x = p.x; u.z = p.z; u.h = p.h; u.alt = st.type === 'helikopterbase' ? 0.3 : 0;
+  const p = Sim.parkPos(st, Math.max(0, Sim.bayOf(u))); u.x = p.x; u.z = p.z; u.h = p.h; u.alt = st.type === 'helikopterbase' ? 0.3 : 0;
 };
 Sim.recover = function (u) { u.vis = true; Sim.park(u); Log.add(tgOf(u), u.name, 'Mannskapet er tilbake i tjeneste', 'info'); };
 Sim.detach = function (u) {
@@ -1044,7 +1080,7 @@ const Vol = {
 Sim.driveToGuard = function (u) {
   const place = u.guardPlace; u.status = 'utrykning'; u.phase = 'drive'; u.dest = 'guard'; u.siren = false; u.boarded = -1;
   const r = WORLD.nav.route(Sim.unitRP(u), place.rp); if (!r.ok) { u.job = null; Sim.sendHome(u); return; }
-  u.path = r.pts; u.pi = 0;
+  u.path = Sim.exitPath(u, r.pts); u.pi = 0;
 };
 
 /* ==========================================================================
