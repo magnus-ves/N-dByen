@@ -151,8 +151,10 @@ function loop(now) {
     if (Game.mode === 'play') { Game.saveTimer += rdt; if (Game.saveTimer > 20) { Game.saveTimer = 0; Store.save(); } }
   } catch (e) { console.error(e); Game.errors = (Game.errors || 0) + 1; if (Game.errors > 50) { S && (S.paused = true); } }
   // enkel adaptiv kvalitet
-  if (raw < 0.5) { Game.fpsT += raw; Game.fpsN++; if (Game.fpsT > 3) { const avg = Game.fpsT / Game.fpsN; if (avg > 0.05 && Game.mode === 'play') { Game.slow = (Game.slow || 0) + 1;   // trinnvis: lavere oppløsning/skygger/trafikk, deretter færre bygningsdetaljer
-            if (!Game.lowGfx) { Game.lowGfx = true; R.setQuality(1); R.initTraffic(); City.lastKey = ''; UI.toast('Grafikken er senket for jevnere spilling (kan endres i menyen)', 'info'); }
+  if (raw < 10) { Game.fpsT += Math.min(raw, 1); Game.fpsN++; if (Game.fpsT > 3) { const avg = Game.fpsT / Game.fpsN; if (avg > 0.05 && Game.fpsN >= 3 && Game.mode === 'play') { Game.slow = (Game.slow || 0) + 1;   // også svært trege bilder teller (uten skjermkort)   // trinnvis: lavere oppløsning/skygger/trafikk, deretter færre bygningsdetaljer
+            if (Game.ultra) { Game.ultra = false; R.applyGfx(); Game.slow = 0; UI.toast('Oppløsningen er senket litt for jevnere spilling (kan endres i menyen)', 'info'); }
+            else if (Grade.on && Grade.ok && !Grade.paused) { Grade.paused = true; Game.slow = 0; UI.toast('Bildefilteret er slått av for jevnere spilling', 'info'); }
+            else if (!Game.lowGfx) { Game.lowGfx = true; R.applyGfx(); R.initTraffic(); City.lastKey = ''; UI.toast('Grafikken er senket for jevnere spilling (kan endres i menyen)', 'info'); }
             else if (Game.slow === 3) { City.lite = true; City.lastKey = ''; UI.toast('Færre detaljer langt unna for jevnere spilling', 'info'); } } Game.fpsT = 0; Game.fpsN = 0; } }
 }
 R.onTap = function (x, y, touch) {

@@ -8,7 +8,9 @@ const TABS = [
   { id: 'hendelser', navn: 'Hendelser', ikon: 'bell' }, { id: 'enheter', navn: 'Enheter', ikon: 'truck' }, { id: 'frivillige', navn: 'Frivillige', ikon: 'hand' },
   { id: 'nodnett', navn: 'Nødnett', ikon: 'mast' }, { id: 'stasjoner', navn: 'Stasjoner', ikon: 'house' }, { id: 'butikk', navn: 'Butikk', ikon: 'bag' }, { id: 'statistikk', navn: 'Statistikk', ikon: 'chart' }
 ];
-const Game = { mode: 'boot', cityId: null, worldCity: null, place: null, saveTimer: 0 };
+const Game = { mode: 'boot', cityId: null, worldCity: null, place: null, saveTimer: 0, ultra: true, lowGfx: false };
+// valgt grafikknivå huskes i nettleseren: ultra (standard, høyere oppløsning enn skjermen), høy eller lav
+try { const g = localStorage.getItem('nodbyen.gfx'); if (g === 'høy') Game.ultra = false; else if (g === 'lav') { Game.ultra = false; Game.lowGfx = true; } } catch (e) { /* ignorer */ }
 const UI = { seen: new Set(), tab: 'hendelser', sheet: 1, sel: null, dirty: true, lastHtml: '', lastTab: '', shopCat: 'etat', logFilter: 'ALLE', mc: 0, sug: {}, sugT: 0, openUnits: {}, tick: 0, season: 1 };
 
 const el = (html) => { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstChild; };
@@ -48,7 +50,7 @@ UI.init = function () {
   Bus.on('toast', m => UI.toast(m.msg, m.kind));
   Bus.on('log', e => UI.pushMini(e));
   Bus.on('levelup', d => UI.levelUp(d));
-  Radio.init(); Sound.init(); Bus.on('dayReport', r => { if (Game.mode === 'play') Goals.report(r); }); $('#btnRadio').classList.toggle('on', Radio.enabled);
+  Radio.init(); Sound.init(); Grade.init(); Bus.on('dayReport', r => { if (Game.mode === 'play') Goals.report(r); }); $('#btnRadio').classList.toggle('on', Radio.enabled);
   $('#btnRadio').addEventListener('click', () => { Radio.enabled = !Radio.enabled; Radio.unlock(); if (!Radio.enabled && 'speechSynthesis' in window) speechSynthesis.cancel(); Radio.queue = []; $('#btnRadio').classList.toggle('on', Radio.enabled); UI.toast(Radio.enabled ? (Radio.listen.size ? 'Radio på' : 'Radio på – velg talegrupper å lytte på under Nødnett') : 'Radio av', 'info'); });
   Bus.on('incident', inc => { UI.dirty = true; if (Game.mode === 'play') UI.renderTab(true); if (UI.sheet === 0 && window.innerWidth < 900) UI.pulseTab('hendelser'); });
   Bus.on('alarm', al => { UI.dirty = true; UI.alarmBar(); R.focus(S.units[al.unitId].x, S.units[al.unitId].z, 80); });
@@ -161,7 +163,7 @@ UI.menu = function () {
   const cfg = WORLD.cfg;
   UI.modal({ title: 'Meny · ' + cfg.navn, html:
     '<div class="seg" style="flex-wrap:wrap"><button data-m="help">' + icon('doc') + ' Hjelp</button><button data-m="save">' + icon('check') + ' Lagre nå</button><button data-m="auto" class="' + (S.settings.auto ? 'on' : '') + '">Autodisponering: ' + (S.settings.auto ? 'på' : 'av') + '</button></div>'
-    + '<div class="seg" style="flex-wrap:wrap"><button data-m="base">Bunnkart: ' + (R.base === 'kart' ? 'tegnet kart' : 'satellitt') + '</button><button data-m="gfx">Grafikk: ' + (Game.lowGfx ? 'lav' : 'høy') + '</button><button data-m="lyd">Lyd: ' + (Sound.on ? 'på' : 'av') + '</button><button data-m="city">Bytt by</button><button data-m="new">Ny runde i ' + esc(cfg.navn) + '</button></div>'
+    + '<div class="seg" style="flex-wrap:wrap"><button data-m="base">Bunnkart: ' + (R.base === 'kart' ? 'tegnet kart' : 'satellitt') + '</button><button data-m="gfx">Grafikk: ' + (Game.lowGfx ? 'lav' : Game.ultra ? 'ultra' : 'høy') + '</button><button data-m="filter">Filter: ' + (Grade.soft ? 'av (uten skjermkort)' : Grade.on && !Grade.paused ? 'realistisk' : 'av') + '</button><button data-m="lyd">Lyd: ' + (Sound.on ? 'på' : 'av') + '</button><button data-m="city">Bytt by</button><button data-m="new">Ny runde i ' + esc(cfg.navn) + '</button></div>'
     + '<p class="muted sm">Spillet lagres automatisk i nettleseren (egen lagring per by).</p>', buttons: [{ label: 'Fortsett', cls: 'primary' }],
     init: h => { $$('[data-m]', h.body).forEach(b => b.addEventListener('click', async () => {
       const m = b.dataset.m;
@@ -170,7 +172,11 @@ UI.menu = function () {
       else if (m === 'auto') { S.settings.auto = !S.settings.auto; h.close(); UI.toast('Autodisponering ' + (S.settings.auto ? 'påslått – nærmeste enheter sendes automatisk' : 'avslått'), 'info'); }
       else if (m === 'base') { R.setBase(R.base === 'kart' ? 'sat' : 'kart'); h.close(); }
       else if (m === 'lyd') { const on = Sound.toggle(); h.close(); UI.toast('Lyd ' + (on ? 'på' : 'av'), 'info'); }
-      else if (m === 'gfx') { Game.lowGfx = !Game.lowGfx; City.lite = false; Game.slow = 0; R.setQuality(Game.lowGfx ? 1 : 2); R.initTraffic(); City.lastKey = ''; h.close(); UI.toast('Grafikk: ' + (Game.lowGfx ? 'lav (sparer batteri)' : 'høy'), 'info'); }
+      else if (m === 'gfx') {   // ultra → høy → lav → ultra
+        const next = Game.lowGfx ? 'ultra' : Game.ultra ? 'høy' : 'lav'; Game.ultra = next === 'ultra'; Game.lowGfx = next === 'lav'; City.lite = false; Game.slow = 0;
+        try { localStorage.setItem('nodbyen.gfx', next); } catch (e) { /* ignorer */ }
+        R.applyGfx(); R.initTraffic(); City.lastKey = ''; h.close(); UI.toast('Grafikk: ' + (next === 'lav' ? 'lav (sparer batteri)' : next === 'ultra' ? 'ultra (skarpest)' : 'høy'), 'info'); }
+      else if (m === 'filter') { Grade.paused = false; const on = Grade.toggle(); h.close(); UI.toast('Realistisk bildefilter ' + (on ? 'på' : 'av'), 'info'); }
       else if (m === 'city') { h.close(); Store.save(true); Game.toMenu(); }
       else if (m === 'new') { h.close(); if (await UI.ask('Ny runde?', 'Dette starter på nytt i ' + esc(cfg.navn) + ' og overskriver lagringen.', 'Start på nytt', 'Avbryt', true)) { Store.clear(S.city); Game.toMenu(S.city); } }
     })); } });

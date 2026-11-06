@@ -63,7 +63,7 @@ R.style = function (offline) {
     layers.push({ id: 'place', type: 'symbol', source: 'om', 'source-layer': 'place', filter: ['in', 'class', 'suburb', 'neighbourhood', 'quarter'], layout: { 'text-field': nm, 'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-transform': 'uppercase', 'text-letter-spacing': 0.08 }, paint: { 'text-color': '#7A8776', 'text-halo-color': '#F6F0E0', 'text-halo-width': 1.4 } });
     layers.push({ id: 'street-name', type: 'symbol', source: 'om', 'source-layer': 'transportation_name', minzoom: 15.5, layout: { 'text-field': nm, 'text-font': ['Noto Sans Regular'], 'text-size': 11, 'symbol-placement': 'line' }, paint: { 'text-color': '#7B7566', 'text-halo-color': '#FBF7EC', 'text-halo-width': 1.2 } });
   }
-  const style = { version: 8, name: 'NødByen pastell', glyphs: GLYPHS, sky: { 'sky-color': '#8FBBE3', 'horizon-color': '#E6EEF2', 'fog-color': '#DCE5EA', 'fog-ground-blend': 0.55, 'horizon-fog-blend': 0.7, 'sky-horizon-blend': 0.6, 'atmosphere-blend': 0.8 }, sources: offline ? {} : { om: { type: 'vector', url: TILE_URL, attribution: 'OpenFreeMap © OpenMapTiles Data from OpenStreetMap' }, sat: { type: 'raster', tiles: [SAT_URL], tileSize: 256, maxzoom: 18, attribution: SAT_CREDIT } }, layers, light: { anchor: 'viewport', color: '#fff6e6', intensity: 0.38, position: [1.2, 200, 38] } };
+  const style = { version: 8, name: 'NødByen pastell', glyphs: GLYPHS, sky: { 'sky-color': '#8FBBE3', 'horizon-color': '#E6EEF2', 'fog-color': '#DCE5EA', 'fog-ground-blend': 0.55, 'horizon-fog-blend': 0.7, 'sky-horizon-blend': 0.6, 'atmosphere-blend': 0.8 }, sources: offline ? {} : { om: { type: 'vector', url: TILE_URL, attribution: 'OpenFreeMap © OpenMapTiles Data from OpenStreetMap' }, sat: { type: 'raster', tiles: [SAT_URL], tileSize: 256, maxzoom: 19, attribution: SAT_CREDIT } }, layers, light: { anchor: 'viewport', color: '#fff6e6', intensity: 0.38, position: [1.2, 200, 38] } };
   return style;
 };
 R.setSeason = function (si) {
@@ -181,7 +181,7 @@ R.init = function (container, opts) {
     try {
       map = new maplibregl.Map({ container, style: R.style(!!opts.offline), center: [10.752, 59.913], zoom: 14.5, pitch: 55, bearing: -18, maxPitch: 75, minZoom: 12.5, maxZoom: 19.5, attributionControl: false, antialias: true, dragRotate: true, pitchWithRotate: true, touchPitch: true, hash: false, fadeDuration: 150, localIdeographFontFamily: false });
     } catch (e) { reject(e); return; }
-    R.map = map; map.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5)); R.dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    R.map = map; map.setPixelRatio(R.gfxRatio()); R.dpr = R.gfxRatio();
     map.touchZoomRotate.enableRotation();
     R.scene = new THREE.Scene(); R.camera = new THREE.Camera();
     R.hemi = new THREE.HemisphereLight(0xfaf3e2, 0xdadcc8, 0.9); R.sun = new THREE.DirectionalLight(0xfff1d6, 0.7); R.sun.position.set(60, 90, 40);
@@ -204,7 +204,7 @@ R.init = function (container, opts) {
     map.on('error', e => { if (!errShown && e && e.error && /tile|fetch|Failed|NetworkError|AJAX/i.test(String(e.error.message || e.error))) { errShown = true; R.tileError = true; if (R.onTileError) R.onTileError(e.error); } });
     const addFacades = () => { for (const k of ['low', 'high']) for (let i = 0; i < 5; i++) for (const n of ['', '-n']) { const id = 'win-' + k + '-' + i + n; if (!map.hasImage(id)) map.addImage(id, R.makeWindows(id), { pixelRatio: 2 }); } if (!map.hasImage('water-anim')) map.addImage('water-anim', R.makeWater(0)); };
     map.on('style.load', addFacades);
-    map.on('load', () => { addFacades(); map.addLayer(R.layer); R.ready = true; R.setBase(R.base || 'sat'); R.setSeason(R.seasonIdx); if (!done) { done = true; resolve(true); } });
+    map.on('load', () => { addFacades(); map.addLayer(R.layer); if (typeof Grade !== 'undefined') map.addLayer(Grade.layer); R.ready = true; R.setBase(R.base || 'sat'); R.setSeason(R.seasonIdx); if (!done) { done = true; resolve(true); } });
     map.on('click', e => { if (R.onTap) R.onTap(e.point.x, e.point.y, !!(e.originalEvent && (e.originalEvent.pointerType === 'touch' || e.originalEvent.type === 'touchend'))); });
     map.on('resize', () => R.resize());
     let rt = 0, rLast = 0; const roofSoon = () => { clearTimeout(rt); const wait = performance.now() - rLast > 1500 ? 60 : 500; rt = setTimeout(() => { rLast = performance.now(); (window.requestIdleCallback ? requestIdleCallback(() => City.update(), { timeout: 1500 }) : City.update()); }, wait); }; map.on('moveend', roofSoon); ['dragstart', 'wheel', 'touchstart'].forEach(ev => map.on(ev, () => { R.follow = null; })); map.on('idle', () => { if (!City.mesh || City.lastKey === '') roofSoon(); R.fixBeaches(); });
@@ -214,6 +214,9 @@ R.init = function (container, opts) {
 };
 R.resize = function () { if (!R.map) return; const c = R.map.getCanvas(); R.w = c.clientWidth || window.innerWidth; R.h = c.clientHeight || window.innerHeight; R.dpr = R.map.getPixelRatio ? R.map.getPixelRatio() : 1; };
 R.setQuality = function (cap) { if (R.map) { R.map.setPixelRatio(Math.min(window.devicePixelRatio || 1, cap)); R.resize(); } };
+/** Oppløsning etter grafikknivå: ultra tegner skarpere enn skjermen (overprøving, glattere kanter), høy som skjermen, lav sparer batteri. */
+R.gfxRatio = () => { const d = window.devicePixelRatio || 1; return Game.lowGfx ? Math.min(d, 1) : Game.ultra ? Math.min(Math.max(d, 1) * 1.5, 2.25) : Math.min(d, 1.5); };
+R.applyGfx = function () { if (!R.map) return; R.map.setPixelRatio(R.gfxRatio()); R.resize(); R.map.triggerRepaint(); };
 R.resize0 = null;
 R.setPadding = function (right, bottom) {
   right = Math.round(right); bottom = Math.round(bottom);

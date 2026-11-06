@@ -119,7 +119,7 @@ const City = {
       case 'tegltak':
         for (let y = 0; y < H; y += 16) for (let i = (y / 16) % 2 ? 0 : 16; i < W; i += 32) { x.fillStyle = 'rgba(0,0,0,.16)'; x.fillRect(i, y + 12, 30, 4); x.fillStyle = 'rgba(0,0,0,.08)'; x.fillRect(i, y, 2, 16); } noise(.06); break;
     }
-    const tex = cv => { const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; return t; };
+    const tex = cv => { const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = R.renderer ? Math.min(16, R.renderer.capabilities.getMaxAnisotropy()) : 8; return t; };   // skarpe fasader også på skrå
     return { map: tex(c), lit: tex(lit), spec: tex(spc) };
   },
   /** Himmel til speilinger i glass (enkel kube: blå himmel, lys horisont, mørkere by og bakke). */
