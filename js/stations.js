@@ -92,7 +92,8 @@ const Stations = {
       return;
     }
     // flatt tak med takkant
-    const g = get('tak'), tc = 0.9; for (const [px, pz] of [[x0, z0], [x1, z0], [x1, z1], [x0, z0], [x1, z1], [x0, z1]]) { g.p.push(px, y1 + .02, pz); g.n.push(0, 1, 0); g.c.push(tc, tc, tc); g.uv.push(px / 12, pz / 12); }
+    // taket vender opp (riktig vinding), så sola lyser på det og lys nedenfra (blålys) ikke gjør det
+    const g = get('tak'), tc = 0.9; for (const [px, pz] of [[x0, z0], [x1, z1], [x1, z0], [x0, z0], [x0, z1], [x1, z1]]) { g.p.push(px, y1 + .02, pz); g.n.push(0, 1, 0); g.c.push(tc, tc, tc); g.uv.push(px / 12, pz / 12); }
     if (o.parapet !== false) { const pc = col.clone().multiplyScalar(0.9); for (const [a, b, nx, nz] of walls) quad('gesims', a, b, y1, y1 + 0.6, 2, 1, pc, nx, nz); }
   },
   /** Gjør samlede flater om til meshes. */

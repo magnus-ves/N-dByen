@@ -18,7 +18,7 @@ const SatAtlas = {
     const nx = tx1 - tx0 + 1, ny = ty1 - ty0 + 1; if (nx * ny > 100) { this.ok = false; return this; }
     this.key = key; this.tx0 = tx0; this.ty0 = ty0; this.W = nx * 256; this.H = ny * 256; this.ok = true;
     const c = document.createElement('canvas'); c.width = this.W; c.height = this.H; const x = c.getContext('2d'); x.fillStyle = '#8D8E8A'; x.fillRect(0, 0, c.width, c.height);
-    if (!this.tex) { this.tex = new THREE.CanvasTexture(c); this.tex.anisotropy = 8; this.mat = new THREE.MeshLambertMaterial({ map: this.tex, side: THREE.DoubleSide }); }
+    if (!this.tex) { this.tex = new THREE.CanvasTexture(c); this.tex.anisotropy = 8; this.mat = new THREE.MeshLambertMaterial({ map: this.tex, side: THREE.DoubleSide, color: 0xd0d0d0 }); }
     else { this.tex.image = c; this.tex.needsUpdate = true; }
     const myKey = key;
     for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) {
@@ -137,7 +137,8 @@ const City = {
     if (style === 'taksat') return SatAtlas.mat;
     if (City.tex[style]) return City.tex[style].m;
     const T = City.makeTex(style), roof = style === 'tak' || style === 'tegltak' || style === 'sokkel' || style === 'gesims';
-    const m = new THREE.MeshLambertMaterial({ map: T.map, vertexColors: true, side: THREE.DoubleSide, emissive: 0xffffff, emissiveMap: roof ? null : T.lit, emissiveIntensity: 0 });
+    // Phong uten glans = samme dagslys som før, men lyset regnes per piksel, så blålys og flammer lyser opp veggene riktig
+    const m = new THREE.MeshPhongMaterial({ map: T.map, vertexColors: true, side: THREE.DoubleSide, emissive: 0xffffff, emissiveMap: roof ? null : T.lit, emissiveIntensity: 0, specular: 0x000000, shininess: 1 });
     if (!roof) { m.envMap = City.envMap(); m.specularMap = T.spec; m.combine = THREE.MixOperation; m.reflectivity = style === 'glass' ? 0.75 : 0.6; }
     City.tex[style] = { m, T }; return m;
   },
@@ -252,7 +253,8 @@ const City = {
             const gw = get(st); for (const [p, q, sg] of [[a1, a4, -1], [a2, a3, 1]]) { gw.p.push(p[0], H, p[1], q[0], H, q[1], (p[0] + q[0]) / 2, top, (p[1] + q[1]) / 2); for (let k = 0; k < 3; k++) { gw.n.push(ax[0] * sg, 0, ax[1] * sg); gw.c.push(col.r, col.g, col.b); } gw.uv.push(0, 0, 1, 0, .5, rh / City.FLOOR); }   // gavler
           } else {
             const tris = THREE.ShapeUtils.triangulateShape(P.map(p => new THREE.Vector2(p[0], p[1])), []), sat = atlas.uv(w, cx, cz), g = get(sat ? 'taksat' : 'tak'), tc = 0.85 + hsh * 0.15;
-            for (const t of tris) for (const j of t) { g.p.push(P[j][0], H + .05, P[j][1]); g.n.push(0, 1, 0); g.c.push(tc, tc, tc * 0.98); const q = sat && atlas.uv(w, P[j][0], P[j][1]); if (q) g.uv.push(q[0], q[1]); else g.uv.push(P[j][0] / 12, P[j][1] / 12); }
+            // vinding snudd: taket vender opp, så sola lyser på det og lys nedenfra (blålys, flammer) ikke gjør det
+            for (const t of tris) for (const j of [t[0], t[2], t[1]]) { g.p.push(P[j][0], H + .05, P[j][1]); g.n.push(0, 1, 0); g.c.push(tc, tc, tc * 0.98); const q = sat && atlas.uv(w, P[j][0], P[j][1]); if (q) g.uv.push(q[0], q[1]); else g.uv.push(P[j][0] / 12, P[j][1] / 12); }
             if (A > 220 && inst.box.length < 4000) {   // ventilasjon og trappehus
               const ca = Math.cos(r.a), sa = Math.sin(r.a), nb = 1 + Math.floor(hsh * 3);
               for (let q = 0; q < nb; q++) { const u = (City.hash(k + q) - .5) * r.w * .5, v = (City.hash(k + 'v' + q) - .5) * r.d * .5; inst.box.push([r.cx + ca * u - sa * v, H + .6, r.cz + sa * u + ca * v, 2.2, 1.2, 1.4, 0x9DA3A6, r.a]); }

@@ -186,6 +186,8 @@ R.init = function (container, opts) {
     R.scene = new THREE.Scene(); R.camera = new THREE.Camera();
     R.hemi = new THREE.HemisphereLight(0xfaf3e2, 0xdadcc8, 0.9); R.sun = new THREE.DirectionalLight(0xfff1d6, 0.7); R.sun.position.set(60, 90, 40);
     R.scene.add(R.hemi, R.sun); R.dyn = new THREE.Group(); R.scene.add(R.dyn);
+    // fire punktlys som deles av de nærmeste blålysene og brannene (fast antall, så materialene ikke må bygges på nytt)
+    R.pl = []; for (let i = 0; i < 4; i++) { const p = new THREE.PointLight(0x3d6dff, 0, 60, 1.4); p.position.set(0, -500, 0); R.pl.push(p); R.scene.add(p); }
     R.layer = {
       id: 'game3d', type: 'custom', renderingMode: '3d',
       onAdd(m, gl) { R.renderer = new THREE.WebGLRenderer({ canvas: m.getCanvas(), context: gl, antialias: true }); R.renderer.autoClear = false; },
@@ -877,21 +879,62 @@ R.glowInit = function () {
     fragmentShader: 'varying vec3 vC; void main(){ float r = length(gl_PointCoord - 0.5) * 2.0; if (r > 1.0) discard; float a = exp(-r * r * 4.0) + 0.6 * max(0.0, 1.0 - r * 6.0); gl_FragColor = vec4(vC * a, a); }' });
   const pts = new THREE.Points(g, R.glowMat); pts.frustumCulled = false; pts.renderOrder = 9; R.glowPts = pts; R.scene.add(pts);
 };
+/** Blålysmønster som på ekte LED-bjelker: to raske blink venstre, så to høyre, hver bil i sin egen takt. */
+/** Blålys på: under utrykning, og når kjøretøyet står på et oppdrag (sikrer stedet – sirenen er da av). */
+R.blueOn = (u, T) => !T.foot && T.model !== 'heli' && u.org !== 'strand' && (u.siren || (u.status === 'pastedet' && !!u.job));
+R.flashOf = function (id, t) {
+  let hsh = 0; for (let i = 0; i < id.length; i++) hsh = (hsh * 31 + id.charCodeAt(i)) % 997;
+  const p = (t * 1.35 + hsh / 997) % 1, l = p < .07 || (p > .12 && p < .19), r = (p > .5 && p < .57) || (p > .62 && p < .69);
+  return { l, r, on: l || r };
+};
+/* ---------- lys på bakken: lyskjegler fra gatelys og frontlykter, blått lys rundt utrykningskjøretøy og brannglød ---------- */
+R.poolInit = function () {
+  const N = 3200, g = new THREE.BufferGeometry(), P = { N, pos: new Float32Array(N * 12), col: new Float32Array(N * 12), shp: new Float32Array(N * 4) }, uv = new Float32Array(N * 8), idx = new Uint16Array(N * 6);
+  for (let i = 0; i < N; i++) { uv.set([0, 0, 1, 0, 1, 1, 0, 1], i * 8); idx.set([i * 4, i * 4 + 1, i * 4 + 2, i * 4, i * 4 + 2, i * 4 + 3], i * 6); }
+  g.setAttribute('position', new THREE.BufferAttribute(P.pos, 3)); g.setAttribute('aColor', new THREE.BufferAttribute(P.col, 3)); g.setAttribute('aShape', new THREE.BufferAttribute(P.shp, 1)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setIndex(new THREE.BufferAttribute(idx, 1));
+  R.poolMat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
+    vertexShader: 'attribute vec3 aColor; attribute float aShape; varying vec3 vC; varying float vS; varying vec2 vUv; void main(){ vC = aColor; vS = aShape; vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: 'varying vec3 vC; varying float vS; varying vec2 vUv; void main(){ float a; if (vS < 0.5) { float r = length(vUv - 0.5) * 2.0; a = exp(-r * r * 3.2) * (1.0 - smoothstep(0.7, 1.0, r)); } else { float u = (vUv.x - 0.5) * 2.0, v = vUv.y, w = 0.16 + 0.84 * v; a = exp(-(u / w) * (u / w) * 3.0) * smoothstep(0.0, 0.1, v) * pow(1.0 - v, 1.5); } gl_FragColor = vec4(vC, a); }' });
+  const m = new THREE.Mesh(g, R.poolMat); m.frustumCulled = false; m.renderOrder = 4; R.poolMesh = m; R.pool = P; R.scene.add(m);
+};
 R.glowFrame = function (S) {
+  if (!R.pool) R.poolInit(); const PL = R.pool; let q = 0;
+  const pool = (x, z, rad, r, g, b) => { if (q >= PL.N || r + g + b < .004) return; const y = .2, o = q * 12; PL.pos.set([x - rad, y, z + rad, x + rad, y, z + rad, x + rad, y, z - rad, x - rad, y, z - rad], o); for (let k = 0; k < 4; k++) { PL.col[o + k * 3] = r; PL.col[o + k * 3 + 1] = g; PL.col[o + k * 3 + 2] = b; PL.shp[q * 4 + k] = 0; } q++; };
+  const beam = (x, z, sx, sz, len, wid, r, g, b) => { if (q >= PL.N) return; const y = .2, o = q * 12, px = sz * wid / 2, pz = -sx * wid / 2, fx = x + sx * len, fz = z + sz * len;   // rektangel foran bilen; formen på kjeglen lages i shaderen
+    PL.pos.set([x + px, y, z + pz, x - px, y, z - pz, fx - px, y, fz - pz, fx + px, y, fz + pz], o); for (let k = 0; k < 4; k++) { PL.col[o + k * 3] = r; PL.col[o + k * 3 + 1] = g; PL.col[o + k * 3 + 2] = b; PL.shp[q * 4 + k] = 1; } q++; };
   if (!R.glow) R.glowInit(); const G = R.glow, night = smooth(0.35, 0.8, 1 - (R.env.daylight == null ? 1 : R.env.daylight)); let n = 0;
   const add = (x, y, z, r, g, b, s) => { if (n >= G.N) return; G.pos[n * 3] = x; G.pos[n * 3 + 1] = y; G.pos[n * 3 + 2] = z; G.col[n * 3] = r; G.col[n * 3 + 1] = g; G.col[n * 3 + 2] = b; G.size[n] = s; n++; };
-  const car = (x, z, h, L, W, k) => { const sx = Math.sin(h), sz = Math.cos(h), px = sz, pz = -sx;   // lykter foran (varmt hvitt) og bak (rødt)
-    for (const sd of [-1, 1]) { add(x + sx * L + px * W * sd, 1.6, z + sz * L + pz * W * sd, .9 * night * k, .82 * night * k, .62 * night * k, 7); add(x - sx * L + px * W * sd, 1.6, z - sz * L + pz * W * sd, .6 * night * k, .05, .04, 3.5); } };
+  const car = (x, z, h, L, W, k) => { const sx = Math.sin(h), sz = Math.cos(h), px = sz, pz = -sx;   // små, skarpe lykter foran (LED-hvitt) og bak (rødt), lyskjegle på veien og rødt skjær bak
+    for (const sd of [-1, 1]) { add(x + sx * L + px * W * sd, 1.5, z + sz * L + pz * W * sd, .95 * night * k, .93 * night * k, .85 * night * k, 4.2); add(x - sx * L + px * W * sd, 1.6, z - sz * L + pz * W * sd, .75 * night * k, .04, .03, 2.6); }
+    beam(x + sx * L, z + sz * L, sx, sz, 26, 12, .4 * night * k, .38 * night * k, .32 * night * k); pool(x - sx * (L + 1.5), z - sz * (L + 1.5), 3.2, .22 * night * k, .015, .01); };
   if (S && R.views) for (const id in R.views.units) {
     const v = R.views.units[id], u = S.units[id]; if (!u || !v.grp.visible) continue; const T = UT[u.type];
     if (night > .02 && !T.foot && T.model !== 'heli') { const pr = VPROF[T.model] || VPROF.car, L = (pr.p ? Math.max(...pr.p.map(q => q[0])) : 2.5) / 2 * VS; car(v.grp.position.x, v.grp.position.z, v.h, L, .32 * VS, 1); }
-    if (u.siren) for (const m of v.lights) if (m.visible) { m.getWorldPosition(_v3); add(_v3.x, _v3.y + .3, _v3.z, .15, .35, 1, 5 + 12 * night); }
+    if (v.flash) { let lit = 0; for (const m of v.lights) if (m.visible) { m.getWorldPosition(_v3); add(_v3.x, _v3.y + .2, _v3.z, .2, .42, 1, 3.5 + 6 * night); lit++; }
+      if (lit) { const k = .35 + .65 * night; add(v.grp.position.x, 3.2, v.grp.position.z, .04 * k, .09 * k, .34 * k, 9 + 6 * night); pool(v.grp.position.x, v.grp.position.z, 17, .05 * k, .13 * k, .55 * k); } }   // blått skjær rundt bilen og på bakken
   }
   if (night > .02) {
     const T = R.traffic; if (T && T.cars) for (const c of T.cars) if (c.px != null) car(c.px, c.pz, c.h, (CIV_MODELS[c.mi][0] === 'bus' ? 2.3 : 1.05) * VS, .3 * VS, .8);
-    if (City.lamps) for (const l of City.lamps) { add(l[0], 6.6, l[1], 1 * night, .78 * night, .5 * night, 16); add(l[0], .5, l[1], .25 * night, .19 * night, .12 * night, 22); }
+    if (City.lamps) City.lamps.forEach((l, i) => { const na = (i * 7) % 10 < 3, c = na ? [1, .62, .26] : [1, .87, .68];   // de fleste er varmhvite LED-armaturer, noen gamle natriumlamper (oransje)
+      add(l[0], 6.62, l[1], c[0] * night, c[1] * night, c[2] * night, 5); add(l[0], 6.4, l[1], c[0] * .16 * night, c[1] * .16 * night, c[2] * .16 * night, 15);
+      pool(l[0], l[1], 10.5, c[0] * .36 * night, c[1] * .36 * night, c[2] * .36 * night); });
   }
+  // branner: flakkende oransje glød på bakken
+  if (S) for (const id in S.incidents) { const inc = S.incidents[id]; if (inc.fx !== 'fire' || inc.state === 'ferdig' || inc.state === 'feilet') continue; const f = .75 + .25 * Math.sin(R.time * 9 + inc.loc.x) * Math.sin(R.time * 5.3); pool(inc.loc.x, inc.loc.z, 24, (.35 + .5 * night) * f, (.13 + .2 * night) * f, .03 * f); }
+  R.lightFrame(S, night);
   R.glowMat.uniforms.uK.value = R.dpr / R.mpp; const a = R.glowPts.geometry.attributes; a.position.needsUpdate = a.aColor.needsUpdate = a.aSize.needsUpdate = true; R.glowPts.geometry.setDrawRange(0, n);
+  const pa = R.poolMesh.geometry.attributes; pa.position.needsUpdate = pa.aColor.needsUpdate = pa.aShape.needsUpdate = true; R.poolMesh.geometry.setDrawRange(0, q * 6); R.poolMesh.visible = q > 0;
+};
+/** Punktlysene: de nærmeste blinkende blålysene lyser opp husvegger og biler i takt, og branner kaster flakkende oransje lys. */
+R.lightFrame = function (S, night) {
+  if (!R.pl) return; const c = R.map.getCenter(), cp = R.world.proj.toXZ(c.lat, c.lng), src = [];
+  if (S && R.views) {
+    for (const id in R.views.units) { const v = R.views.units[id], u = S.units[id]; if (!u || !v.grp.visible || !v.flash) continue; src.push({ d: Math.hypot(v.grp.position.x - cp.x, v.grp.position.z - cp.z), x: v.grp.position.x, y: 3.2, z: v.grp.position.z, col: 0x3d6dff, i: v.flash.on ? (.7 + 1.8 * night) : 0, dist: 42 }); }
+    for (const id in S.incidents) { const inc = S.incidents[id]; if (inc.fx !== 'fire' || inc.state === 'ferdig' || inc.state === 'feilet') continue; const f = .8 + .2 * Math.sin(R.time * 11 + inc.loc.z) * Math.sin(R.time * 4.1);
+      src.push({ d: Math.hypot(inc.loc.x - cp.x, inc.loc.z - cp.z) * .8, x: inc.loc.x, y: 4 + Math.min(20, (inc.floors || 1) * 2), z: inc.loc.z, col: 0xff7a2e, i: (1.1 + 2.2 * night) * f, dist: 70 }); }
+  }
+  src.sort((a, b) => a.d - b.d);
+  R.pl.forEach((p, k) => { const s = src[k]; if (!s || s.d > 900) { p.intensity = 0; return; } p.position.set(s.x, s.y, s.z); p.color.setHex(s.col); p.intensity = s.i; p.distance = s.dist; });
 };
 /** Kameraet følger valgt enhet (stopper når spilleren drar i kartet). */
 R.followFrame = function (S, dt) {
@@ -1055,7 +1098,6 @@ R.sync = function (S, dt) {
   for (const id in V.masts) { const v = V.masts[id], m = masts[id]; v.pin.visible = far > 40; R.pinAt(v.pin, m.x, v.h, m.z, pinPx.mast); v.beacon.material.color.set(m.down ? 0x555555 : (Math.sin(t * 3 + id.length) > 0 ? 0xf2a0a0 : 0xa77878)); v.pin.material.opacity = m.down ? 0.45 : 1; }
   for (const id in S.units) if (!V.units[id]) R.addUnitView(S.units[id]);
   for (const id in V.units) if (!S.units[id]) { R.dyn.remove(V.units[id].grp); R.dyn.remove(V.units[id].pin); delete V.units[id]; if (V.ghosts[id]) { R.dyn.remove(V.ghosts[id]); delete V.ghosts[id]; } }
-  const flash = Math.floor(t * 5) % 2;
   for (const id in V.units) {
     const v = V.units[id], u = S.units[id], T = UT[u.type], show = u.vis !== false && u.contact !== 'ingen';
     v.grp.visible = show;
@@ -1069,8 +1111,9 @@ R.sync = function (S, dt) {
     const hx = Math.sin(u.h || 0), hz = Math.cos(u.h || 0), lane = v.lane;
     const px = u.x - hz * lane, pz = u.z + hx * lane, alt = (u.alt || 0) * 6;
     v.grp.position.set(px, alt, pz); v.h = lerpAngle(v.h, u.h || 0, 0.25); v.grp.rotation.y = v.h;
-    const siren = u.siren && T.model !== 'foot';
-    for (let i = 0; i < v.lights.length; i++) v.lights[i].visible = siren ? ((i + flash) % 2 === 0) : false;
+    const siren = R.blueOn(u, T);
+    const fl = siren ? R.flashOf(id, t) : null; v.flash = fl;
+    for (let i = 0; i < v.lights.length; i++) { const m = v.lights[i]; m.visible = !!fl && (m.position.x < 0 ? fl.l : fl.r); }
     if (v.rotor) v.rotor.rotation.y += (u.status === 'ledig' ? 0 : 22) * dt;
     if (v.rotor2) v.rotor2.rotation.x += (u.status === 'ledig' ? 0 : 30) * dt;
     if (v.halo) { v.halo.rotation.z += dt * 1.2; v.halo.material.opacity = 0.6 + 0.3 * Math.sin(t * 4); }

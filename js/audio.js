@@ -45,7 +45,7 @@ const Sound = {
   /** Sirener: de tre nærmeste kjøretøyene med blålys høres. */
   sirenFrame(S, dt) {
     if (!Sound.ctx) return; const c = Sound.ctx, t = c.currentTime, live = Sound.ready() && S && !S.paused && Game.mode === 'play'; Sound.t += dt;
-    const near = []; if (live) for (const id in S.units) { const u = S.units[id]; if (!u.siren || u.vis === false || UT[u.type].foot || UT[u.type].boat) continue; const d = Math.hypot(u.x - R.camPos.x, u.z - R.camPos.z, R.camPos.y); if (d < 900) near.push({ u, d }); }
+    const near = []; if (live) for (const id in S.units) { const u = S.units[id]; if (!u.siren || u.status === 'pastedet' || u.vis === false || UT[u.type].foot || UT[u.type].boat) continue; const d = Math.hypot(u.x - R.camPos.x, u.z - R.camPos.z, R.camPos.y); if (d < 900) near.push({ u, d }); }
     near.sort((a, b) => a.d - b.d); const keep = new Set(near.slice(0, 3).map(o => o.u.id));
     for (const id in Sound.sirens) if (!keep.has(id)) { const s = Sound.sirens[id]; s.g.gain.setTargetAtTime(0, t, .15); s.o.stop(t + .6); delete Sound.sirens[id]; }
     for (const { u, d } of near.slice(0, 3)) {
