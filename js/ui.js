@@ -50,8 +50,8 @@ UI.init = function () {
   Bus.on('toast', m => UI.toast(m.msg, m.kind));
   Bus.on('log', e => UI.pushMini(e));
   Bus.on('levelup', d => UI.levelUp(d));
-  Radio.init(); Sound.init(); Grade.init(); Bus.on('dayReport', r => { if (Game.mode === 'play') Goals.report(r); }); $('#btnRadio').classList.toggle('on', Radio.enabled);
-  $('#btnRadio').addEventListener('click', () => { Radio.enabled = !Radio.enabled; Radio.unlock(); if (!Radio.enabled && 'speechSynthesis' in window) speechSynthesis.cancel(); Radio.queue = []; $('#btnRadio').classList.toggle('on', Radio.enabled); UI.toast(Radio.enabled ? (Radio.listen.size ? 'Radio på' : 'Radio på – velg talegrupper å lytte på under Nødnett') : 'Radio av', 'info'); });
+  Radio.init(); Sound.init(); Grade.init(); RadioUI.init(); Bus.on('dayReport', r => { if (Game.mode === 'play') Goals.report(r); }); $('#btnRadio').classList.toggle('on', RadioUI.open);
+  $('#btnRadio').addEventListener('click', () => RadioUI.toggle());   // vis/skjul radioen (av/på og lydstyrke sitter på selve radioen)
   Bus.on('incident', inc => { UI.dirty = true; if (Game.mode === 'play') UI.renderTab(true); if (UI.sheet === 0 && window.innerWidth < 900) UI.pulseTab('hendelser'); });
   Bus.on('alarm', al => { UI.dirty = true; UI.alarmBar(); R.focus(S.units[al.unitId].x, S.units[al.unitId].z, 80); });
   Bus.on('incidentDone', () => { UI.dirty = true; });
@@ -507,8 +507,11 @@ UI.tabNodnett = function () {
   let h = '<div class="card"><div class="row"><i class="dot ' + (ns === 'g' ? '' : ns) + '"></i><div class="grow"><b>' + (ns === 'g' ? 'Nettet fungerer normalt' : ns === 'y' ? 'Høy belastning eller svak dekning' : 'Utfall eller overbelastning!') + '</b><div class="xs muted">' + Net.techName() + ' · god/svak dekning på ' + cov + ' % av landarealet</div></div><button class="btn sm' + (S.settings.cover ? ' net' : '') + '" data-act="cover">' + icon('layers') + ' Dekning</button></div></div>';
   const alarms = S.net.alarms.filter(a => !a.done);
   for (const al of alarms) { const u = S.units[al.unitId], inc = S.incidents[al.incId]; if (!u) continue; h += '<div class="card" style="background:#f6dcd5;border-color:#d9695a"><div class="row">' + icon('warn') + '<div class="grow"><b>NØDKNAPP: ' + esc(u.name) + '</b><div class="sm">' + esc(inc ? inc.loc.addr : '') + ' · ' + Math.max(0, Math.ceil(al.deadline - S.t)) + ' min igjen</div></div><button class="btn clay sm" data-act="sendhelp" data-id="' + al.id + '">Send hjelp</button></div></div>'; }
-  h += '<h3 class="sec">Radio – lytt på samband</h3><div class="card">' + Radio.channels().map(c => '<button class="opt' + (Radio.listen.has(c.id) ? ' on' : '') + '" data-act="listen" data-id="' + esc(c.id) + '"><div class="av" style="background:' + (Radio.listen.has(c.id) ? '#7b9a79' : '#B7BDB8') + '">' + icon(Radio.listen.has(c.id) ? 'headset' : 'radio') + '</div><div class="grow"><div class="b sm">' + esc(c.navn) + '</div><div class="xs muted">' + (Radio.listen.has(c.id) ? 'Lytter' : 'Trykk for å lytte') + '</div></div></button>').join('')
-    + '<div class="xs muted" style="margin-top:6px">Meldingene leses opp med radioklang. Snakk med en enhet fra Enheter-fanen. ' + ('speechSynthesis' in window ? '' : 'Nettleseren din støtter ikke talesyntese.') + '</div></div>';
+  h += '<h3 class="sec">Radio – kanal og skanneliste</h3><div class="card"><div class="row" style="margin-bottom:8px"><div class="grow"><div class="xs muted">' + (Net.vhf() ? 'VHF-kanal' : 'Valgt talegruppe') + '</div><b>' + esc(Net.vhf() ? 'Kanal ' + (RadioUI.vhfIndex() + 1) + ' · ' + RadioUI.vhfName(Radio.channel) : RadioUI.tgName(Radio.channel)) + '</b></div>'
+    + '<button class="btn sm' + (Radio.scan ? ' net' : '') + '" data-act="rscan">Skann ' + (Radio.scan ? 'på' : 'av') + '</button><button class="btn sm primary" data-act="rshow">' + icon('radio') + ' Radio</button></div>'
+    + Radio.channels().map(c => { const cur = c.id === Radio.channel, inL = Radio.listen.has(c.id); return '<div class="opt' + (cur ? ' on' : '') + '"><div class="av" style="background:' + (cur ? '#7b9a79' : inL ? '#A99BCB' : '#B7BDB8') + '">' + icon(cur ? 'headset' : 'radio') + '</div><div class="grow"><div class="b sm">' + esc(c.navn) + '</div><div class="xs muted">' + (cur ? 'Valgt kanal' : inL ? 'I skannelisten' : 'Ikke i skannelisten') + '</div></div>'
+      + (cur ? '' : '<button class="btn xs" data-act="rch" data-id="' + esc(c.id) + '">Velg</button>') + '<button class="btn xs' + (inL ? ' net' : '') + '" data-act="listen" data-id="' + esc(c.id) + '">' + (inL ? 'Skann ✓' : 'Skann') + '</button></div>'; }).join('')
+    + '<div class="xs muted" style="margin-top:6px">Du hører den valgte kanalen, og med skanning også kanalene i skannelisten. Bytt kanal med velgeren på toppen av radioen (eller [ og ]). PTT-knappen på siden lar deg snakke med en enhet. ' + ('speechSynthesis' in window ? '' : 'Nettleseren din støtter ikke talesyntese.') + '</div></div>';
   h += '<h3 class="sec">' + (Net.vhf() ? 'Kanaler' : 'Talegrupper') + '</h3>';
   const groups = Net.groups();
   for (const tg of ['BRANN', 'POLITI', 'HELSE', 'REDNING']) {
@@ -622,6 +625,9 @@ UI.act = function (act, d) {
     case 'bistand': if (inc) UI.openBistand(inc); break;
     case 'samv': if (inc) UI.res(Sim.createSamvirke(inc)); break;
     case 'listen': Radio.toggle(id); UI.dirty = true; break;
+    case 'rch': Radio.unlock(); Radio.setChannel(id); Radio.squelch(0.09, false); UI.dirty = true; break;
+    case 'rscan': Radio.scan = !Radio.scan; Radio.save(); UI.dirty = true; RadioUI.render(); break;
+    case 'rshow': RadioUI.toggle(true); break;
     case 'follow': if (R.follow === id) { R.follow = null; UI.toast('Slutter å følge', 'info'); } else { R.follow = id; UI.toast('Følger ' + S.units[id].name + ' – dra i kartet for å stoppe', 'info'); } UI.dirty = true; break;
     case 'talk': UI.mc || Radio.talk(id); break;
     case 'answer': { const c = Sim.answerCall(id); if (c) { UI.toast('Du snakker med innringer: «' + c.text + '»', 'info'); UI.dirty = true; } break; }

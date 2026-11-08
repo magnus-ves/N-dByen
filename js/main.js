@@ -50,6 +50,7 @@ Game.showCity = async function (id, season) {
   R.setEnv(Game.envFor(season), true);
 };
 Game.toMenu = function (cityId) {
+  if (RadioUI.el) { RadioUI.el.className = 'hidden'; RadioUI.el.innerHTML = ''; }
   S = null; Game.mode = 'menu'; Game.place = null; UI.sel = null; $('#alarmBar').innerHTML = '';
   if (R.world) { R.clearViews(); R.showCoverage(false); } R.setLabels([]);
   UI.screenCities();
@@ -105,6 +106,7 @@ Game.continueCity = async function (id) {
   }
 };
 Game.enterPlay = function (isNew) {
+  setTimeout(() => RadioUI.build(), 0);   // radioen vises igjen hvis den var åpen
   Game.mode = 'play'; UI.hideScreen(); UI.sel = null; UI.lastHtml = '';
   $('#hud').classList.remove('hidden'); $('#topbar').classList.remove('hidden'); $('#mapTools').classList.remove('hidden'); $('#miniLog').classList.remove('hidden'); $('#miniLog').innerHTML = ''; $('#panel').classList.remove('hidden');
   UI.setSheet(1); UI.setTab('hendelser'); UI.layout(); Radio.defaults();

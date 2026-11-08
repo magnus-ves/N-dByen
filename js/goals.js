@@ -6,7 +6,7 @@ const Goals = {
   LIST: [
     { id: 'svar', navn: 'Svar på et nødanrop selv', tekst: 'Trykk «Svar» når det ringer i nødsentralen.', kr: 5000, xp: 10, ok: s => s.flags.answered },
     { id: 'send', navn: 'Send en enhet ut', tekst: 'Trykk «Send enheter» på en hendelse.', kr: 5000, xp: 10, ok: s => (s.flags.dispatched || 0) >= 1 },
-    { id: 'lytt', navn: 'Lytt på sambandet', tekst: 'Velg en talegruppe under Nødnett → Radio.', kr: 3000, xp: 5, ok: s => s.flags.listened },
+    { id: 'lytt', navn: 'Lytt på sambandet', tekst: 'Trykk på radioknappen til venstre og bytt kanal på radioen.', kr: 3000, xp: 5, ok: s => s.flags.listened },
     { id: 'los3', navn: 'Løs 3 oppdrag', tekst: 'Få enhetene frem og la dem gjøre jobben.', kr: 15000, xp: 20, ok: s => s.stats.solved >= 3 },
     { id: 'snakk', navn: 'Snakk med en enhet', tekst: 'Enheter → velg en enhet → «Snakk».', kr: 3000, xp: 5, ok: s => s.flags.talked },
     { id: 'kjop', navn: 'Kjøp et nytt kjøretøy', tekst: 'Butikk → Kjøretøy. Mannskap følger med.', kr: 10000, xp: 15, ok: s => s.flags.bought },

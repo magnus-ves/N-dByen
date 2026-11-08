@@ -8,8 +8,9 @@
    ========================================================================== */
 const Radio = {
   listen: new Set(), queue: [], speaking: false, ctx: null, voices: [], clips: {}, enabled: true,
+  channel: null, scan: true, volume: 0.9,   // valgt kanal/talegruppe på radioen, skanning av skannelisten, lydstyrke
   init() {
-    try { const saved = JSON.parse(localStorage.getItem('nodbyen.radio') || '[]'); saved.forEach(t => Radio.listen.add(t)); } catch (e) { /* ignorer */ }
+    try { const saved = JSON.parse(localStorage.getItem('nodbyen.radio') || '[]'); saved.forEach(t => Radio.listen.add(t)); const st = JSON.parse(localStorage.getItem('nodbyen.radio2') || '{}'); if (st.channel) Radio.channel = st.channel; if (st.scan != null) Radio.scan = !!st.scan; if (st.volume != null) Radio.volume = st.volume; } catch (e) { /* ignorer */ }
     if ('speechSynthesis' in window) { const load = () => { Radio.voices = speechSynthesis.getVoices(); }; load(); speechSynthesis.onvoiceschanged = load; }
     Bus.on('log', e => Radio.onLog(e));
     Bus.on('dispatch', d => Radio.dispatchTalk(d.inc, d.u));
@@ -19,11 +20,14 @@ const Radio = {
   },
   /** Ny runde: lytt på egne etaters talegrupper (og samvirke) hvis spilleren ikke har valgt noe selv. */
   defaults() {
+    if (!Radio.channel) { const own = ETATER.find(a => S.agencies[a]); Radio.channel = own ? AGENCIES[own].tg : 'SENTRAL'; }
     if (Radio.listen.size) return;
     for (const a of ETATER) if (S.agencies[a]) Radio.listen.add(AGENCIES[a].tg);
     Radio.listen.add('REDNING'); for (let k = 1; k <= 6; k++) Radio.listen.add('SAMVIRKE ' + k); Radio.save();
   },
-  save() { try { localStorage.setItem('nodbyen.radio', JSON.stringify([...Radio.listen])); } catch (e) { /* ignorer */ } },
+  save() { try { localStorage.setItem('nodbyen.radio', JSON.stringify([...Radio.listen])); localStorage.setItem('nodbyen.radio2', JSON.stringify({ channel: Radio.channel, scan: Radio.scan, volume: Radio.volume })); } catch (e) { /* ignorer */ } },
+  /** Bytt kanal/talegruppe på radioen: bare den (og skannelisten hvis skanning er på) høres. */
+  setChannel(tg) { if (!tg || tg === Radio.channel) return; Radio.channel = tg; Radio.queue = Radio.queue.filter(m => Radio.heard({ tg: m.tg })); if (Radio.speaking && 'speechSynthesis' in window) speechSynthesis.cancel(); Radio.save(); Bus.emit('radioChannel', tg); },
   /** Talegrupper som kan avlyttes (VHF har kanaler i stedet for talegrupper). */
   channels() {
     const vhf = Net.vhf(), list = [
@@ -34,7 +38,7 @@ const Radio = {
     return list;
   },
   toggle(tg) { if (Radio.listen.has(tg)) Radio.listen.delete(tg); else { Radio.listen.add(tg); Radio.unlock(); if (S) S.flags.listened = 1; } Radio.save(); },
-  heard(e) { const tg = e.tg; return Radio.listen.has(tg) || (tg.startsWith('SAMVIRKE') && Radio.listen.has('SAMVIRKE*')); },
+  heard(e) { const tg = e.tg; if (!tg) return false; if (tg === Radio.channel) return true; return Radio.scan && (Radio.listen.has(tg) || (tg.startsWith('SAMVIRKE') && Radio.listen.has('SAMVIRKE*'))); },
   onLog(e) {
     if (!Radio.enabled || Game.mode !== 'play' || !Radio.heard(e) || e.kind === 'quiet') return;
     if (/^(Utrykning til|Varslet –|Går til skadested)|: (Utrykning til|Varslet|Går til)/.test(e.msg) || e.msg === 'Fremme på stedet') return;   // dekkes av dialogene under
@@ -92,8 +96,8 @@ const Radio = {
     const n = Math.floor(c.sampleRate * len), buf = c.createBuffer(1, n, c.sampleRate), d = buf.getChannelData(0);
     for (let i = 0; i < n; i++) { const env = i < 200 ? i / 200 : Math.max(0, 1 - (i - 200) / (n - 200)); d[i] = (Math.random() * 2 - 1) * env * (loud ? 0.35 : 0.22); }
     const src = c.createBufferSource(), bp = c.createBiquadFilter(), g = c.createGain(); bp.type = 'bandpass'; bp.frequency.value = 1900; bp.Q.value = 0.7; g.gain.value = 0.6;
-    src.buffer = buf; src.connect(bp).connect(g).connect(c.destination); src.start();
-    const o = c.createOscillator(), og = c.createGain(); o.frequency.value = loud ? 1400 : 1050; og.gain.setValueAtTime(0.06, c.currentTime); og.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.07); o.connect(og).connect(c.destination); o.start(); o.stop(c.currentTime + 0.08);
+    g.gain.value = 0.6 * Radio.volume; src.buffer = buf; src.connect(bp).connect(g).connect(c.destination); src.start();
+    const o = c.createOscillator(), og = c.createGain(); o.frequency.value = loud ? 1400 : 1050; og.gain.setValueAtTime(0.06 * Radio.volume + 0.0001, c.currentTime); og.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.07); o.connect(og).connect(c.destination); o.start(); o.stop(c.currentTime + 0.08);
   },
   hash(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return (h >>> 0) / 4294967296; },
   voiceFor(who) {
@@ -117,12 +121,12 @@ const Radio = {
     Radio.queue.shift(); Radio.speakOne(m);
   },
   speakOne(m) {
-    Radio.speaking = true; Radio.unlock(); Radio.squelch(0.12, m.urgent);
+    Radio.speaking = true; Radio.unlock(); Radio.squelch(0.12, m.urgent); Bus.emit('radioRx', m);
     const key = Radio.clipKey(m.msg), clip = key && Radio.clips[key];
-    const done = () => { Radio.squelch(0.18, false); Radio.speaking = false; setTimeout(Radio.next, 250); };
+    const done = () => { Radio.squelch(0.18, false); Radio.speaking = false; Bus.emit('radioRxEnd', m); setTimeout(Radio.next, 250); };
     if (clip) { const a = new Audio(clip); a.onended = done; a.onerror = done; a.play().catch(done); return; }
     const u = new SpeechSynthesisUtterance(m.who + '. ' + m.msg.replace(/–/g, ',').replace(/\(.*?\)/g, '')), v = Radio.voiceFor(m.who);
-    u.lang = v.voice ? v.voice.lang : 'nb-NO'; if (v.voice) u.voice = v.voice; u.pitch = v.pitch; u.rate = m.urgent ? v.rate + 0.15 : v.rate; u.volume = 0.9;
+    u.lang = v.voice ? v.voice.lang : 'nb-NO'; if (v.voice) u.voice = v.voice; u.pitch = v.pitch; u.rate = m.urgent ? v.rate + 0.15 : v.rate; u.volume = Radio.volume;
     u.onend = done; u.onerror = done; setTimeout(() => speechSynthesis.speak(u), 130);
   },
   /** Nøkkel for ferdiginnspilte lydfiler (audio/radio/<nøkkel>.mp3) for faste fraser. */
@@ -151,7 +155,7 @@ const Radio = {
     else if (/mannskap|folk|hvem/.test(t)) reply = Staff.needs(u) ? 'Vi er ' + Staff.of(u).length + ' på bilen: ' + Staff.of(u).map(p => p.navn.split(' ')[0]).join(', ') + '.' : 'Vi er ' + UT[u.type].crew + ' mannskap.';
     else reply = pick(['Mottatt.', 'Mottatt, det tar vi.', 'Oppfattet.']);
     setTimeout(() => { if (S && S.units[u.id]) Log.add(tg, u.name, reply, 'info'); }, 900 + delay * 600);
-    if (!Radio.listen.has(tg) && !(tg.startsWith('SAMVIRKE') && Radio.listen.has(tg))) { Radio.listen.add(tg); Radio.save(); }
+    if (!Radio.heard({ tg })) Radio.setChannel(tg);   // radioen går over på enhetens talegruppe så svaret høres
   },
   /** Dialog for å snakke med en enhet: hurtigknapper, fritekst og mikrofon (talegjenkjenning der nettleseren støtter det). */
   talk(uid) {
@@ -161,7 +165,7 @@ const Radio = {
     UI.modal({ title: icon('radio') + ' Samband: ' + esc(u.name), html: '<p class="muted sm">' + esc(UI.unitState(u)) + ' · talegruppe ' + esc(tgOf(u)) + ' · ' + (Net.vhf() ? 'VHF' : 'Nødnett') + '</p>'
       + '<div class="row wrap" style="gap:6px">' + quick.map(q => '<button class="btn sm" data-q="' + esc(q) + '">' + esc(q) + '</button>').join('') + '</div>'
       + '<div class="row" style="margin-top:10px;gap:6px"><input id="rTxt" class="inp grow" placeholder="Skriv en melding, f.eks. «Hvor er dere?»" autocomplete="off">' + (SR ? '<button class="btn" id="rMic" title="Snakk">' + icon('mic') + '</button>' : '') + '<button class="btn primary" id="rSend">Send</button></div>'
-      + '<p class="xs muted" style="margin-top:8px">Svarene høres på radioen når du lytter på talegruppen (slås på automatisk).</p>',
+      + '<p class="xs muted" style="margin-top:8px">Radioen går over på enhetens talegruppe, så svaret høres.</p>',
       buttons: [{ label: 'Lukk', cls: 'ghost' }],
       init: h => {
         const send = txt => { if (!txt.trim()) return; Radio.command(u, txt.trim()); h.close(); };

@@ -232,3 +232,94 @@ code{background:rgba(62,74,63,.1);padding:1px 6px;border-radius:8px;font-size:12
 .btn.net{background:#E8E2F4}
 
 .goals .goal{display:flex;gap:10px;align-items:center;margin-top:8px}
+
+/* ==========================================================================
+   Radioene: Nødnett-terminal og VHF-håndradio (js/radioui.js)
+   ========================================================================== */
+#radioDev{position:absolute;z-index:16;left:64px;top:calc(var(--topH,104px) + 8px + var(--safe-t));width:178px;filter:drop-shadow(0 18px 26px rgba(10,14,12,.38)) drop-shadow(0 3px 6px rgba(10,14,12,.3));touch-action:none}
+#radioDev.vhf{width:166px}
+.rd-top{display:flex;gap:4px;align-items:center;padding:4px;border-radius:14px;background:linear-gradient(180deg,rgba(40,44,47,.86),rgba(22,24,26,.86));-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);margin-bottom:5px;cursor:grab;border:1px solid rgba(255,255,255,.08)}
+.rd-top:active{cursor:grabbing}
+.rd-top button{padding:3px 9px;border-radius:9px;font-size:11px;font-weight:900;color:#c3c9cd;letter-spacing:.02em;transition:background .2s,color .2s}
+.rd-top button.on{background:linear-gradient(180deg,#fff,#dfe5e8);color:#1b1e21;box-shadow:0 2px 6px rgba(0,0,0,.25)}
+.rd-top button[data-r="close"]{color:#8d969c;padding:3px 7px}
+.rd-wrap{position:relative}
+.rd-svg{display:block;width:100%;height:auto;overflow:visible}
+.rd-svg .kt{font:900 9.5px Nunito,system-ui,sans-serif;fill:#eef1f3;text-anchor:middle}
+.rd-svg .ks{font:800 5.2px Nunito,system-ui,sans-serif;fill:#9aa3a9;text-anchor:middle;letter-spacing:.06em}
+.rd-svg .brand{font:900 7px Nunito,system-ui,sans-serif;fill:#5c646a;text-anchor:middle;letter-spacing:.32em}
+.hz{position:absolute;border-radius:9px;background:transparent;transition:background .12s}
+.hz:hover{background:rgba(255,255,255,.07)}
+.hz:active{background:rgba(255,255,255,.16)}
+.rd-scr{position:absolute;overflow:hidden;pointer-events:none;font-family:'Nunito',system-ui,sans-serif;line-height:1.12}
+.rd-scr.off{background:#050607!important;box-shadow:none!important}
+.rd-scr .bars{display:inline-flex;gap:1px;align-items:flex-end;height:8px}.rd-scr .bars i{width:2px;border-radius:1px;background:currentColor;opacity:.25}
+.rd-scr .bars i:nth-child(1){height:3px}.rd-scr .bars i:nth-child(2){height:5px}.rd-scr .bars i:nth-child(3){height:6.5px}.rd-scr .bars i:nth-child(4){height:8px}.rd-scr .bars i.on{opacity:1}
+.rd-scr .bat{display:inline-block;flex:none;width:11px;height:6px;border:1px solid currentColor;border-radius:1.5px;position:relative;margin-left:3px;background:linear-gradient(90deg,currentColor 75%,transparent 75%);background-clip:content-box;padding:1px}
+.rd-scr .bat::after{content:'';position:absolute;right:-3px;top:1px;width:1.5px;height:2.5px;background:currentColor;border-radius:0 1px 1px 0}
+.rd-scr .vol{display:inline-flex;gap:1px;align-items:flex-end;margin-left:4px;vertical-align:middle}.rd-scr .vol i{width:2px;height:5px;background:currentColor;opacity:.25}.rd-scr .vol i.on{opacity:.9}
+/* Nødnett-terminal: fargeskjerm */
+.nod .rd-scr{left:17.6%;top:20.7%;width:64.8%;height:23.6%;border-radius:5px;background:linear-gradient(180deg,#123a5c 0%,#0b2236 55%,#081827 100%);color:#e8f2fc;padding:3px 5px;display:flex;flex-direction:column;box-shadow:inset 0 0 12px rgba(80,160,255,.18)}
+.nod .rd-scr .sb{display:flex;align-items:center;gap:3px;font-size:6.4px;white-space:nowrap;font-weight:900;color:#b9d7f5;border-bottom:1px solid rgba(185,215,245,.22);padding-bottom:2px}
+.nod .rd-scr .sb .net{letter-spacing:.02em}.nod .rd-scr .sb .tmo{opacity:.65}.nod .rd-scr .sb .bat{margin-right:3px}.nod .rd-scr .grow{flex:1}
+.nod .rd-scr .mid{flex:1;display:flex;flex-direction:column;justify-content:center;gap:1px;min-height:0}
+.nod .rd-scr .lbl{font-size:6.6px;font-weight:800;color:#8fb6dc;text-transform:uppercase;letter-spacing:.05em}.nod .rd-scr .lbl b{color:#ffd166}
+.nod .rd-scr .big{font-size:12.5px;font-weight:900;letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 0 6px rgba(140,200,255,.35)}
+.nod .rd-scr .big.dim{color:#8fa9c2}
+.nod .rd-scr .sub{font-size:7px;font-weight:800;color:#a9c8e6;display:flex;align-items:center}.nod .rd-scr .tx{color:#ff6b5e}
+.nod .rd-scr .rx{margin-top:2px;font-size:7px;font-weight:700;color:#d8e8f8;background:rgba(255,255,255,.07);border-radius:3px;padding:2px 3px;max-height:2.4em;overflow:hidden}
+.nod .rd-scr .rx b{color:#7ee0a1}.nod .rd-scr .rx.live{background:rgba(57,211,83,.16);box-shadow:inset 0 0 0 1px rgba(57,211,83,.45)}.nod .rd-scr .dim{opacity:.55}
+.nod .rd-scr .sk{display:flex;justify-content:space-between;font-size:7px;font-weight:900;color:#0b2236;margin:2px -5px -3px;padding:1px 5px;background:linear-gradient(180deg,#cfe3f6,#a8c8e8)}
+.nod .rd-scr .menu{flex:1;display:flex;flex-direction:column;gap:1px;padding-top:2px}.nod .rd-scr .mt{font-size:6.6px;color:#8fb6dc;font-weight:900;text-transform:uppercase}
+.nod .rd-scr .mi{font-size:8px;font-weight:800;padding:1px 3px;border-radius:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.nod .rd-scr .mi.on{background:#ffd166;color:#0b2236}.nod .rd-scr .mi.cur::after{content:' ●';color:#7ee0a1}
+.nod .rd-scr.em{background:linear-gradient(180deg,#7a1710,#4a0c08);animation:emBlink .5s steps(2) infinite}.nod .rd-scr.em .big{color:#fff}
+@keyframes emBlink{50%{filter:brightness(1.5)}}
+/* VHF: liten LCD med bakgrunnslys */
+.vhf .rd-scr{left:17.9%;top:37.6%;width:64.2%;height:8%;border-radius:3px;background:linear-gradient(180deg,#c9e29a,#a9c978);color:#1d2a12;padding:2px 4px;font-family:'Courier New',ui-monospace,monospace;box-shadow:inset 0 1px 4px rgba(0,0,0,.35)}
+.vhf .rd-scr .l1{display:flex;align-items:center;gap:3px;font-size:6px;height:8px}.vhf .rd-scr .tag{font-size:6px;border:1px solid currentColor;border-radius:2px;padding:0 1.5px;line-height:1}.vhf .rd-scr .tag.tx{background:#1d2a12;color:#c9e29a}.vhf .rd-scr .l1 .bat{margin-left:auto}
+.vhf .rd-scr .l2{display:flex;align-items:baseline;gap:4px;font-weight:900}.vhf .rd-scr .chn{font-size:12px;letter-spacing:-.02em}.vhf .rd-scr .nm{font-size:8px}
+.vhf .rd-scr .l3{font-size:5.6px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:899px){#radioDev{left:auto;right:8px;bottom:auto;top:calc(var(--topH,104px) + 6px + var(--safe-t));transform:scale(.56);transform-origin:top right;z-index:19}}
+
+/* ==========================================================================
+   UI 2.0 – litt mer liv: lysere glass, myke gradienter, glød og bevegelse
+   ========================================================================== */
+:root{--glass:rgba(251,248,240,.72);--accent:linear-gradient(135deg,#8fb08b,#5f8a6a);--accent-net:linear-gradient(135deg,#b7a9de,#8a78c4)}
+.glass{background:linear-gradient(160deg,rgba(255,253,247,.82),rgba(246,240,226,.7));-webkit-backdrop-filter:blur(18px) saturate(1.3);backdrop-filter:blur(18px) saturate(1.3);border:1px solid rgba(255,255,255,.75);box-shadow:0 12px 36px rgba(48,62,52,.18),inset 0 1px 0 rgba(255,255,255,.9)}
+#topbar{box-shadow:0 14px 40px rgba(48,62,52,.2),inset 0 1px 0 rgba(255,255,255,.95)}
+.tbc{background:linear-gradient(180deg,rgba(255,255,255,.88),rgba(255,255,255,.6));box-shadow:inset 0 1px 0 #fff,0 1px 3px rgba(48,62,52,.08);transition:transform .2s var(--ease),box-shadow .2s}
+.tbc.clickable:hover{transform:translateY(-1px);box-shadow:inset 0 1px 0 #fff,0 4px 12px rgba(48,62,52,.14)}
+.tbc.money .ic{color:#b88a2a}.tbc#tbClock .ic{color:#6E9BAE}#tbInc.has .ic,#tbInc.hot .ic{color:#9c3f33}
+#tbInc.hot{animation:hotPulse 1.4s ease-in-out infinite}
+@keyframes hotPulse{0%,100%{box-shadow:0 0 0 0 rgba(217,105,90,.0)}50%{box-shadow:0 0 0 5px rgba(217,105,90,.22)}}
+.tb-speed button.on,.btn.primary{background:var(--accent);color:#fff;box-shadow:0 4px 14px rgba(95,138,106,.38),inset 0 1px 0 rgba(255,255,255,.35)}
+.btn.primary:hover{filter:brightness(1.06);box-shadow:0 6px 18px rgba(95,138,106,.48),inset 0 1px 0 rgba(255,255,255,.35)}
+.btn{transition:transform .18s var(--ease),background .2s,box-shadow .2s,filter .2s}
+.btn:hover{transform:translateY(-1px)}
+.btn.clay{background:linear-gradient(135deg,#d98d72,#b9644b);box-shadow:0 4px 14px rgba(185,100,75,.35)}
+.ib{background:linear-gradient(180deg,rgba(255,255,255,.92),rgba(255,255,255,.68));box-shadow:0 6px 16px rgba(48,62,52,.16),inset 0 1px 0 #fff}
+.ib:hover{transform:translateY(-1px)}
+.ib.on{background:var(--accent-net);box-shadow:0 6px 18px rgba(138,120,196,.45)}
+.tab{transition:background .25s,color .25s,transform .2s var(--ease)}
+.tab:hover{color:var(--ink)}
+.tab.on{background:linear-gradient(180deg,#fff,rgba(255,255,255,.75));box-shadow:0 6px 16px rgba(48,62,52,.14),inset 0 1px 0 #fff}
+.tab.on .ic{color:#5f8a6a;transform:translateY(-1px)}
+.tab.on::after{content:'';position:absolute;left:30%;right:30%;bottom:2px;height:3px;border-radius:3px;background:var(--accent)}
+.card{background:linear-gradient(180deg,rgba(255,255,255,.78),rgba(255,255,255,.55));box-shadow:0 6px 18px rgba(48,62,52,.1),inset 0 1px 0 rgba(255,255,255,.9);transition:transform .25s var(--ease),box-shadow .25s}
+@media(hover:hover){.card:hover{transform:translateY(-1px);box-shadow:0 10px 24px rgba(48,62,52,.14),inset 0 1px 0 #fff}}
+.card.p1{box-shadow:0 0 0 1px rgba(217,105,90,.25),0 8px 22px rgba(217,105,90,.16)}
+.card .stripe{width:5px;box-shadow:0 0 12px currentColor}
+.card.p1 .stripe{color:var(--p1)}.card.p2 .stripe{color:var(--p2)}.card.p3 .stripe{color:var(--p3)}.card.p4 .stripe{color:var(--p4)}
+.toast{background:linear-gradient(160deg,rgba(255,253,247,.96),rgba(246,240,226,.92));border-left:4px solid var(--sage-d);box-shadow:0 12px 30px rgba(48,62,52,.2)}
+.toast.good{border-left-color:#5f8a6a}.toast.bad{border-left-color:#d9695a}.toast.warn{border-left-color:#e4ae4e}.toast.net{border-left-color:#8a78c4}
+.modal{background:linear-gradient(170deg,rgba(255,253,247,.97),rgba(246,240,226,.95));box-shadow:0 24px 60px rgba(30,40,34,.3),inset 0 1px 0 #fff}
+.mlog{background:linear-gradient(160deg,rgba(255,253,247,.86),rgba(246,240,226,.78))}
+.opt{transition:background .2s,border-color .2s,transform .18s var(--ease)}
+.opt:hover{background:#fff}
+.seg button.on{background:linear-gradient(180deg,#fff,#f4f1e8)}
+.tile{background:linear-gradient(180deg,rgba(255,255,255,.78),rgba(255,255,255,.52));box-shadow:inset 0 1px 0 #fff}
+.tile b{background:linear-gradient(135deg,#3E4A3F,#5f8a6a);-webkit-background-clip:text;background-clip:text;color:transparent}
+.logo h1{background:linear-gradient(135deg,#3E4A3F 20%,#5f8a6a 60%,#3E4A3F);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 2px 0 rgba(255,255,255,.6))}
+.logo h1 span{background:linear-gradient(135deg,#d98d72,#b9644b);-webkit-background-clip:text;background-clip:text;color:transparent}
+.ccard,.acard{box-shadow:0 14px 34px rgba(48,62,52,.16),inset 0 1px 0 #fff}
+.ccard:hover,.acard:hover{transform:translateY(-4px);box-shadow:0 20px 44px rgba(48,62,52,.22),inset 0 1px 0 #fff}
