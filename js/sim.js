@@ -409,8 +409,8 @@ const Staff = {
   },
   injure(u) {
     const c = Staff.of(u).filter(p => p.state === 'ok'); if (!c.length) return; const p = pick(c);
-    p.state = 'skadet'; p.until = S.t + 240; p.unitId = null; Staff.fill(u.stationId);
-    Log.add(tgOf(u), u.name, p.navn + ' er skadet og er ute i fire timer' + (Staff.ready(u) ? ' – reserve har tatt over' : ' – enheten mangler mannskap'), 'warn');
+    p.state = 'skadet'; p.until = S.t + 90; p.unitId = null; Staff.fill(u.stationId);
+    Log.add(tgOf(u), u.name, p.navn + ' er lettere skadet og er ute i halvannen time' + (Staff.ready(u) ? ' – reserve har tatt over' : ' – enheten mangler mannskap'), 'warn');
   },
   tick() {
     for (const p of Staff.list()) {
@@ -580,11 +580,22 @@ Sim.landingFor = function (inc) {
    ========================================================================== */
 const ZONE_MUL = { sentrum: 0.9, by: 1.0, bolig: 1.15, strand: 1.15, fjell: 1.5, park: 1.1 };
 Sim.active = () => Object.values(S.incidents).filter(i => i.state !== 'ferdig' && i.state !== 'feilet');
+/** Stasjonene til etaten som leder oppdraget (der den har enheter). */
+Sim.homePts = function (tpl) {
+  const ag = tpl.lead.find(a => S.agencies[a]); if (!ag) return [];
+  return Object.values(S.stations).filter(st => ST[st.type].org === ag && ST[st.type].rolle === 'etat' && Sim.unitsAt(st.id).length).map(st => WORLD.lotById.get(st.lotId)).filter(Boolean);
+};
+/** Oppdragene skjer oftest i nærheten av stasjonene dine (ditt distrikt), noen få lenger unna. */
+Sim.nearHome = function (tpl, gen) {
+  const pts = Sim.homePts(tpl); if (!pts.length) return gen();
+  const c = []; for (let i = 0; i < 6; i++) { const p = gen(); const d = Math.min(...pts.map(q => Math.hypot(p.x - q.x, p.z - q.z))); c.push({ p, w: Math.exp(-d / 2200) + 0.06 }); }
+  return wpick(c, o => o.w).p;
+};
 Sim.pickPlace = function (tpl) {
   const w = WORLD;
   switch (tpl.loc) {
-    case 'bygg': case 'hjem': case 'natt': return w.randomAddress(tpl.loc);
-    case 'vei': return w.randomRoadPlace();
+    case 'bygg': case 'hjem': case 'natt': return Sim.nearHome(tpl, () => w.randomAddress(tpl.loc));
+    case 'vei': return Sim.nearHome(tpl, () => w.randomRoadPlace());
     case 'park': { const p = pick(w.parks); return { x: p.x, z: p.z, rp: p.rp, addr: p.navn, zone: 'park', floors: 0, approach: p.approach }; }
     case 'vann': { const p = pick(w.waterfront); return { x: p.x, z: p.z, rp: p.rp, addr: p.navn + ' (kaikanten)', zone: 'by', floors: 0, water: true, approach: p.approach }; }
     case 'strand': {
@@ -596,7 +607,7 @@ Sim.pickPlace = function (tpl) {
     case 'fjell': { const p = pick(w.mountain); return { x: p.x + rr(-60, 60), z: p.z + rr(-60, 60), rp: p.rp, addr: p.navn + ' (turløype)', zone: 'fjell', floors: 0, approach: 6 + p.approach }; }
     case 'arr': break;
   }
-  return w.randomAddress('bygg');
+  return Sim.nearHome(tpl, () => w.randomAddress('bygg'));
 };
 Sim.waterfront = () => WORLD.waterfront;
 Sim.hasFjell = () => WORLD.mountain.length > 0;
@@ -667,8 +678,10 @@ Sim.rate = function () {
   if (!lam && Sim.staffedBeaches().length && isSummer()) lam = 0.05;
   return Math.min(0.67, lam * (cfg.incidentMul.total || 1) * (0.8 + 0.2 * cfg.diff) * (1 + 0.08 * (S.level - 1)));
 };
-Sim.pickTemplate = function () {
-  const info = Clock.cur, groups = {};
+Sim.pickTemplate = function (onlyKey) {
+  const info = Clock.cur, groups = {}, have = new Set(Object.values(S.units).filter(u => !u.bistand).map(u => u.type));
+  // oppdrag som krever enhetstyper du ikke har, kommer sjelden (de må løses med bistand)
+  const fits = tpl => tpl.slots.filter(x => x.req).every(x => x.accepts.some(t => have.has(t))) ? 1 : 0.12;
   for (const id in TEMPLATES) {
     const tpl = TEMPLATES[id]; if (tpl.w <= 0 || tpl.lvl > S.level) continue;
     const leadOwned = tpl.lead.some(a => S.agencies[a]), beachOk = tpl.volLead && Sim.staffedBeaches().length && info.season === 1;
@@ -679,22 +692,44 @@ Sim.pickTemplate = function () {
     if (tpl.loc === 'vann' && !Sim.waterfront().length) continue;
     if (tpl.loc === 'park' && !WORLD.parks.length) continue;
     if (tpl.loc === 'oy' && !Object.values(WORLD.beaches).some(b => b.island)) continue;
-    const m = tpl.w * tplMods(tpl, info); if (m <= 0.0001) continue;
+    const m = tpl.w * tplMods(tpl, info) * fits(tpl); if (m <= 0.0001) continue;
     const key = leadOwned ? tpl.lead.find(a => S.agencies[a]) : 'strand';
     (groups[key] = groups[key] || []).push({ id, w: m });
   }
+  if (onlyKey) { const c = groups[onlyKey] && wpick(groups[onlyKey], c => c.w); if (c) return c.id; }   // etaten som har ledig kapasitet
   const share = { brann: 1.0, politi: 1.15, ambulanse: 1.4, strand: 0.7 }, cand = [];
   for (const k in groups) { const sum = groups[k].reduce((a, c) => a + c.w, 0); for (const c of groups[k]) cand.push({ id: c.id, w: c.w / sum * share[k] }); }
   const c = wpick(cand, c => c.w); return c ? c.id : null;
 };
+/** Ledende etat for en mal eller hendelse (strandlivredderne leder når ingen etat som kan lede er opprettet). */
+Sim.leadKey = tpl => tpl.lead.find(a => S.agencies[a]) || 'strand';
+/** Hvor mange oppdrag hver etat skal ha samtidig: følger hvor mange enheter etaten har. Alt regnes i spilltid,
+    så forholdet mellom oppdrag og enheter er det samme på 1×, 5× og 20×. */
+Sim.caseTargets = function () {
+  const cfg = WORLD.cfg, n = {}, owned = ETATER.filter(a => S.agencies[a]), tod = Clock.tod(Clock.cur.hour);
+  for (const u of Object.values(S.units)) {
+    if (u.bistand || u.vis === false) continue; const T = UT[u.type];
+    if (u.type === 'livredder') { if (!Vol.onDuty() || !(S.beaches[u.beach] || {}).staffed) continue; const k = S.agencies.ambulanse ? 'ambulanse' : 'strand'; n[k] = (n[k] || 0) + .6; continue; }
+    if (ETATER.includes(T.org)) n[T.org] = (n[T.org] || 0) + 1;
+    else if (owned.length) { const k = S.agencies.ambulanse ? 'ambulanse' : owned[0]; n[k] = (n[k] || 0) + .35; }   // frivillige avlaster etatene
+  }
+  const mul = (cfg.incidentMul.total || 1) * (0.85 + 0.15 * cfg.diff) * (1 + 0.03 * (S.level - 1)) * (tod === 'natt' ? .8 : tod === 'rush' ? 1.1 : 1), out = {};
+  for (const k of owned) out[k] = Math.max(.7, (n[k] || 0) * .5 * mul);   // omtrent halvparten av enhetene er i arbeid
+  if (!owned.length && n.strand && isSummer()) out.strand = Math.max(.7, n.strand * .5);
+  return out;
+};
 Sim.spawnTick = function () {
   if (S.t < S.nextSpawn) return;
-  const lam = Sim.rate(); if (lam <= 0) { S.nextSpawn = S.t + 20; return; }
-  const maxActive = 3 + Math.round(S.level * 1.6 + Object.keys(S.units).length * 0.5);
-  if (Sim.active().length + S.calls.length >= maxActive) { S.nextSpawn = S.t + 2; return; }
-  const id = Sim.pickTemplate();
+  const tgt = Sim.caseTargets(), keys = Object.keys(tgt); if (!keys.length) { S.nextSpawn = S.t + 5; return; }
+  const busy = {}; for (const k of keys) busy[k] = 0;
+  for (const inc of Sim.active()) { const k = Sim.leadKey(TEMPLATES[inc.tpl] || { lead: [] }); if (k in busy) busy[k]++; }
+  for (const c of S.calls) if (c.ag in busy) busy[c.ag]++;
+  const room = keys.map(k => ({ k, w: Math.max(0, tgt[k] - busy[k]) })).filter(o => o.w > .05), free = room.reduce((a, o) => a + o.w, 0);
+  if (!free) { S.nextSpawn = S.t + 1.5; return; }   // alle er opptatt: vent til noen blir ledige
+  const pickK = wpick(room, o => o.w).k, id = Sim.pickTemplate(pickK);
   if (id) { const tpl = TEMPLATES[id]; Sim.incomingCall(id, Sim.pickPlace(tpl)); }
-  S.nextSpawn = S.t + Math.max(2.5, -Math.log(1 - Math.random()) / lam);
+  // jo mer ledig kapasitet, jo kortere tid til neste anrop (minst 2 spillminutter mellom anropene)
+  S.nextSpawn = S.t + Math.max(2, -Math.log(1 - Math.random()) * clamp(7 / free, 2, 14));
 };
 Sim.onScene = inc => inc.slots.flatMap(s => s.units).map(id => S.units[id]).filter(u => u && u.status === 'pastedet' && u.job && u.job.inc === inc.id);
 Sim.slotArrived = (inc, s) => s.units.map(id => S.units[id]).filter(u => u && u.status === 'pastedet' && u.job && u.job.inc === inc.id).length;
@@ -753,7 +788,7 @@ Sim.updateIncidents = function (dt) {
 Sim.injure = function (u, inc) {
   Staff.injure(u);
   Sim.detach(u); u.status = 'ute'; u.wait = 18; u.vis = false; u.phase = null; u.siren = false; u.path = [];
-  const pen = Math.min(Math.max(0, S.money), 8000); S.money -= pen; S.stats.costs += pen; dayStat('cost', pen); S.perf = lerp(S.perf, 0.25, 0.06); Bus.emit('toast', { msg: u.name + ': mannskap skadet', kind: 'bad' });
+  const pen = Math.min(Math.max(0, S.money), 4000); S.money -= pen; S.stats.costs += pen; dayStat('cost', pen); S.perf = lerp(S.perf, 0.25, 0.06); Bus.emit('toast', { msg: u.name + ': mannskap skadet', kind: 'bad' });
   if (inc && inc.state !== 'ferdig') inc.progress = Math.max(0, inc.progress - 2);
 };
 Sim.alarmResolve = function (al) {
@@ -901,7 +936,7 @@ Sim.finish = function (inc, ok) {
       saved = inc.quick || Math.random() < Math.min(0.98, surv);
       if (saved) S.stats.lives++; else { S.stats.lost++; mult *= 0.5; score *= 0.45; }
     }
-    pay = tpl.reward * 0.6 * inc.rewardMul * mult; if (inc.false) pay = tpl.reward * 0.35;
+    pay = tpl.reward * 0.95 * inc.rewardMul * mult; if (inc.false) pay = tpl.reward * 0.5;
     S.money += pay; S.stats.income += pay; dayStat('income', pay); dayStat('ok', 1); S.stats.solved++;
     const a = S.stats.byAg[agKey]; if (a) { a.n++; a.rt += rt; if (ratio <= 1) a.ok++; }
     if (volShare > 0) { const f = S.stats.byAg.frivillig; f.n++; f.rt += rt; if (ratio <= 1) f.ok++; }
@@ -912,7 +947,7 @@ Sim.finish = function (inc, ok) {
     Bus.emit('toast', { msg: inc.navn + ' løst: +' + fmtKr(pay), kind: saved === false ? 'warn' : 'good' });
     inc.saved = saved; if (inc.tri) S.flags.triSolved = 1;
   } else {
-    pay = -tpl.reward * 0.3; S.money += pay; S.stats.costs -= pay; dayStat('cost', -pay); dayStat('fail', 1); S.stats.failed++;
+    pay = -tpl.reward * 0.15; S.money += pay; S.stats.costs -= pay; dayStat('cost', -pay); dayStat('fail', 1); S.stats.failed++;
     S.perf = lerp(S.perf, 0, 0.17); const a = S.stats.byAg[agKey]; if (a) a.n++;
     summary = 'Mislyktes – ingen enhet rakk frem i tide';
     Log.add('SENTRAL', 'Sentral', inc.navn + ' ved ' + inc.loc.addr + ' ble ikke håndtert i tide (' + fmtKr(pay) + ')', 'alarm');
@@ -1065,7 +1100,7 @@ const Vol = {
       const o = Vol.occurrence(e); if (!o || S.t < o.tStart || S.t > o.tEnd) continue;
       const bk = Vol.booking(o.key), guarded = bk && bk.state === 'aktiv' && bk.units.some(id => S.units[id] && S.units[id].status === 'pastedet');
       if (Math.random() < (e.rate / 60) * dt * (guarded ? 0.45 : 1)) {
-        const id = wpick([['arr_skade', 0.5], ['arr_besvimelse', 0.3], ['arr_rus', 0.2]], x => x[1])[0];
+        const id = wpick([['arr_skade', 0.5], ['arr_besvimelse', 0.3], ['arr_rus', 0.2]], x => x[1])[0]; if (!TEMPLATES[id].lead.some(a => S.agencies[a])) continue;   // bare når etaten som leder finnes
         const place = Vol.venue(e); place.x += rr(-3, 3); place.z += rr(-3, 3);
         if (guarded && Math.random() < 0.7) {
           const u = S.units[bk.units.find(i => S.units[i] && S.units[i].status === 'pastedet')];
@@ -1098,7 +1133,7 @@ const Eco = {
   tick(dt) {
     S.acc += dt;
     while (S.acc >= 1) {
-      S.acc -= 1; const c = this.runCost(), g = c * (0.5 + 0.5 * (S.ready || 70) / 100);
+      S.acc -= 1; const c = this.runCost(), g = c * (0.78 + 0.32 * (S.ready || 70) / 100);   // driftstilskudd: dekker nesten alt ved god beredskap
       S.money += g - c; S.stats.costs += c; S.stats.grant += g; dayStat('cost', c); dayStat('income', g);
     }
   },

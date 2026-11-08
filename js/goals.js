@@ -12,7 +12,7 @@ const Goals = {
     { id: 'kjop', navn: 'Kjøp et nytt kjøretøy', tekst: 'Butikk → Kjøretøy. Mannskap følger med.', kr: 10000, xp: 15, ok: s => s.flags.bought },
     { id: 'k160', navn: 'Ansett en med kode 160', tekst: 'Stasjoner → «Ansett med kode 160» gir reserve når noen blir skadet.', kr: 8000, xp: 10, ok: s => s.flags.hired160 },
     { id: 'stasjon', navn: 'Bygg en ny stasjon', tekst: 'Kortere kjøretid til flere deler av byen.', kr: 25000, xp: 25, ok: s => Object.values(s.stations).filter(st => !st.gift).length >= 2 },
-    { id: 'etat', navn: 'Opprett en etat til', tekst: 'Butikk → Stasjoner → Opprett. Flere etater gir flere oppdrag.', kr: 40000, xp: 30, ok: s => ETATER.filter(a => s.agencies[a]).length >= 2 },
+    { id: 'etat', navn: 'Opprett en etat til', tekst: 'Butikk → Stasjoner → Opprett. Hver etat får egne oppdrag og inntekter.', kr: 40000, xp: 30, ok: s => ETATER.filter(a => s.agencies[a]).length >= 2 },
     { id: 'nodnett', navn: 'Bytt fra VHF til Nødnett', tekst: 'Butikk → Nødnett. Gir samvirke og raskere ordre.', kr: 30000, xp: 25, ok: s => s.net.termLevel >= 1 },
     { id: 'frivillig', navn: 'Inngå avtale med frivillige', tekst: 'Røde Kors, Folkehjelpa, Redningsselskapet eller livreddere.', kr: 20000, xp: 20, ok: s => !!(s.vol.rk || s.vol.nf || s.vol.rs || s.vol.strand) },
     { id: 'samv', navn: 'Bruk en samvirke-talegruppe', tekst: 'Når flere etater jobber sammen på samme sted.', kr: 20000, xp: 25, ok: s => s.stats.samv >= 1 },

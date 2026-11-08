@@ -156,6 +156,7 @@ UI.help = function () {
     + '<p><b>1.</b> Trykk på en hendelse (kart eller liste) og velg <i>Send enheter</i>. Nærmeste ledige enhet foreslås. <i>Velg selv</i> lar deg bestemme.</p>'
     + '<p><b>2.</b> Alvorlige hendelser (trippelvarsling) trenger flere etater. Har du ikke etaten, kan du <i>be om bistand</i> fra nabodistriktet mot betaling – det tar lengre tid.</p>'
     + '<p><b>3.</b> Alt går over <b>Nødnett</b>. Enheter uten dekning blir grå og får ordre senere. Bygg flere master, og opprett <i>samvirke-talegruppe</i> når flere etater jobber sammen.</p>'
+    + '<p><b>Oppdrag og penger:</b> Antall oppdrag følger hvor mange enheter du har i hver etat, og de skjer mest i distriktet rundt stasjonene dine – likt på alle hastigheter. Kjøp flere enheter for flere oppdrag og mer inntekt. Driftstilskuddet dekker nesten alle faste kostnader når beredskapen er god.</p>'
     + '<p><b>4.</b> <b>Frivillige</b> (Røde Kors, Folkehjelp, strandlivreddere) er billigere, men bruker tid på å mobilisere. De gir bonus på beredskapsnivået. Book sanitetsvakt på arrangementer i kalenderen.</p>'
     + '<p><b>Styring:</b> dra for å flytte, klyp/hjul for å zoome, to fingre eller høyre museknapp for å rotere. Mellomrom = pause, 1/2/3 = fart, M = dekningslag.</p>', buttons: [{ label: 'Skjønner', cls: 'primary' }] });
 };
