@@ -83,7 +83,8 @@ b,strong{font-weight:700}
 #sub .it{width:118px;flex-shrink:0;border-radius:12px;padding:7px 6px;text-align:center;background:#f3f7fd;border:2px solid transparent;display:flex;flex-direction:column;align-items:center;gap:2px}
 #sub .it:hover{border-color:#bcd0ee}
 #sub .it.on{border-color:var(--accent);background:#fff4ef}
-#sub .it .i{font-size:24px}
+#sub .it .i{font-size:24px;height:30px;display:grid;place-items:center}
+#sub .it .i svg{width:32px;height:32px}
 #sub .it b{font-size:12.5px;line-height:1.15}
 #sub .it small{font-size:11px;color:var(--muted);line-height:1.15}
 #sub .it.locked{opacity:.55}
@@ -359,12 +360,23 @@ const LOAN_RATE = 0.065;
 const F_FOREST = 1, F_WATER = 2, F_STREAM = 4, F_ROAD = 8, F_BLDG = 16, F_ROCK = 32, F_BASE = 64;
 
 const LIFT = {
-  drag:    { name: 'Trekkheis', short: 'T', icon: '🎿', base: 150000, perM: 700, minM: 80, maxM: 1200, maxGrade: 0.6, spd: 2.3, seats: 1, interval: 0.5, cap: 900, staff: 1, drift: 4500, tier: 0, spacing: 1.6, wind: 24, desc: 'Billig og enkel, men treg og kort. Tåler mye vind.' },
-  chair:   { name: 'Stolheis', short: 'S', icon: '🪑', base: 500000, perM: 1800, minM: 150, maxM: 2600, maxGrade: 0.85, spd: 3.1, seats: 4, interval: 1.0, cap: 2000, staff: 2, drift: 8000, tier: 1, spacing: 2.4, wind: 15, desc: 'Firesetet stolheis med god kapasitet.' },
-  gondola: { name: 'Gondol', short: 'G', icon: '🚠', base: 2000000, perM: 4200, minM: 300, maxM: 5000, maxGrade: 1.3, spd: 5.0, seats: 8, interval: 1.3, cap: 2600, staff: 3, drift: 16000, tier: 2, spacing: 4.5, wind: 19, desc: 'Dyr, men rask og lang. Varm og lun tur.' },
-  express: { name: 'Ekspress-stolheis', short: 'E', icon: '💺', base: 1100000, perM: 2700, minM: 200, maxM: 3200, maxGrade: 0.85, spd: 4.3, seats: 6, interval: 0.95, cap: 3000, staff: 2, drift: 12000, tier: 3, spacing: 3, wind: 16, desc: 'Sekssetet høyhastighetsheis med vindboble.' },
+  carpet:  { name: 'Skibånd (magic carpet)', short: 'B', icon: '🪄', surface: true, gauge: 0, track: 0, base: 60000, perM: 1600, minM: 20, maxM: 150, maxGrade: 0.25, minRise: 2, spd: 0.9, seats: 1, interval: 0.45, cap: 1100, staff: 1, drift: 1500, tier: 0, wind: 30, towers: 0, desc: 'Rullebånd for nybegynnere og barn. Kort, slakt og trygt – ingen faller av.' },
+  platter: { name: 'Koppheis', short: 'K', icon: '🥏', surface: true, gauge: 0.32, track: 0.42, base: 120000, perM: 600, minM: 80, maxM: 1000, maxGrade: 0.55, minRise: 10, spd: 2.4, seats: 1, interval: 0.5, cap: 900, staff: 1, drift: 3500, tier: 0, wind: 24, towers: 5, desc: 'Én person per kopp mellom bena. Billig og enkel, og tåler mye vind.' },
+  tbar:    { name: 'T-krok', short: 'T', icon: '🎿', surface: true, gauge: 0.36, track: 0.72, base: 180000, perM: 800, minM: 100, maxM: 1500, maxGrade: 0.6, minRise: 15, spd: 2.4, seats: 2, interval: 0.8, cap: 1200, staff: 1, drift: 4500, tier: 0, wind: 24, towers: 5.5, desc: 'To personer per krok. Mer kapasitet enn koppheis, men nybegynnere kan falle av.' },
+  chair:   { name: 'Stolheis (fast klype)', short: 'S', icon: '🪑', gauge: 0.28, base: 500000, perM: 1700, minM: 150, maxM: 2000, maxGrade: 0.85, minRise: 15, spd: 2.5, seats: 4, interval: 1.1, cap: 1800, staff: 2, drift: 7500, tier: 1, wind: 15, towers: 7, desc: 'Firesetet stolheis med fast klype. Stolene går like sakte hele veien.' },
+  detach:  { name: 'Stolheis med stasjon', short: 'D', icon: '💺', gauge: 0.32, base: 1300000, perM: 3000, minM: 300, maxM: 3200, maxGrade: 0.85, minRise: 15, spd: 4.8, seats: 6, interval: 0.95, cap: 3000, staff: 2, drift: 12500, tier: 3, wind: 17, towers: 8, desc: 'Koblingsbar sekssetet stolheis med boble. Stolene kobles fra og går sakte i stasjonen, men fort i linja.' },
+  gondola: { name: 'Gondol', short: 'G', icon: '🚠', gauge: 0.34, base: 2000000, perM: 4200, minM: 300, maxM: 5000, maxGrade: 1.3, minRise: 15, spd: 5.0, seats: 8, interval: 1.3, cap: 2600, staff: 3, drift: 16000, tier: 2, wind: 19, towers: 9, desc: 'Dyr, men rask og lang. Varm og lun tur.' },
 };
-const LIFT_ORDER = ['drag', 'chair', 'gondola', 'express'];
+const LIFT_ORDER = ['carpet', 'platter', 'tbar', 'chair', 'detach', 'gondola'];
+function normLiftType(t) { return t === 'drag' ? 'tbar' : t === 'express' ? 'detach' : LIFT[t] ? t : 'tbar'; }
+const LIFT_SVG = {
+  carpet: '<svg viewBox="0 0 40 40"><path d="M4 33 L36 20" stroke="#353a45" stroke-width="7" stroke-linecap="round"/><path d="M5 30 L35 18" stroke="#8fa3bf" stroke-width="1.5" stroke-dasharray="3 3"/><path d="M2 27 Q20 6 38 14" stroke="#9fc4ef" stroke-width="2.5" fill="none" opacity=".8"/><circle cx="19" cy="17" r="3" fill="#ff8c1a"/><path d="M19 20 v6" stroke="#2f6fd6" stroke-width="3"/></svg>',
+  platter: '<svg viewBox="0 0 40 40"><path d="M2 8 L38 4" stroke="#4a5160" stroke-width="2"/><path d="M19 6 q5 0 5 5 v3" stroke="#aab2bf" stroke-width="2.6" fill="none"/><circle cx="24" cy="15" r="2.6" fill="#c9ced6"/><rect x="22.6" y="16" width="2.8" height="16" fill="#f2b705"/><ellipse cx="24" cy="33.5" rx="6.5" ry="2.8" fill="#d93a3a"/></svg>',
+  tbar: '<svg viewBox="0 0 40 40"><path d="M2 8 L38 4" stroke="#4a5160" stroke-width="2"/><path d="M19 6 q5 0 5 5 v3" stroke="#aab2bf" stroke-width="2.6" fill="none"/><circle cx="24" cy="15" r="2.6" fill="#c9ced6"/><rect x="22.6" y="16" width="2.8" height="15" fill="#e8a317"/><path d="M11 33 Q24 29 37 33" stroke="#222" stroke-width="3.6" fill="none" stroke-linecap="round"/></svg>',
+  chair: '<svg viewBox="0 0 40 40"><path d="M2 7 L38 4" stroke="#4a5160" stroke-width="2"/><path d="M20 6 v14" stroke="#4a5160" stroke-width="2.4"/><path d="M7 20 h26 v9 h-26 z" fill="#2f6fd6"/><path d="M7 29 h26" stroke="#1d3f7a" stroke-width="2.5"/><path d="M9 31 v4 M31 31 v4" stroke="#4a5160" stroke-width="2"/></svg>',
+  detach: '<svg viewBox="0 0 40 40"><path d="M2 7 L38 4" stroke="#4a5160" stroke-width="2"/><path d="M20 6 v10" stroke="#4a5160" stroke-width="2.4"/><path d="M5 30 Q5 14 20 14 Q35 14 35 30 Z" fill="#ff8c1a" opacity=".9"/><path d="M8 26 Q8 17 20 17 Q32 17 32 26" fill="#ffe0b8" opacity=".75"/><path d="M5 31 h30" stroke="#3a4152" stroke-width="3"/></svg>',
+  gondola: '<svg viewBox="0 0 40 40"><path d="M2 7 L38 4" stroke="#4a5160" stroke-width="2"/><path d="M20 6 v6" stroke="#4a5160" stroke-width="2.4"/><rect x="8" y="12" width="24" height="22" rx="5" fill="#d6453d"/><rect x="11" y="15" width="18" height="8" rx="2" fill="#cfe6ff"/><path d="M20 15 v8" stroke="#d6453d" stroke-width="1.5"/></svg>',
+};
 
 const BLD = {
   cafe:       { name: 'Kafé', icon: '☕', w: 2, h: 2, cost: 180000, drift: 3500, staff: 1, price: 140, dur: 35, cap: 24, tier: 0, maxSlope: 0.45, roof: '#c8553d', visit: 'food', desc: 'Kakao og vafler. Dekker sult og kulde.' },
@@ -382,7 +394,7 @@ const BLD = {
 const BLD_ORDER = ['cafe', 'restaurant', 'toilet', 'rental', 'school', 'cabin', 'hotel', 'parking', 'garage'];
 
 const STAFF = {
-  liftop:  { name: 'Heisvakter', icon: '🧑‍🔧', wage: 1800, desc: 'Betjener heisene. Trekkheis trenger 1, stolheis 2, gondol 3.' },
+  liftop:  { name: 'Heisvakter', icon: '🧑‍🔧', wage: 1800, desc: 'Betjener heisene. Skibånd, koppheis og T-krok trenger 1, stolheiser 2 og gondol 3.' },
   groomer: { name: 'Tråkkemaskinførere', icon: '🚜', wage: 2200, desc: 'Preparerer bakkene om natta. 1 per garasje.' },
   patrol:  { name: 'Skipatrulje', icon: '⛑️', wage: 2000, desc: 'Hjelper skadde og sikrer bakkene. Omtrent 1 per 2,5 km nedfart.' },
   kafe:    { name: 'Kafépersonell', icon: '🧑‍🍳', wage: 1500, desc: 'Driver kafeer, restauranter og hotell.' },
@@ -461,6 +473,9 @@ const TH = {
   parking: ['Fant ingen parkeringsplass!'],
   full: ['Det er helt fullt her inne …'],
   gondola: ['Deilig og varmt i gondolen.'],
+  bubble: ['Deilig med boble på stolheisen.'],
+  carpet: ['Skibåndet var supert for en nybegynner som meg!'],
+  fell: ['Jeg falt av heisen! 😅', 'Oi, der mistet jeg kroken …'],
   happyDay: ['For en fin dag i bakken!'],
   unhappy: ['Dette var en dårlig dag. Jeg drar hjem.'],
   lodge: ['Gleder meg til å sove godt i natt.'],
@@ -1019,7 +1034,7 @@ function buildRealMap(H, osm, bb, o, N) {
         const g = (e.geometry || []).filter(Boolean).map(p => toG(p.lat, p.lon)); if (g.length < 2) continue;
         const closed = (e.nodes && e.nodes.length > 2 && e.nodes[0] === e.nodes[e.nodes.length - 1]) || (Math.abs(g[0][0] - g[g.length - 1][0]) < 1e-7 && Math.abs(g[0][1] - g[g.length - 1][1]) < 1e-7);
         if (t['piste:type'] === 'downhill') { if (t.area !== 'yes' && !closed) pistes.push({ g, name: t['piste:name'] || t.name || '', lit: t['piste:lit'] === 'yes' || t.lit === 'yes' }); continue; }
-        if (t.aerialway) { lifts.push({ g, kind: t.aerialway, name: t.name || '' }); continue; }
+        if (t.aerialway) { lifts.push({ g, kind: t.aerialway, name: t.name || '', detach: t['aerialway:detachable'] === 'yes' }); continue; }
         if (t.natural === 'wood' || t.landuse === 'forest') { if (closed) fillRings([g], f, F_FOREST, N); continue; }
         if (t.natural === 'water' || t.waterway === 'riverbank') { if (closed) fillRings([g], f, F_WATER, N); continue; }
         if (t.natural === 'bare_rock' || t.natural === 'scree') { if (closed) fillRings([g], f, F_ROCK, N); continue; }
@@ -1067,9 +1082,10 @@ function buildRealMap(H, osm, bb, o, N) {
   peaks.sort((a, b) => b.ele - a.ele);
   // Ekte heiser og nedfarter
   const imported = { lifts: [], pistes: [] };
-  const AER = { chair_lift: 'chair', mixed_lift: 'gondola', gondola: 'gondola', cable_car: 'gondola', drag_lift: 'drag', 't-bar': 'drag', 'j-bar': 'drag', platter: 'drag', rope_tow: 'drag', magic_carpet: 'drag' };
+  const AER = { chair_lift: 'chair', mixed_lift: 'gondola', gondola: 'gondola', cable_car: 'gondola', drag_lift: 'tbar', 't-bar': 'tbar', 'j-bar': 'tbar', platter: 'platter', rope_tow: 'platter', magic_carpet: 'carpet' };
   for (const L of lifts) {
-    const type = AER[L.kind]; if (!type) continue;
+    let type = AER[L.kind]; if (!type) continue;
+    if (type === 'chair' && L.detach) type = 'detach';
     const ins = L.g.filter(inG); if (ins.length < 2) continue;
     let a = ins[0], b = ins[ins.length - 1];
     if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 2.5) continue;
@@ -1341,9 +1357,9 @@ function evalLift(type, x0, y0, x1, y1) {
   const fail = m => { if (r.ok) { r.ok = false; r.err = m; } };
   if (!inMap(Math.floor(bx), Math.floor(by)) || !inMap(Math.floor(tx), Math.floor(ty))) fail('Utenfor kartet');
   if (lenM < T.minM) fail(`For kort – minst ${T.minM} m`);
-  if (lenM > T.maxM) fail(`For lang – maks ${fmt(T.maxM)} m for ${T.name.toLowerCase()}`);
-  if (rise < 15 && lenM >= T.minM) fail('Toppstasjonen må ligge minst 15 m høyere');
-  if (lenM > 0 && rise / (lenM) > T.maxGrade) fail(`For bratt for ${T.name.toLowerCase()}`);
+  if (lenM > T.maxM) fail(`For lang – maks ${fmt(T.maxM)} m (${T.name})`);
+  if (rise < T.minRise && lenM >= T.minM) fail(`Toppstasjonen må ligge minst ${T.minRise} m høyere`);
+  if (lenM > 0 && rise / (lenM) > T.maxGrade) fail(`For bratt (${T.name} tåler maks ${Math.round(T.maxGrade * 100)} %)`);
   for (const [sx, sy] of [[bx, by], [tx, ty]]) rasterPath([[sx, sy]], 0.9, (i) => {
     const fl = M.f[i];
     if (fl & F_WATER) fail('En stasjon kan ikke stå i vann');
@@ -1352,11 +1368,11 @@ function evalLift(type, x0, y0, x1, y1) {
   });
   const cells = rasterPath([[bx, by], [tx, ty]], 0.7, (i) => {
     const fl = M.f[i];
-    if (type === 'drag' && (fl & F_WATER)) fail('En trekkheis kan ikke gå over vann');
-    if (type === 'drag' && (fl & F_BLDG)) fail('En trekkheis kan ikke gå gjennom bygg');
+    if (T.surface && (fl & F_WATER)) fail(`${T.name} kan ikke gå over vann`);
+    if (T.surface && (fl & F_BLDG)) fail(`${T.name} kan ikke gå gjennom bygg`);
     if (RT.occ && RT.occ[i]) fail('Heisen krysser en av bygningene dine');
     if (fl & F_FOREST) r.clear += CLEAR_TREE;
-    if (type === 'drag' && (fl & F_ROCK)) r.clear += CLEAR_ROCK;
+    if (T.surface && (fl & F_ROCK)) r.clear += CLEAR_ROCK;
   });
   r.cells = [...cells];
   r.cost = Math.round((T.base + T.perM * lenM + r.clear) / 1000) * 1000;
@@ -1373,8 +1389,8 @@ function evalPath(raw, kind) {
   r.lenM = lenC * M.cellM; r.drop = e[0] - e[e.length - 1]; r.minE = Math.min(...e); r.maxE = Math.max(...e);
   for (const p of pts) if (!inMap(Math.floor(p[0]), Math.floor(p[1]))) { fail('Utenfor kartet'); break; }
   if (kind === 'piste') {
-    if (r.lenM < 100 || pts.length < 6) fail('Bakken må være minst 100 m lang');
-    else if (r.drop < 15) fail('Bakken må ha minst 15 m fall');
+    if (r.lenM < 60 || pts.length < 4) fail('Bakken må være minst 60 m lang');
+    else if (r.drop < 6) fail('Bakken må ha minst 6 m fall');
     let acc = 0, mx = 0; for (let i = 0; i + 1 < e.length; i++) { acc = Math.max(0, acc + e[i + 1] - e[i]); mx = Math.max(mx, acc); }
     if (mx > 7) fail('Bakken går oppover et sted – gjestene kan ikke kjøre oppover');
     const W = Math.max(2, Math.round(60 / M.cellM)), sl = [];
@@ -1534,11 +1550,12 @@ function rebuildMasks() {
   const n = M.GW * M.GH; RT.occ = new Int32Array(n); RT.pmask = new Uint8Array(n); RT.lmask = new Uint8Array(n);
   for (const b of G.blds) for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) if (inMap(x, y)) RT.occ[y * M.GW + x] = b.id;
   for (const p of G.pistes) rasterPath(p.pts, PW / 2 + 0.15, i => { RT.pmask[i] = Math.min(255, RT.pmask[i] + 1); });
-  for (const l of G.lifts) { rasterPath([[l.bx, l.by], [l.tx, l.ty]], 0.6, i => { RT.lmask[i] = 1; }); rasterPath([[l.bx, l.by]], 1.0, i => { RT.lmask[i] = 1; }); rasterPath([[l.tx, l.ty]], 1.0, i => { RT.lmask[i] = 1; }); }
+  for (const l of G.lifts) { rasterPath([[l.bx, l.by], [l.tx, l.ty]], 0.6, i => { RT.lmask[i] = 1; }); const st = (l.type === 'detach' || l.type === 'gondola') ? 2.0 : 0.6, r2 = (l.type === 'detach' || l.type === 'gondola') ? 1.3 : 1.0; rasterPath([[l.bx, l.by], [l.bx - l._dx * st, l.by - l._dy * st]], r2, i => { RT.lmask[i] = 1; }); rasterPath([[l.tx, l.ty], [l.tx + l._dx * st, l.ty + l._dy * st]], r2, i => { RT.lmask[i] = 1; }); }
 }
 function importResort(imp) {
   let nl = 0, np = 0;
-  for (const L of imp.lifts) {
+  for (const L0 of imp.lifts) {
+    const L = Object.assign({}, L0, { type: normLiftType(L0.type) });
     const ev = evalLift(L.type, L.bx, L.by, L.tx, L.ty);
     ev.lenM = Math.max(ev.lenM, 30); ev.rise = Math.max(ev.rise, 1);
     ev.name = `${LIFT[L.type].short}${G.lifts.filter(l => l.type === L.type).length + 1} ${L.name || nextName(LIFT_NAMES, [])}`;
@@ -1603,7 +1620,7 @@ function buildGraph() {
   for (const l of G.lifts) {
     const b = byKey.get(`L${l.id}b`), t = byKey.get(`L${l.id}t`), T = LIFT[l.type];
     edge(b, t, 'lift', l._len / T.spd, { l });
-    if (l.type !== 'drag') edge(t, b, 'liftdown', l._len / T.spd * 1.8 + 6, { l });
+    if (!T.surface) edge(t, b, 'liftdown', l._len / T.spd * 1.8 + 6, { l });
   }
   for (const lp of G.loipes) { const s = byKey.get(`X${lp.id}s`), e = byKey.get(`X${lp.id}e`); edge(s, e, 'loipe', lp._len / 2.2, { lp }); edge(e, s, 'loipe', lp._len / 2.2, { lp, rev: true }); }
   RT.graph = { nodes, byKey }; RT.dijCache.clear(); RT.graphDirty = false; RT.graphVer = (RT.graphVer || 0) + 1;
@@ -1611,7 +1628,7 @@ function buildGraph() {
 function edgeCost(e, cls) {
   switch (e.type) {
     case 'walk': return e.cost;
-    case 'lift': { if (cls === 'xc' || !e.l._open) return Infinity; const T = LIFT[e.l.type]; return e.cost + e.l._q.length * T.interval / T.seats; }
+    case 'lift': { if (cls === 'xc' || !e.l._open) return Infinity; const T = LIFT[e.l.type]; let c = e.cost + e.l._q.length * T.interval / T.seats; if (cls < 1 && T.surface && T.gauge) c *= 1.5; if (cls >= 2 && !T.gauge) c *= 2; return c; }
     case 'liftdown': return (cls === 'xc' || !e.l._open) ? Infinity : e.cost;
     case 'piste': { if (cls === 'xc' || !e.p._open) return Infinity; const d = e.p.diff - cls; return d <= 0 ? e.cost : d <= 0.5 ? e.cost * 2.2 : d <= 1 ? e.cost * 7 : Infinity; }
     case 'loipe': return cls === 'xc' ? e.cost : Infinity;
@@ -1897,8 +1914,14 @@ function stepAct(g, a, dt) {
         return false;
       }
       if (g.state === 'ride') {
-        g.t += LIFT[l.type].spd * dt;
-        const off = l.type === 'drag' ? 0.05 : 0.28;
+        const T = LIFT[l.type];
+        g.t += T.spd * dt;
+        if (g.fallAt && g.t >= g.fallAt) {
+          g.fallAt = 0; think(g, 'fell'); g.happy = Math.max(0, g.happy - 6);
+          g.x += l._px * (T.gauge + 0.6); g.y += l._py * (T.gauge + 0.6);
+          g.plan = []; g.act = null; g.node = null; g.state = 'walk'; return false;
+        }
+        const off = T.gauge + ((g.seat || 0) - (T.seats - 1) / 2) * (T.seats === 2 ? 0.34 : T.seats <= 6 ? 0.1 : 0.06);
         g.x = l.bx + l._dx * g.t + l._px * off; g.y = l.by + l._dy * g.t + l._py * off; g.dx = l._dx; g.dy = l._dy;
         if (g.t >= l._len) { g.x = l.tx; g.y = l.ty; return true; }
       }
@@ -1907,7 +1930,7 @@ function stepAct(g, a, dt) {
     case 'liftdown': {
       const l = a.l; if (!G.lifts.includes(l)) return true;
       g.t -= LIFT[l.type].spd * dt;
-      g.x = l.bx + l._dx * g.t - l._px * 0.28; g.y = l.by + l._dy * g.t - l._py * 0.28; g.dx = -l._dx; g.dy = -l._dy;
+      const go = LIFT[l.type].gauge; g.x = l.bx + l._dx * g.t - l._px * go; g.y = l.by + l._dy * g.t - l._py * go; g.dx = -l._dx; g.dy = -l._dy;
       if (g.t <= 0) { g.x = l.bx; g.y = l.by; return true; }
       return false;
     }
@@ -1982,7 +2005,7 @@ function updNeeds(g, dm) {
   n.hunger += dm * 0.14; n.toilet += dm * 0.12;
   const T = tempAtE(elev(g.x, g.y), diurnal()), w = G.weather;
   let cr = clamp((-T - 2) * 0.011 + w.wind * 0.006 + (w.type === 'storm' ? 0.1 : 0), 0.01, 0.35);
-  if (g.state === 'ride' && g.act && g.act.l && g.act.l.type === 'gondola') cr *= 0.2;
+  if (g.state === 'ride' && g.act && g.act.l) cr *= { gondola: 0.2, detach: 0.6, carpet: 0.8 }[g.act.l.type] || 1;
   n.cold += dm * cr;
   n.tired += dm * (g.state === 'ski' ? 0.16 : 0.07);
   if (n.hunger > 85 || n.toilet > 88 || n.cold > 85) g.happy = Math.max(0, g.happy - dm * 0.03);
@@ -2036,7 +2059,10 @@ function updateLifts(dt) {
       while (l._timer >= T.interval) {
         l._timer -= T.interval;
         for (let k = 0; k < T.seats && l._q.length; k++) {
-          const g = l._q.shift(); g.state = 'ride'; g.t = 0; l.rides++; l.ridesToday++;
+          const g = l._q.shift(); g.state = 'ride'; g.t = 0; g.seat = k; l.rides++; l.ridesToday++;
+          g.fallAt = (T.surface && T.gauge && g.cls < 1 && Math.random() < (g.schooled ? 0.04 : 0.1)) ? l._len * rr(0.2, 0.7) : 0;
+          if (l.type === 'detach' && Math.random() < 0.08) think(g, 'bubble');
+          if (l.type === 'carpet' && g.skill === 0 && Math.random() < 0.25) think(g, 'carpet');
           l._wait = l._wait * 0.96 + g.qT * 0.04; G.waitEMA = G.waitEMA * 0.997 + g.qT * 0.003;
           if (l.type === 'gondola' && Math.random() < 0.12) think(g, 'gondola');
         }
@@ -2486,45 +2512,126 @@ function drawBuildings(vb) {
   }
 }
 function drawLifts(vb) {
-  const dk = darkness();
+  const dk = darkness(), win = isWinter();
   for (const l of G.lifts) {
     if (!l._bb) l._bb = [Math.min(l.bx, l.tx), Math.min(l.by, l.ty), Math.max(l.bx, l.tx), Math.max(l.by, l.ty)];
     if (!vbHit(vb, l._bb)) continue;
-    const T = LIFT[l.type], dx = l._dx, dy = l._dy, px = l._px, py = l._py, len = l._len, sel = RT.sel && RT.sel.o === l;
-    if (sel) { ctx.strokeStyle = 'rgba(255,200,40,0.7)'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(l.bx, l.by); ctx.lineTo(l.tx, l.ty); ctx.stroke(); }
-    if (l.type === 'drag') { ctx.strokeStyle = isWinter() ? 'rgba(206,216,232,0.95)' : 'rgba(150,140,110,0.8)'; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.moveTo(l.bx, l.by); ctx.lineTo(l.tx, l.ty); ctx.stroke(); }
-    ctx.strokeStyle = 'rgba(16,26,56,0.18)'; ctx.lineWidth = 0.14; ctx.beginPath(); ctx.moveTo(l.bx + 0.5, l.by + 0.6); ctx.lineTo(l.tx + 0.5, l.ty + 0.6); ctx.stroke();
-    const nT = Math.max(1, Math.round(len / 7));
-    for (let i = 1; i < nT; i++) {
-      const x = l.bx + dx * len * i / nT, y = l.by + dy * len * i / nT;
-      ctx.fillStyle = 'rgba(16,26,56,0.25)'; ctx.fillRect(x + 0.1, y + 0.15, 0.36, 0.36);
-      ctx.fillStyle = '#4a5160'; ctx.fillRect(x - 0.17, y - 0.17, 0.34, 0.34);
-      ctx.strokeStyle = '#4a5160'; ctx.lineWidth = 0.1; ctx.beginPath(); ctx.moveTo(x - px * 0.38, y - py * 0.38); ctx.lineTo(x + px * 0.38, y + py * 0.38); ctx.stroke();
-    }
-    ctx.strokeStyle = '#2b303b'; ctx.lineWidth = 0.06; ctx.lineCap = 'butt';
-    const off = l.type === 'drag' ? [0.05] : [0.28, -0.28];
-    for (const o of off) { ctx.beginPath(); ctx.moveTo(l.bx + px * o, l.by + py * o); ctx.lineTo(l.tx + px * o, l.ty + py * o); ctx.stroke(); }
-    ctx.lineCap = 'round';
-    if (cam.z > 4) {
-      const sp = T.spd * T.interval, ph = (l._timer / T.interval) * sp;
-      for (let s = ph; s < len; s += sp) for (const side of (l.type === 'drag' ? [1] : [1, -1])) {
-        const ss = side > 0 ? s : len - s, o = l.type === 'drag' ? 0.05 : 0.28 * side, x = l.bx + dx * ss + px * o, y = l.by + dy * ss + py * o;
-        if (l.type === 'drag') { ctx.strokeStyle = '#4a5160'; ctx.lineWidth = 0.05; ctx.beginPath(); ctx.moveTo(x - px * 0.25, y - py * 0.25); ctx.lineTo(x + px * 0.25, y + py * 0.25); ctx.stroke(); }
-        else if (l.type === 'gondola') { ctx.fillStyle = 'rgba(16,26,56,0.2)'; ctx.fillRect(x - 0.15, y - 0.05, 0.55, 0.45); ctx.fillStyle = '#d6453d'; rrect(ctx, x - 0.27, y - 0.22, 0.54, 0.44, 0.1); ctx.fill(); ctx.fillStyle = 'rgba(200,230,255,0.9)'; ctx.fillRect(x - 0.2, y - 0.14, 0.4, 0.14); }
-        else { ctx.fillStyle = l.type === 'express' ? '#ff8c1a' : '#3a4152'; ctx.save(); ctx.translate(x, y); ctx.rotate(Math.atan2(dy, dx)); ctx.fillRect(-0.12, -(l.type === 'express' ? 0.33 : 0.25), 0.24, l.type === 'express' ? 0.66 : 0.5); ctx.restore(); }
+    const T = LIFT[l.type], len = l._len, g = T.gauge, ang = Math.atan2(l._dy, l._dx), sel = RT.sel && RT.sel.o === l;
+    const shx = 0.45 * Math.cos(ang) + 0.55 * Math.sin(ang), shy = -0.45 * Math.sin(ang) + 0.55 * Math.cos(ang);
+    ctx.save(); ctx.translate(l.bx, l.by); ctx.rotate(ang);
+    if (sel) { ctx.fillStyle = 'rgba(255,200,40,0.35)'; rrect(ctx, -1.2, -1.1, len + 2.4, 2.2, 0.6); ctx.fill(); }
+    if (l.type === 'carpet') drawCarpet(l, T, len, win);
+    else {
+      if (T.surface) {
+        ctx.fillStyle = win ? 'rgba(212,223,240,0.95)' : 'rgba(150,140,110,0.8)'; ctx.fillRect(0.5, g - T.track / 2, Math.max(0, len - 1.0), T.track);
+        ctx.strokeStyle = win ? 'rgba(170,188,218,0.9)' : 'rgba(120,110,85,0.8)'; ctx.lineWidth = 0.04;
+        for (const o of (l.type === 'tbar' ? [-0.18, 0.18] : [-0.06, 0.06])) { ctx.beginPath(); ctx.moveTo(0.5, g + o); ctx.lineTo(len - 0.5, g + o); ctx.stroke(); }
+      }
+      ctx.strokeStyle = 'rgba(16,26,56,0.15)'; ctx.lineWidth = 0.12;
+      for (const o of [g, -g]) { ctx.beginPath(); ctx.moveTo(shx, o + shy); ctx.lineTo(len + shx, o + shy); ctx.stroke(); }
+      const nT = Math.max(1, Math.round(len / T.towers));
+      for (let i = 1; i < nT; i++) {
+        const x = len * i / nT;
+        ctx.fillStyle = 'rgba(16,26,56,0.25)'; ctx.fillRect(x - 0.12 + shx, -0.12 + shy, 0.3, 0.3);
+        ctx.strokeStyle = '#7d8696'; ctx.lineWidth = 0.1; ctx.beginPath(); ctx.moveTo(x, -g - 0.14); ctx.lineTo(x, g + 0.14); ctx.stroke();
+        ctx.fillStyle = '#9aa3b2'; ctx.fillRect(x - 0.15, -0.15, 0.3, 0.3);
+        ctx.fillStyle = '#5c6474'; ctx.fillRect(x - 0.08, -0.08, 0.16, 0.16);
+        if (cam.z > 10) { ctx.fillStyle = '#4a5160'; for (const o of [g, -g]) ctx.fillRect(x - 0.18, o - 0.05, 0.36, 0.1); }
+      }
+      ctx.strokeStyle = '#2b303b'; ctx.lineWidth = 0.05; ctx.lineCap = 'butt';
+      for (const o of [g, -g]) { ctx.beginPath(); ctx.moveTo(0, o); ctx.lineTo(len, o); ctx.stroke(); }
+      ctx.lineCap = 'round';
+      if (cam.z > 4) {
+        const sp = T.spd * T.interval, ph = (l._timer / T.interval) * sp;
+        for (let s2 = ph; s2 < len; s2 += sp) { drawCarrier(l.type, s2, g, true); drawCarrier(l.type, len - s2, -g, false); }
       }
     }
-    for (const [sx, sy, top] of [[l.bx, l.by, false], [l.tx, l.ty, true]]) {
-      ctx.save(); ctx.translate(sx, sy); ctx.rotate(Math.atan2(dy, dx) + Math.PI / 2);
-      const w = l.type === 'drag' ? 1.1 : 1.6, h = l.type === 'drag' ? 0.8 : 1.15, roof = { drag: '#6b7a8f', chair: '#2f6fd6', gondola: '#d6453d', express: '#ff8c1a' }[l.type];
-      ctx.fillStyle = 'rgba(16,26,56,0.28)'; ctx.fillRect(-w / 2 + 0.15, -h / 2 + 0.2, w, h);
-      ctx.fillStyle = shade(roof, top ? -0.1 : 0.05); rrect(ctx, -w / 2, -h / 2, w, h, 0.15); ctx.fill();
-      if (isWinter()) { ctx.fillStyle = 'rgba(250,252,255,0.8)'; ctx.fillRect(-w / 2 + 0.12, -h / 2 + 0.12, w - 0.24, h - 0.24); }
-      ctx.fillStyle = shade(roof, -0.3); ctx.beginPath(); ctx.arc(0, 0, 0.18, 0, 6.28); ctx.fill();
-      ctx.restore();
-    }
+    drawStation(l, T, 0, false, win); drawStation(l, T, len, true, win);
+    ctx.restore();
     if (dk > 0.3 && l._open) { ctx.fillStyle = 'rgba(255,240,170,0.9)'; ctx.beginPath(); ctx.arc(l.bx, l.by, 0.15, 0, 6.28); ctx.arc(l.tx, l.ty, 0.15, 0, 6.28); ctx.fill(); }
   }
+}
+function drawCarrier(type, x, y, up) {
+  if (type === 'platter') {
+    if (up) { ctx.fillStyle = '#c9ced6'; ctx.beginPath(); ctx.arc(x, y, 0.07, 0, 6.28); ctx.fill(); ctx.strokeStyle = '#e2a90c'; ctx.lineWidth = 0.05; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 0.22, y); ctx.stroke(); ctx.fillStyle = '#d93a3a'; ctx.beginPath(); ctx.ellipse(x - 0.26, y, 0.09, 0.13, 0, 0, 6.28); ctx.fill(); }
+    else { ctx.fillStyle = '#c9ced6'; ctx.beginPath(); ctx.arc(x, y, 0.08, 0, 6.28); ctx.fill(); ctx.fillStyle = '#d93a3a'; ctx.beginPath(); ctx.arc(x, y, 0.05, 0, 6.28); ctx.fill(); }
+  } else if (type === 'tbar') {
+    if (up) { ctx.strokeStyle = '#e2a90c'; ctx.lineWidth = 0.05; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 0.2, y); ctx.stroke(); ctx.strokeStyle = '#1f2229'; ctx.lineWidth = 0.08; ctx.beginPath(); ctx.moveTo(x - 0.22, y - 0.33); ctx.lineTo(x - 0.22, y + 0.33); ctx.stroke(); ctx.fillStyle = '#c9ced6'; ctx.beginPath(); ctx.arc(x, y, 0.07, 0, 6.28); ctx.fill(); }
+    else { ctx.fillStyle = '#c9ced6'; ctx.beginPath(); ctx.arc(x, y, 0.08, 0, 6.28); ctx.fill(); ctx.strokeStyle = '#1f2229'; ctx.lineWidth = 0.06; ctx.beginPath(); ctx.moveTo(x, y - 0.12); ctx.lineTo(x, y + 0.12); ctx.stroke(); }
+  } else if (type === 'gondola') {
+    ctx.fillStyle = 'rgba(16,26,56,0.2)'; ctx.fillRect(x - 0.15, y - 0.12, 0.55, 0.45);
+    ctx.fillStyle = '#d6453d'; rrect(ctx, x - 0.27, y - 0.23, 0.54, 0.46, 0.1); ctx.fill();
+    ctx.fillStyle = 'rgba(200,230,255,0.9)'; ctx.fillRect(x - 0.2, y - 0.15, 0.4, 0.13); ctx.fillRect(x - 0.2, y + 0.03, 0.4, 0.1);
+  } else {
+    const w = type === 'detach' ? 0.78 : 0.62;
+    ctx.fillStyle = 'rgba(16,26,56,0.18)'; ctx.fillRect(x - 0.05, y - w / 2 + 0.12, 0.3, w);
+    ctx.fillStyle = '#3a4152'; ctx.fillRect(x - 0.12, y - w / 2, 0.24, w);
+    ctx.fillStyle = type === 'detach' ? '#2f6fd6' : '#4f7cac'; ctx.fillRect(x - 0.09, y - w / 2 + 0.04, 0.12, w - 0.08);
+    if (type === 'detach') { ctx.fillStyle = up ? 'rgba(255,140,26,0.55)' : 'rgba(255,140,26,0.9)'; ctx.beginPath(); ctx.ellipse(x + 0.08, y, 0.13, w / 2, 0, -Math.PI / 2, Math.PI / 2); ctx.fill(); }
+  }
+}
+function bullwheel(x, y, r) {
+  ctx.strokeStyle = '#b9c0cb'; ctx.lineWidth = 0.09; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.28); ctx.stroke();
+  ctx.strokeStyle = '#d5dae2'; ctx.lineWidth = 0.035; ctx.beginPath(); ctx.arc(x, y, r - 0.08, 0, 6.28); ctx.stroke();
+  ctx.lineWidth = 0.03; ctx.beginPath(); for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); } ctx.stroke();
+  ctx.fillStyle = '#7d8696'; ctx.beginPath(); ctx.arc(x, y, 0.1, 0, 6.28); ctx.fill();
+}
+function drawStation(l, T, x, top, win) {
+  const g = T.gauge, dir = top ? 1 : -1;
+  ctx.fillStyle = 'rgba(16,26,56,0.25)';
+  if (l.type === 'carpet') {
+    ctx.fillStyle = '#c9ced6'; rrect(ctx, x - 0.35, -0.45, 0.7, 0.9, 0.12); ctx.fill();
+    ctx.fillStyle = '#ffb347'; ctx.fillRect(x + (top ? 0.12 : -0.22), -0.4, 0.1, 0.8);
+    if (!top) { ctx.fillStyle = 'rgba(16,26,56,0.25)'; ctx.fillRect(x - 1.15, 0.65, 0.8, 0.65); ctx.fillStyle = '#8a5a3c'; ctx.fillRect(x - 1.25, 0.55, 0.8, 0.65); if (win) { ctx.fillStyle = 'rgba(250,252,255,0.85)'; ctx.fillRect(x - 1.18, 0.62, 0.66, 0.24); } }
+    return;
+  }
+  if (T.surface) {
+    const wx = x + dir * 0.15;
+    if (!top) {
+      ctx.fillRect(x - 1.05 + 0.15, -0.38 + 0.2, 0.62, 0.76);
+      ctx.fillStyle = '#d2d7df'; rrect(ctx, x - 1.05, -0.38, 0.62, 0.76, 0.06); ctx.fill();
+      ctx.strokeStyle = '#8f98a6'; ctx.lineWidth = 0.03; ctx.beginPath(); ctx.moveTo(x - 0.74, -0.38); ctx.lineTo(x - 0.74, 0.38); ctx.stroke();
+      ctx.fillStyle = '#9aa3b2'; ctx.fillRect(x - 0.35, -0.12, 0.35, 0.24);
+      bullwheel(wx, 0, g + 0.06);
+      ctx.fillStyle = 'rgba(16,26,56,0.25)'; ctx.fillRect(x - 0.95, g + 0.9, 0.95, 0.75);
+      ctx.fillStyle = '#6b4a35'; ctx.fillRect(x - 1.05, g + 0.75, 0.95, 0.75);
+      ctx.fillStyle = win ? 'rgba(250,252,255,0.9)' : '#8a5a3c'; ctx.fillRect(x - 1.0, g + 0.8, 0.85, 0.3);
+    } else {
+      ctx.fillRect(x + 0.05, -0.1 + 0.15, 0.3, 0.3);
+      ctx.fillStyle = '#9aa3b2'; ctx.fillRect(x + 0.05, -0.15, 0.3, 0.3);
+      bullwheel(wx, 0, g + 0.02);
+    }
+    return;
+  }
+  if (l.type === 'chair') {
+    const bw = 1.05, bh = 2 * g + 0.7;
+    ctx.fillRect(x - bw / 2 + 0.15, -bh / 2 + 0.2, bw, bh);
+    ctx.fillStyle = '#b7bec9'; rrect(ctx, x - bw / 2, -bh / 2, bw, bh, 0.12); ctx.fill();
+    if (win) { ctx.fillStyle = 'rgba(250,252,255,0.7)'; ctx.fillRect(x - bw / 2 + 0.1, -bh / 2 + 0.1, bw - 0.2, bh - 0.2); }
+    bullwheel(x + dir * 0.2, 0, g + 0.04);
+    if (!top) { ctx.fillStyle = 'rgba(16,26,56,0.25)'; ctx.fillRect(x - 1.5, g + 0.6, 0.9, 0.7); ctx.fillStyle = '#2f6fd6'; ctx.fillRect(x - 1.6, g + 0.45, 0.9, 0.7); if (win) { ctx.fillStyle = 'rgba(250,252,255,0.85)'; ctx.fillRect(x - 1.53, g + 0.52, 0.76, 0.26); } }
+    return;
+  }
+  const roof = l.type === 'gondola' ? '#d6453d' : '#ff8c1a', bw = l.type === 'gondola' ? 2.6 : 2.3, bh = 2 * g + 1.0, cx = x + dir * (bw / 2 - 0.5);
+  ctx.fillRect(cx - bw / 2 + 0.2, -bh / 2 + 0.25, bw, bh);
+  ctx.fillStyle = '#d5dae2'; rrect(ctx, cx - bw / 2, -bh / 2, bw, bh, 0.25); ctx.fill();
+  ctx.fillStyle = shade(roof, top ? -0.08 : 0.04); rrect(ctx, cx - bw / 2 + 0.08, -bh / 2 + 0.08, bw - 0.16, bh / 2 - 0.08, 0.2); ctx.fill();
+  ctx.fillStyle = shade(roof, -0.2); rrect(ctx, cx - bw / 2 + 0.08, 0, bw - 0.16, bh / 2 - 0.08, 0.2); ctx.fill();
+  if (win) { ctx.fillStyle = 'rgba(250,252,255,0.78)'; ctx.fillRect(cx - bw / 2 + 0.25, -bh / 2 + 0.2, bw - 0.5, bh / 2 - 0.3); ctx.fillStyle = 'rgba(214,226,244,0.78)'; ctx.fillRect(cx - bw / 2 + 0.25, 0.1, bw - 0.5, bh / 2 - 0.3); }
+  if (cam.z > 6) for (const o of [g, -g]) for (let k = 0; k < 3; k++) drawCarrier(l.type, cx - bw / 2 + 0.45 + k * (bw - 0.9) / 2, o, o > 0);
+}
+function drawCarpet(l, T, len, win) {
+  ctx.fillStyle = 'rgba(16,26,56,0.22)'; ctx.fillRect(0.1, -0.2, len, 0.62);
+  ctx.fillStyle = '#353a45'; ctx.fillRect(0, -0.28, len, 0.56);
+  const off = (l._anim || 0) % 0.3;
+  ctx.strokeStyle = 'rgba(160,172,190,0.55)'; ctx.lineWidth = 0.03; ctx.beginPath();
+  for (let x = off; x < len; x += 0.3) { ctx.moveTo(x, -0.26); ctx.lineTo(x, 0.26); }
+  ctx.stroke();
+  ctx.strokeStyle = '#c9ced6'; ctx.lineWidth = 0.06; ctx.beginPath(); ctx.moveTo(0, -0.3); ctx.lineTo(len, -0.3); ctx.moveTo(0, 0.3); ctx.lineTo(len, 0.3); ctx.stroke();
+  ctx.fillStyle = win ? 'rgba(232,242,255,0.42)' : 'rgba(220,235,255,0.35)'; rrect(ctx, 0.35, -0.42, Math.max(0.1, len - 0.7), 0.84, 0.3); ctx.fill();
+  ctx.strokeStyle = 'rgba(160,190,230,0.75)'; ctx.lineWidth = 0.04; ctx.beginPath();
+  for (let x = 0.5; x < len - 0.4; x += 0.6) { ctx.moveTo(x, -0.42); ctx.lineTo(x, 0.42); }
+  ctx.stroke();
 }
 function drawGuests(vb) {
   const z = cam.z, sel = RT.sel && RT.sel.kind === 'guest' ? RT.sel.o : null, vis = [];
@@ -2698,7 +2805,7 @@ function toolUp(wx, wy) {
     if (!canAfford(ev.cost)) return;
     const l = addLift(ev);
     floatText(l.tx, l.ty, '−' + krS(ev.cost));
-    toast(`✅ Bygget ${LIFT[l.type].name.toLowerCase()} «${l.name}» (${fmt(l.lenM)} m)`, 'good');
+    toast(`✅ Bygget ${LIFT[l.type].name}: «${l.name}» (${fmt(l.lenM)} m)`, 'good');
     const need = staffNeed(); if (G.staff.liftop < need.liftop) toast(`👷 Husk å ansette heisvakter (trenger ${need.liftop}, har ${G.staff.liftop}).`);
     if (!G.pistes.length) toast('💡 Tegn en nedfart fra toppen av heisen og ned igjen (Bakker → Nedfart).');
   } else if (d.kind === 'piste' || d.kind === 'loipe') {
@@ -3025,7 +3132,7 @@ function onCat(id) {
 function closeSub() { RT.openCat = null; $('#sub').classList.add('hidden'); markBar(); }
 function closeSubIfNarrow() { if (innerWidth < 760 && RT.openCat) { $('#sub').classList.add('hidden'); RT.openCat = null; markBar(); } }
 function subItems(cat) {
-  if (cat === 'lifts') return LIFT_ORDER.map(k => ({ tool: 'lift', sub: k, icon: LIFT[k].icon, name: LIFT[k].name, price: `${krS(LIFT[k].base)} + ${fmt(LIFT[k].perM)} kr/m`, tier: LIFT[k].tier, desc: LIFT[k].desc + ` Kapasitet ca. ${fmt(LIFT[k].cap)} pers/time.` }));
+  if (cat === 'lifts') return LIFT_ORDER.map(k => ({ tool: 'lift', sub: k, icon: LIFT_SVG[k], name: LIFT[k].name, price: `${krS(LIFT[k].base)} + ${fmt(LIFT[k].perM)} kr/m`, tier: LIFT[k].tier, desc: LIFT[k].desc + ` Kapasitet ca. ${fmt(LIFT[k].cap)} pers/time.` }));
   if (cat === 'slopes') return [
     { tool: 'piste', sub: '', icon: '⛷️', name: 'Nedfart', price: `${PISTE_PER_M} kr/m`, tier: 0, desc: 'Tegn en alpinbakke fra toppen og ned.' },
     { tool: 'loipe', sub: '', icon: '🎿', name: 'Langrennsløype', price: `${LOIPE_PER_M} kr/m`, tier: 0, desc: 'Tegn en langrennsløype. Gir langrennsgjester.' },
@@ -3376,6 +3483,7 @@ function loadGame(slot) {
   } catch (e) { console.error(e); G = null; M = null; showMenu(); toast('Lagringen er skadet og kunne ikke lastes.', 'bad'); return false; }
 }
 function migrate(g) {
+  for (const l of g.lifts || []) l.type = normLiftType(l.type);
   g.settings = Object.assign({ snowmaking: true, evening: true, autoStaff: false }, g.settings || {});
   g.stats = g.stats || {}; g.stats.today = g.stats.today || newDayStats(); g.stats.season = g.stats.season || newSeasonStats(); g.stats.hist = g.stats.hist || []; g.stats.seasons = g.stats.seasons || [];
   if (g.happyEMA === undefined) g.happyEMA = 60; if (g.waitEMA === undefined) g.waitEMA = 3; if (g.injEMA === undefined) g.injEMA = 0.0015;
@@ -3419,7 +3527,7 @@ function showMenu() {
 const INTRO = [
   ['Velkommen til Skisjefen! 🎿', 'Du er sjef for et nytt skisenter på en urørt fjellside. Bygg heiser, bakker og fasiliteter, hold gjestene fornøyde og tjen penger. Jo flere stjerner skisenteret får, desto flere gjester kommer.'],
   ['Kart og kamera 🗺️', 'Dra i kartet for å flytte deg, rull med musehjulet eller klyp med to fingre for å zoome. Høydekurvene viser terrenget, og 📐-knappen viser hvor bratt det er. Skog, steiner og bekker koster ekstra å bygge over. Nederst ligger parkeringen og inngangen 🎟️.'],
-  ['Bygg en heis 🚡', 'Velg <b>Heiser → Trekkheis</b> og dra fra bunnen (gjerne nær inngangen) og oppover fjellet. Prisen avhenger av lengden. Heisene trenger heisvakter – ansett dem under <b>Ansatte</b>.'],
+  ['Bygg en heis 🚡', 'Velg <b>Heiser</b> – for eksempel <b>T-krok</b> eller <b>koppheis</b> – og dra fra bunnen (gjerne nær inngangen) og oppover fjellet. Et <b>skibånd</b> er fint for nybegynnere. Prisen avhenger av lengden. Heisene trenger heisvakter – ansett dem under <b>Ansatte</b>.'],
   ['Tegn en nedfart ⛷️', 'Velg <b>Bakker → Nedfart</b> og tegn med musa eller fingeren fra toppen av heisen og ned igjen. Fargen viser vanskelighetsgraden – <b style="color:#2fa84f">grønn</b>, <b style="color:#2f6fd6">blå</b>, <b style="color:#d93a3a">rød</b> eller <b>svart</b> – og regnes ut fra brattheten. Nybegynnere trenger grønne bakker!'],
   ['Gjester og fasiliteter ☕', 'Gjestene blir sultne, kalde, trøtte og må på do. Bygg kafé, toaletter, skiutleie og skiskole nær inngangen eller ved heisene. Klikk på en gjest for å se hva den tenker, og følg med i <b>Oversikt</b>.'],
   ['Start sesongen ▶', 'Sett prisen på heiskortet under <b>Økonomi</b>, ansett folk og trykk <b>«Åpne sesongen»</b>. Sesongen varer fra desember til april – jul, vinterferie og påske gir ekstra mange gjester. Styr farten med ⏸ 1× 2× 3×. Lykke til!'],
