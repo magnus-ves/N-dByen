@@ -16,7 +16,8 @@
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;overflow:hidden;background:#16223f;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;color:var(--text);-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;overscroll-behavior:none}
 input,select,textarea{-webkit-user-select:text;user-select:text}
-canvas#game{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+canvas#game,canvas#gl{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+canvas#gl{background:#16223f}
 button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 .hidden{display:none!important}
 b,strong{font-weight:700}
@@ -191,6 +192,7 @@ canvas.chart{width:100%;height:110px;display:block;background:#f6f9fd;border-rad
 @keyframes spin{to{transform:rotate(360deg)}}
 #loadSteps{font-size:13px;color:var(--muted);text-align:left;margin-top:8px;line-height:1.6}
 
+@media (pointer:coarse){ #bZin,#bZout{display:none!important} }
 @media (max-width:760px){
   #top{gap:4px;padding-top:calc(4px + env(safe-area-inset-top))}
   .chip{font-size:11.5px;padding:5px 7px;gap:3px}
@@ -227,6 +229,7 @@ canvas.chart{width:100%;height:110px;display:block;background:#f6f9fd;border-rad
 </head>
 <body>
 
+<canvas id="gl" class="hidden"></canvas>
 <canvas id="game"></canvas>
 
 <div id="hud" class="hidden">
@@ -248,6 +251,10 @@ canvas.chart{width:100%;height:110px;display:block;background:#f6f9fd;border-rad
   </header>
   <div id="hint" class="hidden"></div>
   <div id="maptools">
+    <button class="ib" id="b3D" title="Bytt mellom 3D og 2D" style="font-weight:800;font-size:14px">3D</button>
+    <button class="ib hidden" id="bRotL" title="Roter (Q)">⟲</button>
+    <button class="ib hidden" id="bRotR" title="Roter (E)">⟳</button>
+    <button class="ib hidden" id="bTilt" title="Endre vinkel">⛰️</button>
     <button class="ib" id="bSlope" title="Vis bratthet (vanskelighetsgrad)">📐</button>
     <button class="ib" id="bZin" title="Zoom inn">＋</button>
     <button class="ib" id="bZout" title="Zoom ut">－</button>
@@ -681,7 +688,7 @@ function prepTerrain() {
     else if (Math.floor(a / 20) !== Math.floor(b / 20) || Math.floor(a / 20) !== Math.floor(c / 20)) C[i] = 1;
   }
   RT.tp = { W, H, E, S, WF, SF, RF, C, NZ };
-  RT.terrCv = document.createElement('canvas'); RT.terrCv.width = W; RT.terrCv.height = H; RT.terrCtx = RT.terrCv.getContext('2d');
+  RT.terrCv = document.createElement('canvas'); RT.terrCv.width = W; RT.terrCv.height = H; RT.terrCtx = RT.terrCv.getContext('2d'); RT.terr3Cv = null;
   RT.objCv = document.createElement('canvas'); RT.objCv.width = M.GW * OP; RT.objCv.height = M.GH * OP; RT.objCtx = RT.objCv.getContext('2d');
   makeSlopeLayer();
 }
@@ -695,7 +702,13 @@ function snowKey() {
   return G.snow.map(v => Math.round(Math.min(v, 60) / 4)).join(',');
 }
 function renderTerrain() {
-  const { W, H, E, S, WF, SF, RF, C, NZ } = RT.tp, img = RT.terrCtx.createImageData(W, H), d = img.data;
+  paintTerrainImg(false); RT.snowKey = snowKey();
+  if (V3.mapRef === M) { paintTerrainImg(true); mark3D(0, 1, 1); }
+}
+function paintTerrainImg(flat) {
+  const { W, H, E, S, WF, SF, RF, C, NZ } = RT.tp;
+  if (flat && !RT.terr3Cv) { RT.terr3Cv = document.createElement('canvas'); RT.terr3Cv.width = W; RT.terr3Cv.height = H; RT.terr3Ctx = RT.terr3Cv.getContext('2d'); }
+  const tctx = flat ? RT.terr3Ctx : RT.terrCtx, img = tctx.createImageData(W, H), d = img.data;
   const summer = G.phase === 'off', tl = M.treeline, lut = new Float32Array(257), coldLake = !summer && (G.phase !== 'season' || dateOf(G.day).getMonth() !== 3 || snowAtE(M.minE) > 8);
   for (let k = 0; k <= 256; k++) lut[k] = summer ? 0 : snowAtE(M.minE + (M.maxE - M.minE) * k / 256);
   const span = M.maxE - M.minE;
@@ -704,7 +717,7 @@ function renderTerrain() {
     const sn = lut[clamp(Math.round((e - M.minE) / span * 256), 0, 256)];
     let cov = clamp((sn - 2) / 16, 0, 1);
     if (cov > 0 && cov < 1) cov = clamp(cov + (nz - 0.5) * 0.7, 0, 1);
-    const br = clamp(0.36 + 0.64 * sh, 0.2, 1.25) * (0.985 + hash2(i % W, (i / W) | 0, 3) * 0.03);
+    const br = flat ? 0.97 + hash2(i % W, (i / W) | 0, 3) * 0.03 : clamp(0.36 + 0.64 * sh, 0.2, 1.25) * (0.985 + hash2(i % W, (i / W) | 0, 3) * 0.03);
     let r, g, b;
     // bart terreng
     if (e < tl - 20) { r = lerp(104, 128, nz); g = lerp(128, 118, nz); b = lerp(74, 82, nz); }
@@ -726,11 +739,10 @@ function renderTerrain() {
       if (summer) { r = 148; g = 140; b = 126; } else { r = 206; g = 208; b = 214; }
     }
     const c = C[i];
-    if (c && wf <= 110) { const m = c === 2 ? 0.86 : 0.94; r *= m; g *= m; b *= m; }
+    if (c && wf <= 110) { const m = c === 2 ? (flat ? 0.93 : 0.86) : (flat ? 0.975 : 0.94); r *= m; g *= m; b *= m; }
     const o = i * 4; d[o] = r; d[o + 1] = g; d[o + 2] = b; d[o + 3] = 255;
   }
-  RT.terrCtx.putImageData(img, 0, 0);
-  RT.snowKey = snowKey();
+  tctx.putImageData(img, 0, 0);
 }
 function makeTreeSprite(snowy, variant) {
   const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d');
@@ -782,6 +794,7 @@ function renderObjects(x0, y0, x1, y1) {
     }
   }
   c.restore();
+  if (V3.mapRef === M) V3.treesDirty = true;
 }
 function makeSlopeLayer() {
   const c = document.createElement('canvas'); c.width = M.GW; c.height = M.GH; const x = c.getContext('2d'), img = x.createImageData(M.GW, M.GH);
@@ -1523,7 +1536,7 @@ function updatePisteOpen() {
     p._open = p.open && p.enabled !== false;
     p._q = pisteQuality(p);
   }
-  RT.graphDirty = true;
+  RT.graphDirty = true; mark3D(0, 1, 0);
 }
 function bldEntrance(b) { return { x: b.x + b.w / 2, y: b.y + b.h + 0.35 }; }
 function bldVisitable(b) { const v = BLD[b.type].visit; return !!v; }
@@ -1545,7 +1558,7 @@ function assignStaff() {
   let gr = G.staff.groomer;
   for (const b of G.blds) if (b.type === 'garage') { b._staffed = gr > 0; if (gr > 0) gr--; }
 }
-function afterChange() { rebuildMasks(); assignStaff(); RT.graphDirty = true; RT.dijCache.clear(); updateBarBadges(); }
+function afterChange() { rebuildMasks(); assignStaff(); RT.graphDirty = true; RT.dijCache.clear(); updateBarBadges(); mark3D(1, 1, 0); }
 function rebuildMasks() {
   const n = M.GW * M.GH; RT.occ = new Int32Array(n); RT.pmask = new Uint8Array(n); RT.lmask = new Uint8Array(n);
   for (const b of G.blds) for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) if (inMap(x, y)) RT.occ[y * M.GW + x] = b.id;
@@ -2343,7 +2356,7 @@ function startSeason() {
 /* =====================================================================
    TEGNING
    ===================================================================== */
-const cv = $('#game'), ctx = cv.getContext('2d');
+const cv = $('#game'); let ctx = cv.getContext('2d');
 const cam = { x: 48, y: 56, z: 9 };
 let DPR = 1, VW = 0, VH = 0;
 function resize() {
@@ -2351,12 +2364,19 @@ function resize() {
   cv.width = Math.round(VW * DPR); cv.height = Math.round(VH * DPR);
   RT.nightCv = document.createElement('canvas'); RT.nightCv.width = Math.ceil(VW / 2); RT.nightCv.height = Math.ceil(VH / 2); RT.nightCtx = RT.nightCv.getContext('2d');
   if (M) clampCam();
+  onResize3D();
 }
-function w2s(x, y) { return [(x - cam.x) * cam.z + VW / 2, (y - cam.y) * cam.z + VH / 2]; }
-function s2w(sx, sy) { return [(sx - VW / 2) / cam.z + cam.x, (sy - VH / 2) / cam.z + cam.y]; }
+function w2s(x, y, h) {
+  if (V3.on) { const v = V3.v.set(x, Y3(x, y) + (h || 0), y).project(V3.camera); if (v.z > 1 || v.z < -1) return [-9999, -9999]; return [(v.x + 1) / 2 * VW, (1 - v.y) / 2 * VH]; }
+  return [(x - cam.x) * cam.z + VW / 2, (y - cam.y) * cam.z + VH / 2];
+}
+function s2w(sx, sy) {
+  if (V3.on) { const r = ray3(sx, sy); return rayGround(r) || rayPlane(r, 0) || [cam.x, cam.y]; }
+  return [(sx - VW / 2) / cam.z + cam.x, (sy - VH / 2) / cam.z + cam.y];
+}
 function minZoom() { return Math.min(VW / (M.GW + 8), VH / (M.GH + 8)) * 0.85; }
 function clampCam() { cam.z = clamp(cam.z, minZoom(), 56); cam.x = clamp(cam.x, -4, M.GW + 4); cam.y = clamp(cam.y, -4, M.GH + 4); }
-function viewBounds() { const [x0, y0] = s2w(0, 0), [x1, y1] = s2w(VW, VH); return { x0: x0 - 3, y0: y0 - 3, x1: x1 + 3, y1: y1 + 3 }; }
+function viewBounds() { if (V3.on) return { x0: -6, y0: -6, x1: M.GW + 6, y1: M.GH + 6 }; const [x0, y0] = s2w(0, 0), [x1, y1] = s2w(VW, VH); return { x0: x0 - 3, y0: y0 - 3, x1: x1 + 3, y1: y1 + 3 }; }
 function inVB(vb, x, y, m) { m = m || 0; return x > vb.x0 - m && x < vb.x1 + m && y > vb.y0 - m && y < vb.y1 + m; }
 function bbOf(pts) { let a = 1e9, b = 1e9, c = -1e9, d = -1e9; for (const p of pts) { a = Math.min(a, p[0]); b = Math.min(b, p[1]); c = Math.max(c, p[0]); d = Math.max(d, p[1]); } return [a, b, c, d]; }
 function vbHit(vb, bb) { return !(bb[2] < vb.x0 || bb[0] > vb.x1 || bb[3] < vb.y0 || bb[1] > vb.y1); }
@@ -2370,7 +2390,15 @@ function shade(hex, f) {
 function isWinter() { return G.phase !== 'off'; }
 
 function render() {
-  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#16223f'; ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (V3.on && G && M && V3.mapRef === M) {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    render3D();
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    const vb = viewBounds(); drawOverlay3D(); drawLabels(vb); drawWeather(); drawToolScreen();
+    return;
+  }
+  ctx.fillStyle = '#16223f'; ctx.fillRect(0, 0, cv.width, cv.height);
   if (!M || !RT.terrCv || !G) return;
   const z = cam.z * DPR;
   ctx.setTransform(z, 0, 0, z, (VW / 2 - cam.x * cam.z) * DPR, (VH / 2 - cam.y * cam.z) * DPR);
@@ -2422,6 +2450,7 @@ function drawHouse(x, y, w, h, roof, opts) {
 }
 function drawBase() {
   const b = M.base, cars = Math.min(RT.parked || 0, 120);
+  if (RT.texMode) { drawParkingLot(b.px, b.py, b.pw, b.ph, 0, 1); return; }
   drawParkingLot(b.px, b.py, b.pw, b.ph, Math.round(cars * (b.pw * b.ph * 1.1) / 120), 1);
   drawHouse(b.ex - 0.8, b.ey - 0.75, 1.6, 0.9, '#d6453d');
   ctx.strokeStyle = '#444'; ctx.lineWidth = 0.06; ctx.beginPath(); ctx.moveTo(b.ex + 1.1, b.ey + 0.1); ctx.lineTo(b.ex + 1.1, b.ey - 1.3); ctx.stroke();
@@ -2431,7 +2460,7 @@ function drawBase() {
 function drawLoipes(vb) {
   for (const lp of G.loipes) {
     if (!lp._bb) lp._bb = bbOf(lp.pts); if (!vbHit(vb, lp._bb)) continue;
-    const sel = RT.sel && RT.sel.o === lp;
+    const sel = !RT.texMode && RT.sel && RT.sel.o === lp;
     strokePts(lp.pts);
     if (sel) { ctx.strokeStyle = 'rgba(255,200,40,0.6)'; ctx.lineWidth = 1.4; ctx.stroke(); }
     ctx.strokeStyle = isWinter() ? 'rgba(120,145,185,0.55)' : 'rgba(150,120,80,0.6)'; ctx.lineWidth = 0.62; ctx.stroke();
@@ -2443,7 +2472,7 @@ function drawPistes(vb) {
   const summer = !isWinter(), dk = darkness();
   for (const p of G.pistes) {
     if (!p._bb) p._bb = bbOf(p.pts); if (!vbHit(vb, p._bb)) continue;
-    const col = DIFF[p.diff].col, open = p._open, sel = RT.sel && RT.sel.o === p;
+    const col = DIFF[p.diff].col, open = p._open, sel = !RT.texMode && RT.sel && RT.sel.o === p;
     strokePts(p.pts);
     if (sel) { ctx.strokeStyle = 'rgba(255,200,40,0.7)'; ctx.lineWidth = PW + 1.1; ctx.stroke(); }
     ctx.globalAlpha = open || summer ? 0.92 : 0.55; ctx.strokeStyle = open || summer ? col : '#8a8f99'; ctx.lineWidth = PW + 0.32; ctx.stroke();
@@ -2467,7 +2496,7 @@ function drawPistes(vb) {
         ctx.moveTo(q.x - q.dx * 0.25 - q.dy * 0.3, q.y - q.dy * 0.25 + q.dx * 0.3); ctx.lineTo(q.x + q.dx * 0.15, q.y + q.dy * 0.15); ctx.lineTo(q.x - q.dx * 0.25 + q.dy * 0.3, q.y - q.dy * 0.25 - q.dx * 0.3); ctx.stroke();
       }
     }
-    if (p.lights && cam.z > 5) {
+    if (p.lights && cam.z > 5 && !RT.texMode) {
       if (!p._lamps) { p._lamps = []; for (let s = 1; s < p._len; s += 3) { const q = pointAt(p, s), o = PW / 2 + 0.35; p._lamps.push([q.x - q.dy * o, q.y + q.dx * o]); } }
       ctx.fillStyle = dk > 0.3 && RT.anyEvening && open ? '#fff3b0' : '#3b3f4a';
       for (const [lx, ly] of p._lamps) { ctx.beginPath(); ctx.arc(lx, ly, 0.11, 0, 6.28); ctx.fill(); }
@@ -2478,9 +2507,10 @@ function drawBuildings(vb) {
   const t = performance.now() / 1000;
   for (const b of G.blds) {
     if (!inVB(vb, b.x + b.w / 2, b.y + b.h / 2, 4)) continue;
-    const B = BLD[b.type], sel = RT.sel && RT.sel.o === b;
+    const B = BLD[b.type], sel = !RT.texMode && RT.sel && RT.sel.o === b;
+    if (RT.texMode && b.type !== 'parking' && b.type !== 'park') continue;
     if (sel) { ctx.strokeStyle = 'rgba(255,200,40,0.85)'; ctx.lineWidth = 0.25; ctx.strokeRect(b.x - 0.25, b.y - 0.25, b.w + 0.5, b.h + 0.5); }
-    if (b.type === 'parking') { drawParkingLot(b.x, b.y, b.w, b.h, Math.round(Math.max(0, (RT.parked || 0) - 120) * b.w * b.h * 1.1 / 150), b.id); continue; }
+    if (b.type === 'parking') { drawParkingLot(b.x, b.y, b.w, b.h, RT.texMode ? 0 : Math.round(Math.max(0, (RT.parked || 0) - 120) * b.w * b.h * 1.1 / 150), b.id); continue; }
     if (b.type === 'park') {
       ctx.fillStyle = 'rgba(16,26,56,0.18)'; rrect(ctx, b.x + 0.15, b.y + 0.2, b.w, b.h, 0.4); ctx.fill();
       ctx.fillStyle = isWinter() ? '#f4f8fe' : '#b9c79a'; rrect(ctx, b.x, b.y, b.w, b.h, 0.4); ctx.fill();
@@ -2666,6 +2696,7 @@ function drawGuests(vb) {
   if (sel && !sel.gone && sel.state !== 'inside') { ctx.strokeStyle = '#ffc828'; ctx.lineWidth = 0.08; ctx.beginPath(); ctx.arc(sel.x, sel.y, 0.38, 0, 6.28); ctx.stroke(); }
 }
 function label(x, y, text, opt) {
+  if (!(x > -300 && x < VW + 300 && y > -60 && y < VH + 60)) return;
   opt = opt || {};
   ctx.font = `${opt.bold ? 700 : 600} ${opt.size || 12}px system-ui, sans-serif`;
   const w = ctx.measureText(text).width + 10, h = (opt.size || 12) + 7;
@@ -2676,31 +2707,33 @@ function label(x, y, text, opt) {
 function drawLabels(vb) {
   const z = cam.z;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  for (const p of M.peaks) { if (!inVB(vb, p.x, p.y)) continue; const [sx, sy] = w2s(p.x, p.y); ctx.fillStyle = '#1b2a4a'; ctx.font = '700 11px system-ui'; ctx.fillText('▲', sx, sy); if (z > 3.5) label(sx, sy - 15, `${p.name ? p.name + ' ' : ''}${fmt(p.ele)} moh`, { size: 11 }); }
-  { const [sx, sy] = w2s(M.base.ex, M.base.ey); if (z > 4) label(sx, sy - Math.max(16, 1.4 * z), '🎟️ Inngang', { size: 11, bold: true }); }
+  for (const p of M.peaks) { if (!inVB(vb, p.x, p.y)) continue; const [sx, sy] = w2s(p.x, p.y, 0.4); if (sx < -100) continue; ctx.fillStyle = '#1b2a4a'; ctx.font = '700 11px system-ui'; ctx.fillText('▲', sx, sy); if (z > 3.5) label(sx, sy - 15, `${p.name ? p.name + ' ' : ''}${fmt(p.ele)} moh`, { size: 11 }); }
+  { const [sx, sy] = w2s(M.base.ex, M.base.ey, V3.on ? 1.4 : 0); if (z > 4) label(sx, sy - (V3.on ? 8 : Math.max(16, 1.4 * z)), '🎟️ Inngang', { size: 11, bold: true }); }
   if (z > 7.5) for (const p of G.pistes) {
     if (!vbHit(vb, p._bb || bbOf(p.pts))) continue;
-    const q = p.pts[Math.min(2, p.pts.length - 1)], [sx, sy] = w2s(q[0], q[1]);
+    const q = p.pts[Math.min(2, p.pts.length - 1)], [sx, sy] = w2s(q[0], q[1], 0.3);
     label(sx, sy, p.name, { size: 11, bold: true, col: '#fff', bg: p._open ? DIFF[p.diff].col : '#8a8f99' });
   }
   for (const l of G.lifts) {
+    if (!l._bb) l._bb = [Math.min(l.bx, l.tx), Math.min(l.by, l.ty), Math.max(l.bx, l.tx), Math.max(l.by, l.ty)];
     if (!vbHit(vb, l._bb)) continue;
-    if (z > 8.5) { const [sx, sy] = w2s((l.bx + l.tx) / 2, (l.by + l.ty) / 2); label(sx, sy, `${LIFT[l.type].icon} ${l.name}`, { size: 11 }); }
-    const [bx, by] = w2s(l.bx, l.by);
+    if (z > 8.5) { const mx = (l.bx + l.tx) / 2, my = (l.by + l.ty) / 2, [sx, sy] = w2s(mx, my, V3.on && l._prof ? cableY(l, l._len / 2) - Y3(mx, my) + 0.4 : 0); label(sx, sy, `${LIFT[l.type].icon} ${l.name}`, { size: 11 }); }
+    const [bx, by] = w2s(l.bx, l.by, 0.6);
     if (G.phase === 'season' && !l._open && (G.time >= 9 * 60 && G.time < 16 * 60 + 15 || !l._staffed || !l.enabled) && z > 3) label(bx, by + 14, '⛔', { size: 11, bg: 'rgba(255,230,230,0.92)' });
     else if (l._q.length && z > 5) label(bx, by + 16, `👥 ${l._q.length}`, { size: 11, bg: l._q.length > 40 ? 'rgba(255,215,200,0.95)' : 'rgba(255,255,255,0.9)' });
   }
   if (z > 5) for (const b of G.blds) {
     if (!inVB(vb, b.x + b.w / 2, b.y + b.h / 2, 2) || b.type === 'parking') continue;
-    const B = BLD[b.type], [sx, sy] = w2s(b.x + b.w / 2, b.y + b.h / 2), fs = clamp(z * 0.75, 11, 22);
+    const B = BLD[b.type], [sx, sy] = w2s(b.x + b.w / 2, b.y + b.h / 2, V3.on ? 1.9 : 0), fs = clamp(z * 0.75, 11, 22);
+    if (sx < -100) continue;
     ctx.font = `${fs}px system-ui, "Apple Color Emoji", "Segoe UI Emoji"`; ctx.fillText(B.icon, sx, sy);
     if ((B.staff && !b._staffed) || !b.enabled) label(sx, sy + fs * 0.9, b.enabled ? 'Mangler personell' : 'Stengt', { size: 10, bg: 'rgba(255,225,225,0.95)', col: '#8a1f1f' });
   }
-  for (const m of RT.marks) { const [sx, sy] = w2s(m.x, m.y); label(sx, sy - 14, '🚑 Skade', { size: 10, bg: 'rgba(255,225,225,0.95)', col: '#8a1f1f' }); }
+  for (const m of RT.marks) { const [sx, sy] = w2s(m.x, m.y, 0.6); label(sx, sy - 14, '🚑 Skade', { size: 10, bg: 'rgba(255,225,225,0.95)', col: '#8a1f1f' }); }
   const now = performance.now();
   for (let i = RT.float.length - 1; i >= 0; i--) {
     const f = RT.float[i], age = (now - f.t0) / 1000; if (age > 2.2) { RT.float.splice(i, 1); continue; }
-    const [sx, sy] = w2s(f.x, f.y); ctx.globalAlpha = 1 - age / 2.2;
+    const [sx, sy] = w2s(f.x, f.y, 1); if (sx < -100) continue; ctx.globalAlpha = 1 - age / 2.2;
     ctx.font = '800 14px system-ui'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.strokeText(f.text, sx, sy - age * 26); ctx.fillStyle = f.col; ctx.fillText(f.text, sx, sy - age * 26);
     ctx.globalAlpha = 1;
   }
@@ -2757,6 +2790,506 @@ function drawWeather() {
     if (w === 'rain') { ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(f.x - 3, f.y - 12); ctx.stroke(); }
     else { ctx.beginPath(); ctx.arc(f.x, f.y, f.s * (storm ? 1.3 : 1.1), 0, 6.28); ctx.fill(); }
   }
+}
+
+/* =====================================================================
+   3D-VISNING (Three.js lastes fra CDN første gang 3D slås på)
+   ===================================================================== */
+const V3 = { on: false, want: false, ready: false, loading: null, mapRef: null, lastShadow: 0, sunKey: '', litOn: null, bldLit: null };
+const cam3 = { yaw: 0, pitch: 0.7, dist: 75 };
+const FOV = 50, GT = 10;
+const STATION_H = { carpet: 0.05, platter: 0.8, tbar: 0.85, chair: 1.05, detach: 1.15, gondola: 1.3 };
+const TOWER_H = { platter: 0.8, tbar: 0.9, chair: 1.2, detach: 1.4, gondola: 1.75 };
+const B3 = { cafe: [0.6, 0.45, '#e9dcc5'], restaurant: [0.8, 0.6, '#efe3cc'], toilet: [0.45, 0.28, '#dfe6ee'], rental: [0.6, 0.45, '#e9dcc5'], school: [0.6, 0.45, '#e6eedb'], cabin: [0.55, 0.55, '#8a5a3c'], hotel: [1.7, 0.65, '#efe6d6'], garage: [0.7, 0.38, '#c9ced6'] };
+function view3DPref() { return lsGet('skisjefen_visning') !== '2d'; }
+function hasWebGL() { try { const c = document.createElement('canvas'); return !!(window.WebGLRenderingContext && (c.getContext('webgl2') || c.getContext('webgl'))); } catch (e) { return false; } }
+function ensureThree() {
+  if (window.THREE && window.THREE.WebGLRenderer) return Promise.resolve();
+  if (V3.loading) return V3.loading;
+  V3.loading = new Promise((res, rej) => {
+    const s = document.createElement('script'); s.src = 'https://unpkg.com/three@0.149.0/build/three.min.js'; s.async = true;
+    const tm = setTimeout(() => { s.remove(); rej(new Error('tidsavbrudd')); }, 20000);
+    s.onload = () => { clearTimeout(tm); (window.THREE && window.THREE.WebGLRenderer) ? res() : rej(new Error('Three.js mangler')); };
+    s.onerror = () => { clearTimeout(tm); s.remove(); rej(new Error('kunne ikke laste Three.js')); };
+    document.head.appendChild(s);
+  });
+  V3.loading.catch(() => { V3.loading = null; });
+  return V3.loading;
+}
+function Y3(x, y) { return (elev(x, y) - M.minE) / M.cellM; }
+function mark3D(o, g, t) { if (o) V3.objDirty = true; if (g) V3.groundDirty = true; if (t) V3.treesDirty = true; }
+function zoomFromDist(d) { return (VH / 2) / (d * Math.tan(FOV * Math.PI / 360)); }
+function distFromZoom(z) { return (VH / 2) / (z * Math.tan(FOV * Math.PI / 360)); }
+function updViewBtns() {
+  const b = $('#b3D'); if (b) { b.textContent = V3.on ? '2D' : '3D'; b.title = V3.on ? 'Vis 2D-kart' : 'Vis 3D'; }
+  for (const id of ['#bRotL', '#bRotR', '#bTilt']) { const e = $(id); if (e) e.classList.toggle('hidden', !V3.on); }
+}
+function setView(mode, quiet) {
+  if (mode === '3d') {
+    if (!quiet) lsSet('skisjefen_visning', '3d');
+    if (!hasWebGL()) { if (!quiet) toast('Nettleseren din støtter ikke WebGL, så 3D er ikke tilgjengelig.', 'bad'); return setView('2d', true); }
+    V3.want = true;
+    if (!V3.ready && !quiet) toast('Laster 3D …');
+    ensureThree().then(() => {
+      if (!G || !M || !V3.want) return;
+      try { init3D(); if (V3.mapRef !== M) build3DWorld(); }
+      catch (e) { console.error(e); V3.want = false; toast('3D kunne ikke startes – viser 2D-kart.', 'bad'); setView('2d', true); return; }
+      if (!quiet) cam3.dist = clamp(distFromZoom(cam.z), 8, 260);
+      V3.on = true; $('#gl').classList.remove('hidden'); onResize3D(); updViewBtns();
+      if (!lsGet('skisjefen_3dtips')) { lsSet('skisjefen_3dtips', '1'); toast('🎥 3D: dra for å flytte, rull/klyp for å zoome, høyreklikk og dra (eller vri med to fingre) for å rotere.'); }
+    }).catch(err => { V3.want = false; toast(`3D-visningen kunne ikke lastes (${err.message}) – viser 2D-kart.`, 'bad'); setView('2d', true); });
+  } else {
+    if (!quiet) lsSet('skisjefen_visning', '2d');
+    if (V3.on && M) { cam.z = zoomFromDist(cam3.dist); clampCam(); }
+    V3.on = false; V3.want = false; const gl = $('#gl'); if (gl) gl.classList.add('hidden'); updViewBtns();
+  }
+}
+function init3D() {
+  if (V3.ready) return;
+  const T = THREE, mobile = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+  const r = new T.WebGLRenderer({ canvas: $('#gl'), antialias: !mobile, powerPreference: 'high-performance' });
+  r.setPixelRatio(Math.min(window.devicePixelRatio || 1, mobile ? 1.25 : 1.5));
+  r.shadowMap.enabled = true; r.shadowMap.type = T.PCFSoftShadowMap; r.shadowMap.autoUpdate = false;
+  const sc = new T.Scene(), camera = new T.PerspectiveCamera(FOV, Math.max(1, VW) / Math.max(1, VH), 0.3, 3000);
+  const hemi = new T.HemisphereLight(0xeef4ff, 0x8d96a8, 0.75), sun = new T.DirectionalLight(0xfff1dc, 0.8);
+  sun.castShadow = true; sun.shadow.mapSize.set(mobile ? 1024 : 2048, mobile ? 1024 : 2048); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.04;
+  sc.add(hemi, sun, sun.target); sc.background = new T.Color(0xbcd3ee); sc.fog = new T.Fog(0xbcd3ee, 100, 600);
+  Object.assign(V3, { T, r, sc, camera, hemi, sun, dummy: new T.Object3D(), col: new T.Color(), tmpC: new T.Color(), v: new T.Vector3(), ready: true });
+}
+function onResize3D() { if (!V3.ready) return; V3.r.setSize(VW, VH, false); V3.camera.aspect = Math.max(1, VW) / Math.max(1, VH); V3.camera.updateProjectionMatrix(); }
+function disposeObj(o) {
+  if (!o) return;
+  o.traverse(c => { if (c.geometry) c.geometry.dispose(); const ms = c.material ? (Array.isArray(c.material) ? c.material : [c.material]) : []; for (const m of ms) m.dispose(); });
+  if (o.parent) o.parent.remove(o);
+}
+function colored(g, col) {
+  const T = V3.T; if (g.index) g = g.toNonIndexed();
+  const n = g.attributes.position.count, a = new Float32Array(n * 3), c = new T.Color(col);
+  for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; }
+  g.setAttribute('color', new T.BufferAttribute(a, 3)); return g;
+}
+function mergeGeoms(list) {
+  const T = V3.T; let n = 0; for (const g of list) n += g.attributes.position.count;
+  const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3); let o = 0;
+  for (const g of list) { pos.set(g.attributes.position.array, o * 3); nor.set(g.attributes.normal.array, o * 3); if (g.attributes.color) col.set(g.attributes.color.array, o * 3); else col.fill(1, o * 3, (o + g.attributes.position.count) * 3); o += g.attributes.position.count; g.dispose(); }
+  const m = new T.BufferGeometry(); m.setAttribute('position', new T.BufferAttribute(pos, 3)); m.setAttribute('normal', new T.BufferAttribute(nor, 3)); m.setAttribute('color', new T.BufferAttribute(col, 3)); return m;
+}
+function prismGeom(L, W, H) {
+  const T = V3.T, a = [-L / 2, 0, -W / 2], b = [-L / 2, 0, W / 2], c = [-L / 2, H, 0], d = [L / 2, 0, -W / 2], e = [L / 2, 0, W / 2], f = [L / 2, H, 0];
+  const v = [a, c, f, a, f, d, b, e, f, b, f, c, a, b, c, d, f, e].flat(), g = new T.BufferGeometry();
+  g.setAttribute('position', new T.Float32BufferAttribute(v, 3)); g.computeVertexNormals(); return g;
+}
+function build3DWorld() {
+  const T = V3.T;
+  for (const k of ['world', 'trees', 'objs', 'dyn']) { disposeObj(V3[k]); V3[k] = null; }
+  if (V3.gtex) { V3.gtex.dispose(); V3.ntex.dispose(); }
+  V3.mapRef = M; V3.pool = null;
+  const GW = M.GW, GH = M.GH, W1 = GW + 1, n = W1 * (GH + 1), pos = new Float32Array(n * 3), uv = new Float32Array(n * 2), idx = [];
+  for (let j = 0; j <= GH; j++) for (let i = 0; i <= GW; i++) { const k = j * W1 + i; pos[k * 3] = i; pos[k * 3 + 1] = Y3(i, j); pos[k * 3 + 2] = j; uv[k * 2] = i / GW; uv[k * 2 + 1] = 1 - j / GH; }
+  for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) { const a = j * W1 + i, b = a + 1, c = a + W1, d = c + 1; idx.push(a, c, b, b, c, d); }
+  const geo = new T.BufferGeometry(); geo.setAttribute('position', new T.BufferAttribute(pos, 3)); geo.setAttribute('uv', new T.BufferAttribute(uv, 2)); geo.setIndex(idx); geo.computeVertexNormals();
+  V3.gcv = document.createElement('canvas'); V3.gcv.width = GW * GT; V3.gcv.height = GH * GT; V3.gctx = V3.gcv.getContext('2d');
+  V3.ncv = document.createElement('canvas'); V3.ncv.width = GW * 4; V3.ncv.height = GH * 4; V3.nctx = V3.ncv.getContext('2d');
+  V3.gtex = new T.CanvasTexture(V3.gcv); V3.gtex.anisotropy = Math.min(8, V3.r.capabilities.getMaxAnisotropy());
+  V3.ntex = new T.CanvasTexture(V3.ncv);
+  V3.terrMat = new T.MeshLambertMaterial({ map: V3.gtex, emissive: 0xffffff, emissiveMap: V3.ntex, emissiveIntensity: 0 });
+  V3.world = new T.Group(); V3.sc.add(V3.world);
+  const mesh = new T.Mesh(geo, V3.terrMat); mesh.receiveShadow = true; V3.world.add(mesh);
+  const ring = [];
+  for (let i = 0; i <= GW; i++) ring.push([i, 0]); for (let j = 1; j <= GH; j++) ring.push([GW, j]);
+  for (let i = GW - 1; i >= 0; i--) ring.push([i, GH]); for (let j = GH - 1; j >= 0; j--) ring.push([0, j]);
+  let lowY = 1e9; for (let k = 1; k < pos.length; k += 3) lowY = Math.min(lowY, pos[k]); lowY -= 4;
+  const sp = [], scol = [], top = new T.Color('#7b6a55'), bot = new T.Color('#3a3027');
+  for (let k = 0; k + 1 < ring.length; k++) {
+    const [x1, z1] = ring[k], [x2, z2] = ring[k + 1], y1 = Y3(x1, z1), y2 = Y3(x2, z2);
+    sp.push(x1, y1, z1, x2, y2, z2, x2, lowY, z2, x1, y1, z1, x2, lowY, z2, x1, lowY, z1);
+    for (const c of [top, top, bot, top, bot, bot]) scol.push(c.r, c.g, c.b);
+  }
+  const sg = new T.BufferGeometry(); sg.setAttribute('position', new T.Float32BufferAttribute(sp, 3)); sg.setAttribute('color', new T.Float32BufferAttribute(scol, 3)); sg.computeVertexNormals();
+  V3.world.add(new T.Mesh(sg, new T.MeshLambertMaterial({ vertexColors: true, side: T.DoubleSide })));
+  const sc = V3.sun.shadow.camera, half = Math.max(GW, GH) * 0.85;
+  sc.left = -half; sc.right = half; sc.top = half; sc.bottom = -half; sc.near = 1; sc.far = 900; sc.updateProjectionMatrix();
+  if (!RT.terr3Cv) paintTerrainImg(true);
+  V3.objDirty = V3.groundDirty = V3.treesDirty = V3.shadowDirty = true; V3.litOn = V3.bldLit = null;
+}
+function paintGround() {
+  const c = V3.gctx, W = V3.gcv.width, H = V3.gcv.height;
+  if (!RT.terr3Cv) paintTerrainImg(true);
+  c.setTransform(1, 0, 0, 1, 0, 0); c.imageSmoothingEnabled = true; c.drawImage(RT.terr3Cv, 0, 0, W, H);
+  if (RT.showSlope) { c.globalAlpha = 0.45; c.imageSmoothingEnabled = false; c.drawImage(RT.slopeCv, 0, 0, W, H); c.imageSmoothingEnabled = true; c.globalAlpha = 1; }
+  c.setTransform(GT, 0, 0, GT, 0, 0); c.lineCap = 'round'; c.lineJoin = 'round';
+  const saved = ctx, z = cam.z; ctx = c; cam.z = 12; RT.texMode = true;
+  try { const vb = { x0: -10, y0: -10, x1: M.GW + 10, y1: M.GH + 10 }; drawBase(); drawLoipes(vb); drawPistes(vb); drawBuildings(vb); }
+  finally { ctx = saved; cam.z = z; RT.texMode = false; }
+  V3.gtex.needsUpdate = true; paintNight();
+}
+function paintNight() {
+  const c = V3.nctx, W = V3.ncv.width, H = V3.ncv.height, s = W / M.GW;
+  c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = '#000'; c.fillRect(0, 0, W, H);
+  c.setTransform(s, 0, 0, s, 0, 0); c.lineCap = 'round'; c.lineJoin = 'round';
+  if (V3.litOn) for (const p of G.pistes) {
+    if (!p.lights || !p._open) continue;
+    c.beginPath(); c.moveTo(p.pts[0][0], p.pts[0][1]); for (const q of p.pts) c.lineTo(q[0], q[1]);
+    c.strokeStyle = 'rgba(255,214,150,0.3)'; c.lineWidth = PW * 2.6; c.stroke(); c.strokeStyle = 'rgba(255,238,205,0.8)'; c.lineWidth = PW * 1.1; c.stroke();
+  }
+  if (V3.bldLit) {
+    const glow = (x, y, r, a) => { const g = c.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, `rgba(255,200,130,${a})`); g.addColorStop(1, 'rgba(255,200,130,0)'); c.fillStyle = g; c.beginPath(); c.arc(x, y, r, 0, 6.29); c.fill(); };
+    for (const b of G.blds) if (BLD[b.type].roof || b.type === 'parking') glow(b.x + b.w / 2, b.y + b.h / 2, Math.max(b.w, b.h) + 1, 0.55);
+    glow(M.base.ex, M.base.ey + 1, 5, 0.6);
+    for (const l of G.lifts) { glow(l.bx, l.by, 2, 0.6); glow(l.tx, l.ty, 2, 0.6); }
+  }
+  V3.ntex.needsUpdate = true;
+}
+function treeGeom(snowy) {
+  const T = V3.T;
+  const tr = new T.CylinderGeometry(0.05, 0.07, 0.36, 5, 1, true).translate(0, 0.18, 0);
+  const c1 = new T.ConeGeometry(0.44, 0.9, 7, 1, true).translate(0, 0.72, 0);
+  const c2 = new T.ConeGeometry(0.31, 0.72, 7, 1, true).translate(0, 1.12, 0);
+  return mergeGeoms([colored(tr, '#5a3d28'), colored(c1, snowy ? '#2f5e48' : '#2a6238'), colored(c2, snowy ? '#d3dfea' : '#3a7a45')]);
+}
+function buildTrees3D() {
+  const T = V3.T; disposeObj(V3.trees); V3.trees = new T.Group(); V3.sc.add(V3.trees);
+  const summer = G.phase === 'off', A = [], B = [], R = [], O = [];
+  for (let y = 0; y < M.GH; y++) for (let x = 0; x < M.GW; x++) {
+    const fl = M.f[y * M.GW + x];
+    if (fl & F_FOREST) {
+      const snowy = !summer && snowAtE(M.h[y * M.GW + x]) > 4, n = 2 + (hash2(x, y, 3) < 0.55 ? 1 : 0);
+      for (let k = 0; k < n; k++) (snowy ? A : B).push([x + 0.15 + hash2(x, y, 11 + k) * 0.7, y + 0.15 + hash2(x, y, 29 + k) * 0.7, 0.7 + hash2(x, y, 47 + k) * 0.45, hash2(x, y, 53 + k)]);
+    } else if (fl & F_ROCK) {
+      const n = 1 + (hash2(x, y, 5) < 0.4 ? 1 : 0);
+      for (let k = 0; k < n; k++) R.push([x + 0.25 + hash2(x, y, 61 + k) * 0.5, y + 0.25 + hash2(x, y, 71 + k) * 0.5, 0.6 + hash2(x, y, 81 + k) * 0.6, hash2(x, y, 91 + k)]);
+    }
+    if (fl & F_BLDG) O.push([x + 0.5, y + 0.5, 1, hash2(x, y, 7)]);
+  }
+  const mat = new T.MeshLambertMaterial({ vertexColors: true });
+  const mk = (geo, list, yOff, cast) => {
+    if (!list.length) { geo.dispose(); return; }
+    const m = new T.InstancedMesh(geo, mat, list.length), d = V3.dummy, c = V3.col;
+    list.forEach((p, i) => { d.position.set(p[0], Y3(p[0], p[1]) + yOff, p[1]); d.rotation.set(0, p[3] * 6.28, 0); d.scale.set(p[2], p[2] * (0.9 + p[3] * 0.3), p[2]); d.updateMatrix(); m.setMatrixAt(i, d.matrix); c.setScalar(0.86 + p[3] * 0.28); m.setColorAt(i, c); });
+    m.castShadow = cast; V3.trees.add(m);
+  };
+  mk(treeGeom(true), A, -0.05, true); mk(treeGeom(false), B, -0.05, true);
+  const rg = new T.IcosahedronGeometry(0.3, 0); rg.scale(1, 0.6, 1); mk(colored(rg, summer ? '#8a8c93' : '#c3c9d3'), R, 0.03, true);
+  mk(mergeGeoms([colored(new T.BoxGeometry(0.75, 0.45, 0.75).translate(0, 0.22, 0), '#8a5a3c'), colored(new T.ConeGeometry(0.6, 0.32, 4).rotateY(Math.PI / 4).translate(0, 0.6, 0), summer ? '#5c3a28' : '#eef3f8')]), O, 0, true);
+  V3.shadowDirty = true;
+}
+function liftProfile(l) {
+  const T = LIFT[l.type], len = l._len;
+  if (l.type === 'carpet') { l._prof = [[0, Y3(l.bx, l.by) + 0.08], [len, Y3(l.tx, l.ty) + 0.08]]; l._towers = []; return; }
+  const gAt = t => Y3(l.bx + l._dx * t, l.by + l._dy * t), th = TOWER_H[l.type], sh = STATION_H[l.type], nT = Math.max(1, Math.round(len / T.towers));
+  let ts = [0]; for (let i = 1; i < nT; i++) ts.push(len * i / nT); ts.push(len);
+  const topAt = t => (t === 0 || t === len) ? gAt(t) + sh : gAt(t) + th, minClr = T.surface ? 0.55 : 0.8;
+  for (let iter = 0; iter < 6; iter++) {
+    const add = [];
+    for (let i = 0; i + 1 < ts.length; i++) {
+      const a = ts[i], b = ts[i + 1], ya = topAt(a), yb = topAt(b); let worst = 0, wt = 0;
+      for (let k = 1; k < 8; k++) { const t = a + (b - a) * k / 8, need = minClr - (ya + (yb - ya) * k / 8 - gAt(t)); if (need > worst) { worst = need; wt = t; } }
+      if (worst > 0.02 && b - a > 1) add.push(wt);
+    }
+    if (!add.length) break;
+    ts = ts.concat(add).sort((p, q) => p - q);
+  }
+  l._prof = ts.map(t => [t, topAt(t)]); l._towers = ts.slice(1, -1);
+}
+function cableY(l, t) {
+  const p = l._prof; if (!p) return 0;
+  if (t <= p[0][0]) return p[0][1];
+  for (let i = 0; i + 1 < p.length; i++) if (t <= p[i + 1][0]) { const a = p[i], b = p[i + 1]; return a[1] + (b[1] - a[1]) * (t - a[0]) / ((b[0] - a[0]) || 1); }
+  return p[p.length - 1][1];
+}
+function station3D(l, T, top, O) {
+  const TT = V3.T, g = T.gauge, len = l._len, t = top ? len : 0, x = top ? l.tx : l.bx, z = top ? l.ty : l.by, gy = Y3(x, z), dir = top ? 1 : -1, win = isWinter();
+  const grp = new TT.Group(); grp.position.set(x, gy, z); grp.rotation.y = -Math.atan2(l._dy, l._dx); O.add(grp);
+  const lam = c => new TT.MeshLambertMaterial({ color: c });
+  const box = (w, h, d, col, lx, ly, lz) => { const m = new TT.Mesh(new TT.BoxGeometry(w, h, d), lam(col)); m.position.set(lx, ly + h / 2, lz); m.castShadow = true; m.receiveShadow = true; grp.add(m); return m; };
+  const roof = (L, W, H, col, lx, ly, lz) => { const m = new TT.Mesh(prismGeom(L, W, H), lam(win ? '#f3f6fb' : col)); m.position.set(lx, ly, lz); m.castShadow = true; grp.add(m); if (win) box(L, 0.06, W, col, lx, ly - 0.06, lz); };
+  const cab = cableY(l, t) - gy;
+  const wheel = (r, y) => {
+    const m = new TT.Mesh(new TT.TorusGeometry(r, 0.045, 6, 28), lam('#c3c9d3')); m.rotation.x = Math.PI / 2; m.position.set(dir * 0.1, y, 0); m.castShadow = true; grp.add(m);
+    for (let k = 0; k < 3; k++) { const s = new TT.Mesh(new TT.BoxGeometry(r * 2, 0.03, 0.04), lam('#b7bec9')); s.position.set(dir * 0.1, y, 0); s.rotation.y = k * Math.PI / 3; grp.add(s); }
+    box(0.22, 0.14, 0.22, '#7d8696', dir * 0.1 - 0.11, y - 0.07, -0.11);
+  };
+  const hut = (col, lz) => { const hx = top ? 0.7 : -0.7; box(0.85, 0.5, 0.7, '#e9dcc5', hx, 0, lz); roof(0.95, 0.8, 0.3, col, hx, 0.5, lz); };
+  if (l.type === 'carpet') {
+    box(0.6, 0.08, 0.8, '#c9ced6', top ? 0.25 : -0.25, 0, 0);
+    if (!top) hut('#8a5a3c', 1.0);
+    return;
+  }
+  if (T.surface) {
+    wheel(g + 0.04, cab); box(0.15, cab, 0.15, '#9aa3b2', dir * 0.1 - 0.35, 0, 0); box(0.45, 0.07, 0.1, '#9aa3b2', dir * 0.1 - 0.2, cab - 0.02, 0);
+    if (!top) { box(0.5, 0.75, 0.6, '#d2d7df', dir * 0.1 - 0.75, cab - 0.95, 0); box(0.15, cab - 0.95, 0.15, '#9aa3b2', dir * 0.1 - 0.75, 0, 0); hut('#6b4a35', g + 1.0); }
+    return;
+  }
+  if (l.type === 'chair') {
+    box(1.1, 0.12, 2 * g + 0.7, '#b7bec9', dir * 0.2, 0, 0); wheel(g + 0.03, cab); box(0.18, cab, 0.18, '#9aa3b2', dir * 0.1 - 0.3, 0, 0); box(0.4, 0.08, 0.12, '#9aa3b2', dir * 0.1 - 0.15, cab - 0.02, 0);
+    if (!top) hut('#2f6fd6', g + 1.05);
+    return;
+  }
+  const roofCol = l.type === 'gondola' ? '#d6453d' : '#ff8c1a', bw = l.type === 'gondola' ? 2.6 : 2.3, bh = 2 * g + 1.0, cx = dir * (bw / 2 - 0.5), wallH = cab + 0.3;
+  box(bw, wallH, bh, '#d5dae2', cx, 0, 0);
+  box(bw + 0.04, 0.2, bh + 0.04, roofCol, cx, wallH - 0.35, 0);
+  roof(bw + 0.25, bh + 0.25, 0.55, roofCol, cx, wallH, 0);
+}
+function buildCarpet3D(l, O) {
+  const T = V3.T, n = Math.max(2, Math.ceil(l._len / 0.5)), bp = [], bi = [], cp = [], ci = [], K = 6;
+  for (let i = 0; i <= n; i++) {
+    const t = l._len * i / n, x = l.bx + l._dx * t, z = l.by + l._dy * t, y = Y3(x, z) + 0.06;
+    bp.push(x + l._px * 0.28, y, z + l._py * 0.28, x - l._px * 0.28, y, z - l._py * 0.28);
+    for (let k = 0; k <= K; k++) { const a = Math.PI * k / K, o = Math.cos(a) * 0.4, h = 0.06 + Math.sin(a) * 0.42; cp.push(x + l._px * o, y + h, z + l._py * o); }
+    if (i < n) { const a = i * 2; bi.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); for (let k = 0; k < K; k++) { const q = i * (K + 1) + k, r = q + K + 1; ci.push(q, r, q + 1, q + 1, r, r + 1); } }
+  }
+  const bg = new T.BufferGeometry(); bg.setAttribute('position', new T.Float32BufferAttribute(bp, 3)); bg.setIndex(bi); bg.computeVertexNormals();
+  const bm = new T.Mesh(bg, new T.MeshLambertMaterial({ color: '#353a45', side: T.DoubleSide })); bm.receiveShadow = true; O.add(bm);
+  const cg = new T.BufferGeometry(); cg.setAttribute('position', new T.Float32BufferAttribute(cp, 3)); cg.setIndex(ci); cg.computeVertexNormals();
+  O.add(new T.Mesh(cg, new T.MeshLambertMaterial({ color: '#dceaff', transparent: true, opacity: 0.42, side: T.DoubleSide, depthWrite: false })));
+}
+function house3D(cx, cz, w, d, wallH, roofH, wallCol, roofCol, O, gy) {
+  const T = V3.T, win = isWinter(), lam = c => new T.MeshLambertMaterial({ color: c });
+  const walls = new T.Mesh(new T.BoxGeometry(w, wallH, d), lam(wallCol)); walls.position.set(cx, gy + wallH / 2, cz); walls.castShadow = true; walls.receiveShadow = true; O.add(walls);
+  const along = w >= d, r = new T.Mesh(prismGeom((along ? w : d) + 0.2, (along ? d : w) + 0.2, roofH), lam(win ? '#f3f6fb' : roofCol));
+  r.position.set(cx, gy + wallH, cz); r.rotation.y = along ? 0 : Math.PI / 2; r.castShadow = true; O.add(r);
+  const fas = new T.Mesh(new T.BoxGeometry(w + 0.22, 0.07, d + 0.22), lam(roofCol)); fas.position.set(cx, gy + wallH - 0.02, cz); O.add(fas);
+  const ch = new T.Mesh(new T.BoxGeometry(0.16, 0.4, 0.16), lam('#6b4f3d')); ch.position.set(cx + (along ? w * 0.28 : 0), gy + wallH + roofH * 0.55, cz + (along ? 0 : d * 0.28)); ch.castShadow = true; O.add(ch);
+  return walls;
+}
+function building3D(b, O) {
+  const T = V3.T, lam = c => new T.MeshLambertMaterial({ color: c }), cx = b.x + b.w / 2, cz = b.y + b.h / 2;
+  const ys = [Y3(b.x, b.y), Y3(b.x + b.w, b.y), Y3(b.x, b.y + b.h), Y3(b.x + b.w, b.y + b.h), Y3(cx, cz)], gy = Math.min(...ys), gmax = Math.max(...ys);
+  const add = (geo, col, x, y, z, ry, rz) => { const m = new T.Mesh(geo, lam(col)); m.position.set(x, y, z); m.rotation.set(0, ry || 0, rz || 0); m.castShadow = true; m.receiveShadow = true; O.add(m); return m; };
+  if (b.type === 'parking') return;
+  if (b.type === 'park') {
+    for (let i = 0; i < 3; i++) { const x = b.x + 0.8 + i * 1.2, z = b.y + 0.9 + (i % 2) * 1.1; add(new T.BoxGeometry(0.75, 0.12, 0.55), '#ffffff', x, Y3(x, z) + 0.08, z, 0, 0.35); }
+    const rz = b.y + b.h - 0.6; add(new T.BoxGeometry(b.w - 1.2, 0.05, 0.05), '#555c6b', cx, Y3(cx, rz) + 0.3, rz);
+    for (const ox of [-(b.w - 1.4) / 2, (b.w - 1.4) / 2]) add(new T.BoxGeometry(0.05, 0.3, 0.05), '#555c6b', cx + ox, Y3(cx + ox, rz) + 0.15, rz);
+    return;
+  }
+  if (b.type === 'cannon') {
+    const x = b.x + 0.5, z = b.y + 0.5, y = Y3(x, z);
+    add(new T.CylinderGeometry(0.04, 0.05, 0.7, 6).translate(0, 0.35, 0), '#5c6474', x, y, z);
+    add(new T.CylinderGeometry(0.14, 0.18, 0.36, 10), '#ffb347', x + 0.08, y + 0.75, z, 0, -1.0);
+    return;
+  }
+  const s = B3[b.type] || [0.6, 0.45, '#e9dcc5'], wallH = s[0] + (gmax - gy);
+  house3D(cx, cz, b.w - 0.15, b.h - 0.15, wallH, s[1], s[2], BLD[b.type].roof || '#888', O, gy);
+  if (b.type === 'hotel') for (let k = 1; k <= 2; k++) add(new T.BoxGeometry(b.w - 0.1, 0.05, b.h - 0.1), '#c9b89a', cx, gy + (gmax - gy) + k * 0.55, cz);
+  if (b.type === 'garage') add(new T.BoxGeometry(0.8, 0.5, 0.05), '#555c6b', cx, gy + 0.25, b.y + b.h - 0.05);
+}
+function buildObjects3D() {
+  const T = V3.T; disposeObj(V3.objs); V3.objs = new T.Group(); V3.sc.add(V3.objs);
+  const O = V3.objs, d = V3.dummy, lam = c => new T.MeshLambertMaterial({ color: c }), poles = [], arms = [], cable = [];
+  for (const l of G.lifts) {
+    liftProfile(l);
+    const Tt = LIFT[l.type], g = Tt.gauge, ang = Math.atan2(l._dy, l._dx);
+    if (l.type === 'carpet') { buildCarpet3D(l, O); station3D(l, Tt, false, O); station3D(l, Tt, true, O); continue; }
+    for (const t of l._towers) { const x = l.bx + l._dx * t, z = l.by + l._dy * t, gy = Y3(x, z), top = cableY(l, t); poles.push([x, gy, z, top - gy + 0.05, ang]); arms.push([x, top + 0.03, z, g, ang]); }
+    for (const side of [g, -g]) for (let i = 0; i + 1 < l._prof.length; i++) {
+      const [t1, y1] = l._prof[i], [t2, y2] = l._prof[i + 1];
+      cable.push(l.bx + l._dx * t1 + l._px * side, y1, l.by + l._dy * t1 + l._py * side, l.bx + l._dx * t2 + l._px * side, y2, l.by + l._dy * t2 + l._py * side);
+    }
+    station3D(l, Tt, false, O); station3D(l, Tt, true, O);
+  }
+  if (poles.length) {
+    const pm = new T.InstancedMesh(new T.BoxGeometry(0.16, 1, 0.16).translate(0, 0.5, 0), lam('#9aa3b2'), poles.length);
+    poles.forEach((p, i) => { d.position.set(p[0], p[1], p[2]); d.rotation.set(0, -p[4], 0); d.scale.set(1, p[3], 1); d.updateMatrix(); pm.setMatrixAt(i, d.matrix); });
+    pm.castShadow = true; O.add(pm);
+    const am = new T.InstancedMesh(new T.BoxGeometry(0.09, 0.08, 1), lam('#5c6474'), arms.length);
+    arms.forEach((a, i) => { d.position.set(a[0], a[1], a[2]); d.rotation.set(0, -a[4], 0); d.scale.set(1, 1, a[3] * 2 + 0.35); d.updateMatrix(); am.setMatrixAt(i, d.matrix); });
+    am.castShadow = true; O.add(am);
+  }
+  if (cable.length) { const cg = new T.BufferGeometry(); cg.setAttribute('position', new T.Float32BufferAttribute(cable, 3)); O.add(new T.LineSegments(cg, new T.LineBasicMaterial({ color: 0x2b303b }))); }
+  for (const b of G.blds) building3D(b, O);
+  { const b = M.base, gy = Y3(b.ex, b.ey - 0.3); house3D(b.ex, b.ey - 0.3, 1.6, 0.9, 0.5, 0.35, '#e9dcc5', '#d6453d', O, gy);
+    const pole = new T.Mesh(new T.CylinderGeometry(0.03, 0.03, 1.6, 6), lam('#555')); pole.position.set(b.ex + 1.1, gy + 0.8, b.ey - 0.3); O.add(pole);
+    const flag = new T.Mesh(new T.BoxGeometry(0.6, 0.35, 0.02), lam('#d6453d')); flag.position.set(b.ex + 1.42, gy + 1.42, b.ey - 0.3); O.add(flag); }
+  const lamps = [];
+  for (const p of G.pistes) if (p.lights) for (let s = 1; s < p._len; s += 3) { const q = pointAt(p, s), o = PW / 2 + 0.35; lamps.push([q.x - q.dy * o, q.y + q.dx * o]); }
+  V3.lampMat = null;
+  if (lamps.length) {
+    const pm = new T.InstancedMesh(new T.CylinderGeometry(0.025, 0.035, 1.1, 5).translate(0, 0.55, 0), lam('#4a505c'), lamps.length);
+    V3.lampMat = new T.MeshBasicMaterial({ color: '#4a505c' });
+    const hm = new T.InstancedMesh(new T.SphereGeometry(0.08, 6, 4), V3.lampMat, lamps.length);
+    lamps.forEach(([x, z], i) => { const y = Y3(x, z); d.position.set(x, y, z); d.rotation.set(0, 0, 0); d.scale.set(1, 1, 1); d.updateMatrix(); pm.setMatrixAt(i, d.matrix); d.position.y = y + 1.12; d.updateMatrix(); hm.setMatrixAt(i, d.matrix); });
+    pm.castShadow = true; O.add(pm, hm);
+  }
+  buildDyn3D(); V3.shadowDirty = true;
+}
+function buildDyn3D() {
+  const T = V3.T; disposeObj(V3.dyn); V3.dyn = new T.Group(); V3.sc.add(V3.dyn);
+  const lam = c => new T.MeshLambertMaterial({ color: c }), vc = () => new T.MeshLambertMaterial({ vertexColors: true });
+  const pool = (geo, mat, n) => { const m = new T.InstancedMesh(geo, mat, Math.max(1, n)); m.userData.cap = Math.max(1, n); m.count = 0; m.frustumCulled = false; m.instanceMatrix.setUsage(T.DynamicDrawUsage); V3.dyn.add(m); return m; };
+  const nC = { chair: 0, detach: 0, gondola: 0, tbar: 0, platter: 0 };
+  for (const l of G.lifts) { if (l.type === 'carpet') continue; const Tt = LIFT[l.type]; nC[l.type] += Math.ceil(l._len / (Tt.spd * Tt.interval)) * 2 + 4; }
+  const box = (w, h, d, col, x, y, z) => colored(new T.BoxGeometry(w, h, d).translate(x || 0, y || 0, z || 0), col);
+  const chairG = mergeGeoms([box(0.22, 0.06, 0.62, '#3b6db3'), box(0.04, 0.24, 0.62, '#3b6db3', -0.1, 0.13), box(0.03, 0.5, 0.03, '#3a4152', 0, 0.27), box(0.03, 0.03, 0.62, '#3a4152', 0.12, 0.12)]);
+  const detG = mergeGeoms([box(0.26, 0.07, 0.82, '#2f6fd6'), box(0.05, 0.28, 0.82, '#2f6fd6', -0.12, 0.15), box(0.04, 0.5, 0.04, '#3a4152', 0, 0.27)]);
+  const bubG = new T.SphereGeometry(0.5, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(0.42, 0.62, 0.9).translate(0.02, 0.02, 0);
+  const gonG = mergeGeoms([box(0.46, 0.42, 0.46, '#d6453d'), box(0.47, 0.13, 0.47, '#cfe6ff', 0, 0.06), box(0.04, 0.26, 0.04, '#3a4152', 0, 0.34)]);
+  const bodyG = new T.CylinderGeometry(0.075, 0.1, 0.27, 6).translate(0, 0.155, 0), headG = new T.SphereGeometry(0.068, 7, 5).translate(0, 0.36, 0);
+  const skiG = mergeGeoms([box(0.56, 0.02, 0.05, '#2b2b3a', 0.04, 0.01, 0.055), box(0.56, 0.02, 0.05, '#2b2b3a', 0.04, 0.01, -0.055)]);
+  const carG = mergeGeoms([box(0.6, 0.18, 0.38, '#ffffff', 0, 0.12), box(0.32, 0.14, 0.34, '#dbe8f5', -0.04, 0.27)]);
+  const spots = [];
+  const lots = [{ x: M.base.px, y: M.base.py, w: M.base.pw, h: M.base.ph }, ...G.blds.filter(b => b.type === 'parking')];
+  for (const L of lots) { const rows = Math.max(1, Math.floor((L.h - 0.4) / 1.4)); for (let r = 0; r < rows; r++) for (let xx = L.x + 0.33; xx < L.x + L.w - 0.6; xx += 0.55) spots.push([xx + 0.27, L.y + 0.66 + r * 1.4, JACKETS[Math.floor(hash2(spots.length, r, 3) * JACKETS.length)]]); }
+  V3.spots = spots;
+  V3.pool = {
+    chair: pool(chairG, vc(), nC.chair), detach: pool(detG, vc(), nC.detach), bubble: pool(bubG, new T.MeshLambertMaterial({ color: '#ff8c1a', transparent: true, opacity: 0.55, depthWrite: false }), nC.detach),
+    gondola: pool(gonG, vc(), nC.gondola), stem: pool(new T.CylinderGeometry(0.02, 0.02, 1, 5).translate(0, -0.5, 0), lam('#e2a90c'), nC.tbar + nC.platter),
+    bar: pool(new T.BoxGeometry(0.06, 0.05, 0.66), lam('#1f2229'), nC.tbar), disc: pool(new T.CylinderGeometry(0.14, 0.14, 0.03, 12), lam('#d93a3a'), nC.platter),
+    spring: pool(new T.CylinderGeometry(0.06, 0.06, 0.14, 8), lam('#b7bec9'), nC.tbar + nC.platter),
+    body: pool(bodyG, lam('#ffffff'), 1600), head: pool(headG, lam('#f2c9a0'), 1600), skis: pool(skiG, vc(), 1600), car: pool(carG, vc(), spots.length),
+  };
+}
+function updateDynamic3D() {
+  const P = V3.pool, d = V3.dummy; if (!P) return;
+  const cnt = {}; for (const k in P) cnt[k] = 0;
+  const put = (k, x, y, z, ry, sx, sy, sz) => { const m = P[k], i = cnt[k]; if (i >= m.userData.cap) return -1; d.position.set(x, y, z); d.rotation.set(0, ry, 0); d.scale.set(sx || 1, sy || 1, sz || 1); d.updateMatrix(); m.setMatrixAt(i, d.matrix); cnt[k] = i + 1; return i; };
+  for (const l of G.lifts) {
+    if (l.type === 'carpet' || !l._prof) continue;
+    const T = LIFT[l.type], g = T.gauge, len = l._len, ry = -Math.atan2(l._dy, l._dx), sp = T.spd * T.interval, ph = (l._timer / T.interval) * sp;
+    for (let s = ph; s < len; s += sp) for (const up of [true, false]) {
+      const t = up ? s : len - s, o = up ? g : -g, x = l.bx + l._dx * t + l._px * o, z = l.by + l._dy * t + l._py * o, cy = cableY(l, t);
+      if (l.type === 'chair' || l.type === 'detach') { put(l.type, x, cy - 0.52, z, up ? ry : ry + Math.PI); if (l.type === 'detach') put('bubble', x, cy - 0.52, z, up ? ry : ry + Math.PI); }
+      else if (l.type === 'gondola') put('gondola', x, cy - 0.48, z, ry);
+      else {
+        put('spring', x, cy - 0.07, z, ry);
+        if (up) { const gy = Y3(x, z) + 0.28; put('stem', x, cy - 0.12, z, ry, 1, Math.max(0.1, cy - 0.12 - gy), 1); put(l.type === 'tbar' ? 'bar' : 'disc', x, gy, z, ry); }
+        else put('stem', x, cy - 0.12, z, ry, 1, 0.3, 1);
+      }
+    }
+  }
+  const C = V3.col;
+  for (const g of RT.guests) {
+    if (g.state === 'inside' || g.gone) continue;
+    const a = g.act, ry = -Math.atan2(g.dy || 1e-6, g.dx || 0); let y, seated = false;
+    if ((g.state === 'ride' || g.state === 'ridedown') && a && a.l && a.l._prof) {
+      if (LIFT[a.l.type].surface) y = Y3(g.x, g.y) + (a.l.type === 'carpet' ? 0.08 : 0);
+      else { y = cableY(a.l, g.t) - (a.l.type === 'gondola' ? 0.62 : 0.58); seated = true; }
+    } else y = Y3(g.x, g.y);
+    const i = put('body', g.x, y, g.y, ry, 1, seated ? 0.8 : 1, 1);
+    if (i < 0) break;
+    if (!g._c3) g._c3 = new V3.T.Color(g.color);
+    P.body.setColorAt(i, g._c3);
+    put('head', g.x, y - (seated ? 0.05 : 0), g.y, ry);
+    const onSkis = g.kind === 'xc' ? g.ticket : g.ticket && (g.state === 'ski' || g.state === 'queue' || g.state === 'ride' || (g.state === 'walk' && a && a.spd > 2));
+    if (onSkis && !(seated && a && a.l && a.l.type === 'gondola')) put('skis', g.x, y + (seated ? -0.05 : 0), g.y, ry);
+  }
+  const parked = Math.min(RT.parked || 0, V3.spots.length);
+  for (let i = 0; i < parked; i++) { const [x, z, col] = V3.spots[i], k = put('car', x, Y3(x, z), z, Math.PI / 2); if (k >= 0) P.car.setColorAt(k, C.set(col)); }
+  for (const k in P) { const m = P[k]; m.count = cnt[k]; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
+}
+function sunDir() {
+  if (G.phase !== 'season') return [-0.35, 0.78, 0.52];
+  const s = RT.sun || { rise: 480, set: 960 }, fr = clamp((G.time - s.rise) / Math.max(60, s.set - s.rise), 0, 1);
+  const az = lerp(-1.15, 1.15, fr), el = 0.24 + 0.36 * Math.sin(Math.PI * fr);
+  return [-Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)];
+}
+function update3DCamera() {
+  cam.x = clamp(cam.x, 0, M.GW); cam.y = clamp(cam.y, 0, M.GH);
+  cam3.pitch = clamp(cam3.pitch, 0.16, 1.5); cam3.dist = clamp(cam3.dist, 4, 280);
+  const ty = Y3(cam.x, cam.y), cp = Math.cos(cam3.pitch), sp = Math.sin(cam3.pitch);
+  const px = cam.x + Math.sin(cam3.yaw) * cp * cam3.dist, pz = cam.y + Math.cos(cam3.yaw) * cp * cam3.dist;
+  let py = ty + sp * cam3.dist; const gy = Y3(px, pz) + 1.2; if (py < gy) py = gy;
+  V3.camera.position.set(px, py, pz); V3.camera.lookAt(cam.x, ty, cam.y); V3.camera.updateMatrixWorld();
+  cam.z = zoomFromDist(cam3.dist);
+}
+function updateSky3D() {
+  const dk = darkness(), w = G.weather || { type: 'sun' }, inS = G.phase === 'season';
+  const over = inS && ['cloudy', 'snow', 'rain', 'fog', 'storm'].includes(w.type);
+  const sky = V3.col.set(over ? '#c3cdd9' : G.phase === 'off' ? '#9cc8f0' : '#acd0f2').lerp(V3.tmpC.set('#0b1432'), dk);
+  V3.sc.background.copy(sky); V3.sc.fog.color.copy(sky);
+  const fogF = inS && (w.type === 'fog' || stormNow()) ? 0.35 : inS && w.type === 'snow' ? 0.7 : 1;
+  V3.sc.fog.near = cam3.dist * 0.9 * fogF; V3.sc.fog.far = (cam3.dist * 3.5 + 260) * fogF;
+  V3.hemi.intensity = lerp(over ? 0.85 : 0.7, 0.16, dk); V3.hemi.color.set(dk > 0.5 ? '#8fa5d6' : '#eef4ff');
+  V3.sun.intensity = lerp(over ? 0.3 : 0.85, 0.08, dk); V3.sun.color.set(dk > 0.5 ? '#9db4e8' : '#fff1dc');
+  const [sx, sy, sz] = sunDir(), cx = M.GW / 2, cz = M.GH / 2, cy = (M.maxE - M.minE) / M.cellM / 2;
+  V3.sun.position.set(cx + sx * 300, cy + sy * 300, cz + sz * 300); V3.sun.target.position.set(cx, cy, cz); V3.sun.target.updateMatrixWorld();
+  const key = Math.round(sx * 40) + ',' + Math.round(sy * 40) + ',' + Math.round(sz * 40);
+  if (key !== V3.sunKey) { V3.sunKey = key; V3.sunMoved = true; }
+  V3.terrMat.emissiveIntensity = dk * 0.9;
+  if (V3.lampMat) V3.lampMat.color.set(V3.litOn && dk > 0.3 ? '#fff3b0' : '#4a505c');
+}
+function render3D() {
+  if (V3.objDirty) { V3.objDirty = false; buildObjects3D(); }
+  if (V3.treesDirty) { V3.treesDirty = false; buildTrees3D(); }
+  const inS = G.phase === 'season', litOn = inS && !!RT.anyEvening && G.time < 21.5 * 60, bldLit = inS && G.time > 5 * 60 && G.time < 23 * 60;
+  if (litOn !== V3.litOn || bldLit !== V3.bldLit) { V3.litOn = litOn; V3.bldLit = bldLit; if (!V3.groundDirty) paintNight(); }
+  if (V3.groundDirty) { V3.groundDirty = false; paintGround(); }
+  update3DCamera(); updateSky3D(); updateDynamic3D();
+  const now = performance.now();
+  if (V3.shadowDirty || (V3.sunMoved && now - V3.lastShadow > 600)) { V3.r.shadowMap.needsUpdate = true; V3.lastShadow = now; V3.shadowDirty = false; V3.sunMoved = false; }
+  V3.r.render(V3.sc, V3.camera);
+}
+function ray3(sx, sy) {
+  const T = V3.T, v = new T.Vector3(sx / VW * 2 - 1, -(sy / VH) * 2 + 1, 0.5).unproject(V3.camera), o = V3.camera.position.clone();
+  return { o, d: v.sub(o).normalize() };
+}
+function rayGround(r) {
+  const above = t => r.o.y + r.d.y * t - Y3(r.o.x + r.d.x * t, r.o.z + r.d.z * t);
+  let prev = 0, t = 0.3;
+  while (t < 2500) {
+    if (above(t) <= 0) { let a = prev, b = t; for (let k = 0; k < 18; k++) { const m = (a + b) / 2; if (above(m) > 0) a = m; else b = m; } const tt = (a + b) / 2; return [r.o.x + r.d.x * tt, r.o.z + r.d.z * tt]; }
+    prev = t; t += Math.min(1.5, 0.3 + t * 0.01);
+  }
+  return null;
+}
+function rayPlane(r, y) { if (Math.abs(r.d.y) < 1e-6) return null; const t = (y - r.o.y) / r.d.y; if (t < 0) return null; return [r.o.x + r.d.x * t, r.o.z + r.d.z * t]; }
+function pxPerCell(x, y) {
+  const a = w2s(x, y, 0), b = w2s(x + 1, y, 0), c = w2s(x, y + 1, 0);
+  if (a[0] < -5000 || b[0] < -5000 || c[0] < -5000) return 10;
+  return Math.max(2, (Math.hypot(b[0] - a[0], b[1] - a[1]) + Math.hypot(c[0] - a[0], c[1] - a[1])) / 2);
+}
+function strokeScreen(sp, col, w, dash) {
+  ctx.beginPath(); let on = false;
+  for (const [x, y] of sp) { if (x < -5000) { on = false; continue; } if (!on) { ctx.moveTo(x, y); on = true; } else ctx.lineTo(x, y); }
+  ctx.strokeStyle = col; ctx.lineWidth = w; if (dash) ctx.setLineDash(dash); ctx.stroke(); if (dash) ctx.setLineDash([]);
+}
+function ringScreen(x, y, r, col, w, fill) {
+  const pts = []; for (let k = 0; k <= 28; k++) { const a = k / 28 * Math.PI * 2; pts.push(w2s(x + Math.cos(a) * r, y + Math.sin(a) * r, 0.05)); }
+  if (fill) { ctx.beginPath(); let on = false; for (const [px, py] of pts) { if (px < -5000) continue; if (!on) { ctx.moveTo(px, py); on = true; } else ctx.lineTo(px, py); } ctx.fillStyle = fill; ctx.fill(); }
+  strokeScreen(pts, col, w);
+}
+function drawOverlay3D() {
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const s = RT.sel;
+  if (s && s.o) {
+    if (s.kind === 'piste' || s.kind === 'loipe') { const q = s.o.pts[Math.floor(s.o.pts.length / 2)]; strokeScreen(s.o.pts.map(p => w2s(p[0], p[1], 0.05)), 'rgba(255,200,40,0.55)', (s.kind === 'piste' ? PW + 0.8 : 1.3) * pxPerCell(q[0], q[1])); }
+    else if (s.kind === 'lift') { const l = s.o, pts = []; for (let i = 0; i <= 24; i++) { const t = l._len * i / 24, x = l.bx + l._dx * t, z = l.by + l._dy * t; pts.push(w2s(x, z, l._prof ? cableY(l, t) - Y3(x, z) : 0.5)); } strokeScreen(pts, 'rgba(255,200,40,0.75)', 7); }
+    else if (s.kind === 'bld') { const b = s.o; strokeScreen([[b.x - 0.2, b.y - 0.2], [b.x + b.w + 0.2, b.y - 0.2], [b.x + b.w + 0.2, b.y + b.h + 0.2], [b.x - 0.2, b.y + b.h + 0.2], [b.x - 0.2, b.y - 0.2]].map(p => w2s(p[0], p[1], 0.05)), 'rgba(255,200,40,0.9)', 3); }
+    else if (s.kind === 'guest' && !s.o.gone && s.o.state !== 'inside') { const [x, y] = w2s(s.o.x, s.o.y, 0.2); ctx.strokeStyle = '#ffc828'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, 13, 0, 6.28); ctx.stroke(); }
+  }
+  const k = RT.tool.kind, ev = RT.ev, d = RT.drag;
+  if (k === 'piste' || k === 'loipe' || k === 'lift') {
+    for (const l of G.lifts) { ringScreen(l.tx, l.ty, SNAP * 0.5, 'rgba(47,168,79,0.95)', 2); ringScreen(l.bx, l.by, SNAP * 0.5, 'rgba(47,111,214,0.95)', 2); }
+    ringScreen(M.base.ex, M.base.ey, SNAP * 0.5, 'rgba(255,122,89,0.95)', 2);
+  }
+  if (d && d.kind === 'lift') {
+    const pts = []; for (let i = 0; i <= 24; i++) { const x = lerp(d.x0, d.x1, i / 24), y = lerp(d.y0, d.y1, i / 24); pts.push(w2s(x, y, 0.15)); }
+    strokeScreen(pts, ev && ev.ok ? 'rgba(47,168,79,0.95)' : 'rgba(217,58,58,0.95)', 5, [12, 8]);
+  }
+  if (d && (d.kind === 'piste' || d.kind === 'loipe') && d.pts.length) {
+    const pts = ev && ev.pts && ev.pts.length > 1 ? ev.pts : d.pts, q = pts[0];
+    ctx.globalAlpha = 0.6; strokeScreen(pts.map(p => w2s(p[0], p[1], 0.05)), d.kind === 'loipe' ? '#2f6fd6' : ev && ev.ok ? DIFF[ev.diff].col : '#d93a3a', (d.kind === 'loipe' ? 0.7 : PW) * pxPerCell(q[0], q[1])); ctx.globalAlpha = 1;
+    strokeScreen(d.pts.map(p => w2s(p[0], p[1], 0.08)), ev && !ev.ok ? '#d93a3a' : '#ffffff', 2, [6, 5]);
+  }
+  if (RT.ghost && ev && ev.w) {
+    const poly = [[ev.x, ev.y], [ev.x + ev.w, ev.y], [ev.x + ev.w, ev.y + ev.h], [ev.x, ev.y + ev.h], [ev.x, ev.y]].map(p => w2s(p[0], p[1], 0.05));
+    ctx.beginPath(); poly.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.fillStyle = ev.ok ? 'rgba(47,168,79,0.45)' : 'rgba(217,58,58,0.5)'; ctx.fill();
+    strokeScreen(poly, ev.ok ? '#2fa84f' : '#d93a3a', 2.5);
+    if (ghostType() === 'cannon') ringScreen(ev.x + 0.5, ev.y + 0.5, BLD.cannon.radius, 'rgba(80,160,255,0.95)', 2);
+  }
+  if (k === 'clear' && RT.mouse && RT.mouse.type === 'mouse') { const [wx, wy] = s2w(RT.mouse.x, RT.mouse.y); ringScreen(wx, wy, 1.3, 'rgba(255,122,89,0.95)', 2); }
+}
+function camRotate(dy) { cam3.yaw += dy; }
+function camTilt() { const st = [0.42, 0.75, 1.2]; const i = st.findIndex(v => v > cam3.pitch + 0.05); cam3.pitch = i < 0 ? st[0] : st[i]; }
+function camZoom(f) { if (V3.on) cam3.dist = clamp(cam3.dist * f, 4, 280); else { cam.z /= f; clampCam(); } }
+function camCenter() {
+  if (V3.on) { cam.x = M.GW / 2; cam.y = M.GH / 2; cam3.dist = Math.max(M.GW, M.GH) * 1.25; cam3.pitch = 0.8; }
+  else { cam.x = M.GW / 2; cam.y = M.GH / 2; cam.z = minZoom() / 0.85; clampCam(); }
+}
+function aimCamAtMountain() {
+  const pk = M.peaks[0] || { x: M.GW / 2, y: 0 }, vx = pk.x - M.base.ex, vz = pk.y - M.base.ey;
+  cam3.yaw = Math.atan2(-vx, -vz); cam3.pitch = 0.62; cam3.dist = VW < VH ? 95 : 70;
+  cam.x = M.base.ex + vx * 0.22; cam.y = M.base.ey + vz * 0.22;
 }
 
 /* =====================================================================
@@ -2876,6 +3409,12 @@ function hitTest(wx, wy, sx, sy, guests) {
     for (const g of RT.guests) { if (g.state === 'inside' || g.gone) continue; const [gx, gy] = w2s(g.x, g.y), d = Math.hypot(gx - sx, gy - sy); if (d < bd) { bd = d; bg = g; } }
     if (bg) return { kind: 'guest', o: bg };
   }
+  if (V3.on) {
+    let best = null, bd = 1e9;
+    for (const b of G.blds) { const cx = b.x + b.w / 2, cz = b.y + b.h / 2, [x, y] = w2s(cx, cz, 0.45), r = Math.max(14, pxPerCell(cx, cz) * Math.max(b.w, b.h) * 0.6), dd = Math.hypot(x - sx, y - sy); if (dd < r && dd < bd) { bd = dd; best = { kind: 'bld', o: b }; } }
+    if (best) return best;
+    for (const l of G.lifts) for (let i = 0; i <= 24; i++) { const t = l._len * i / 24, x = l.bx + l._dx * t, z = l.by + l._dy * t, [px, py] = w2s(x, z, l._prof ? cableY(l, t) - Y3(x, z) : 0.3); if (Math.hypot(px - sx, py - sy) < 12) return { kind: 'lift', o: l }; }
+  }
   for (const b of G.blds) if (wx >= b.x - 0.1 && wx <= b.x + b.w + 0.1 && wy >= b.y - 0.1 && wy <= b.y + b.h + 0.1) return { kind: 'bld', o: b };
   for (const l of G.lifts) if (distSeg(wx, wy, l.bx, l.by, l.tx, l.ty) <= 0.85) return { kind: 'lift', o: l };
   let bp = null, bpd = PW / 2 + 0.3;
@@ -2913,7 +3452,7 @@ function toggleLights(p) {
     const c = Math.round(p.lenM * LIGHT_PER_M * 0.3 / 1000) * 1000; p.lights = false; p.value = Math.max(0, p.value - c / 0.3); earn(c, 'refund'); p._lamps = null;
     toast(`Lysene i «${p.name}» er tatt ned (+${kr(c)}).`);
   }
-  RT.graphDirty = true; computeEvening(); if (RT.sel && RT.sel.o === p) openSelPanel();
+  RT.graphDirty = true; computeEvening(); mark3D(1, 1, 0); if (RT.sel && RT.sel.o === p) openSelPanel();
 }
 function resetGuest(g) {
   if (g.act && g.act.k === 'lift' && g.act.l) { const i = g.act.l._q.indexOf(g); if (i >= 0) g.act.l._q.splice(i, 1); }
@@ -2947,35 +3486,50 @@ function demolish(h) {
 }
 
 /* ---------- Pekerhendelser ---------- */
-const PTR = new Map(); let pinch = null, panning = null, downInfo = null;
+const PTR = new Map(); let pinch = null, panning = null, downInfo = null, rotating = null;
 cv.addEventListener('contextmenu', e => e.preventDefault());
 cv.addEventListener('pointerdown', e => {
   if (!G) return;
   try { cv.setPointerCapture(e.pointerId); } catch (er) { /* ignorer */ }
   PTR.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  closeSubIfNarrow();
+  closeSubIfNarrow(); RT.follow = null;
   if (PTR.size === 2) {
     if (RT.drag && RT.drag.kind !== 'ghost') { RT.drag = null; RT.ev = null; updateHint(); }
-    panning = null; const [a, b] = [...PTR.values()], cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2, [wx, wy] = s2w(cx, cy);
-    pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, z: cam.z, wx, wy }; return;
+    panning = null; rotating = null;
+    const [a, b] = [...PTR.values()], cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+    if (V3.on) { const py = Y3(cam.x, cam.y); pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, ang: Math.atan2(b.y - a.y, b.x - a.x), dist0: cam3.dist, yaw0: cam3.yaw, py, P: rayPlane(ray3(cx, cy), py) }; }
+    else { const [wx, wy] = s2w(cx, cy); pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, z: cam.z, wx, wy }; }
+    return;
   }
   if (PTR.size > 2) return;
   downInfo = { x: e.clientX, y: e.clientY, moved: false, type: e.pointerType };
-  const k = RT.tool.kind, panBtn = e.button === 1 || e.button === 2 || RT.space;
-  if (panBtn || k === 'select' || k === 'demolish' || k === 'lights' || (k === 'move' && !RT.moving)) { panning = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y }; return; }
+  const k = RT.tool.kind;
+  if (V3.on && (e.button === 2 || (e.button === 0 && e.altKey))) { rotating = { x: e.clientX, y: e.clientY, yaw: cam3.yaw, pitch: cam3.pitch }; return; }
+  const panBtn = e.button === 1 || e.button === 2 || RT.space;
+  if (panBtn || k === 'select' || k === 'demolish' || k === 'lights' || (k === 'move' && !RT.moving)) {
+    if (V3.on) { const py = Y3(cam.x, cam.y); panning = { x: e.clientX, y: e.clientY, p3: true, py, P: rayPlane(ray3(e.clientX, e.clientY), py) }; }
+    else panning = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y };
+    return;
+  }
   const [wx, wy] = s2w(e.clientX, e.clientY); toolDown(wx, wy, e);
 });
+function pan3To(P, py, sx, sy) { if (!P) return; update3DCamera(); const P1 = rayPlane(ray3(sx, sy), py); if (P1) { cam.x = clamp(cam.x + P[0] - P1[0], 0, M.GW); cam.y = clamp(cam.y + P[1] - P1[1], 0, M.GH); } }
 cv.addEventListener('pointermove', e => {
   if (!G) return;
   if (PTR.has(e.pointerId)) PTR.set(e.pointerId, { x: e.clientX, y: e.clientY });
   RT.mouse = { x: e.clientX, y: e.clientY, type: e.pointerType };
   if (pinch && PTR.size >= 2) {
     const [a, b] = [...PTR.values()], d = Math.hypot(a.x - b.x, a.y - b.y) || 1, cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+    if (V3.on) { cam3.dist = clamp(pinch.dist0 * pinch.d / d, 4, 280); cam3.yaw = pinch.yaw0 - (Math.atan2(b.y - a.y, b.x - a.x) - pinch.ang); pan3To(pinch.P, pinch.py, cx, cy); return; }
     cam.z = clamp(pinch.z * d / pinch.d, minZoom(), 56); cam.x = pinch.wx - (cx - VW / 2) / cam.z; cam.y = pinch.wy - (cy - VH / 2) / cam.z; clampCam(); return;
   }
+  if (rotating) { if (Math.hypot(e.clientX - downInfo.x, e.clientY - downInfo.y) > 3) downInfo.moved = true; cam3.yaw = rotating.yaw - (e.clientX - rotating.x) * 0.006; cam3.pitch = clamp(rotating.pitch + (e.clientY - rotating.y) * 0.005, 0.16, 1.5); return; }
   if (panning) {
     if (Math.hypot(e.clientX - downInfo.x, e.clientY - downInfo.y) > 6) downInfo.moved = true;
-    if (downInfo.moved) { cam.x = panning.cx - (e.clientX - panning.x) / cam.z; cam.y = panning.cy - (e.clientY - panning.y) / cam.z; clampCam(); }
+    if (downInfo.moved) {
+      if (panning.p3) pan3To(panning.P, panning.py, e.clientX, e.clientY);
+      else { cam.x = panning.cx - (e.clientX - panning.x) / cam.z; cam.y = panning.cy - (e.clientY - panning.y) / cam.z; clampCam(); }
+    }
     return;
   }
   const [wx, wy] = s2w(e.clientX, e.clientY);
@@ -2985,7 +3539,8 @@ cv.addEventListener('pointermove', e => {
 function endPtr(e, cancel) {
   if (!G) return;
   PTR.delete(e.pointerId);
-  if (pinch) { if (PTR.size < 2) pinch = null; panning = null; if (PTR.size === 0) downInfo = null; return; }
+  if (pinch) { if (PTR.size < 2) pinch = null; panning = null; rotating = null; if (PTR.size === 0) downInfo = null; return; }
+  if (rotating) { rotating = null; return; }
   if (panning) { const wasClick = downInfo && !downInfo.moved && !cancel; panning = null; if (wasClick) handleClick(e.clientX, e.clientY, e); return; }
   if (RT.drag && !cancel) { const [wx, wy] = s2w(e.clientX, e.clientY); toolUp(wx, wy); }
   else if (cancel) { RT.drag = null; }
@@ -2994,6 +3549,11 @@ cv.addEventListener('pointerup', e => endPtr(e, false));
 cv.addEventListener('pointercancel', e => endPtr(e, true));
 cv.addEventListener('wheel', e => {
   if (!G) return; e.preventDefault();
+  if (V3.on) {
+    const f = Math.exp(clamp(e.deltaY, -120, 120) * 0.0022), P = s2w(e.clientX, e.clientY), nd = clamp(cam3.dist * f, 4, 280), kk = 1 - nd / cam3.dist;
+    if (P) { cam.x = clamp(cam.x + (P[0] - cam.x) * kk, 0, M.GW); cam.y = clamp(cam.y + (P[1] - cam.y) * kk, 0, M.GH); }
+    cam3.dist = nd; return;
+  }
   const [wx, wy] = s2w(e.clientX, e.clientY), f = Math.exp(-clamp(e.deltaY, -120, 120) * 0.0022);
   cam.z = clamp(cam.z * f, minZoom(), 56); cam.x = wx - (e.clientX - VW / 2) / cam.z; cam.y = wy - (e.clientY - VH / 2) / cam.z; clampCam();
 }, { passive: false });
@@ -3006,12 +3566,15 @@ window.addEventListener('keydown', e => {
   else if (k === '1' || k === '2' || k === '3') setSpeed(+k);
   else if (k === '0' || k === 'p' || k === 'P') setSpeed(0);
   else if (k === 'Escape') { if (RT.tool.kind !== 'select') cancelTool(); else if (RT.panel) closePanel(); }
-  else if (k === '+' || k === '=') { cam.z *= 1.2; clampCam(); }
-  else if (k === '-') { cam.z /= 1.2; clampCam(); }
-  else if (k === 'ArrowLeft' || k === 'a' || k === 'A') { cam.x -= 60 / cam.z; clampCam(); }
-  else if (k === 'ArrowRight' || k === 'd' || k === 'D') { cam.x += 60 / cam.z; clampCam(); }
-  else if (k === 'ArrowUp' || k === 'w' || k === 'W') { cam.y -= 60 / cam.z; clampCam(); }
-  else if (k === 'ArrowDown' || k === 's' || k === 'S') { cam.y += 60 / cam.z; clampCam(); }
+  else if (k === '+' || k === '=') camZoom(1 / 1.2);
+  else if (k === '-') camZoom(1.2);
+  else if (V3.on && (k === 'q' || k === 'Q')) camRotate(0.15);
+  else if (V3.on && (k === 'e' || k === 'E')) camRotate(-0.15);
+  else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'a', 'A', 'd', 'D', 'w', 'W', 's', 'S'].includes(k)) {
+    const kl = k.toLowerCase(), mx = (kl === 'arrowleft' || kl === 'a') ? -1 : (kl === 'arrowright' || kl === 'd') ? 1 : 0, my = (kl === 'arrowup' || kl === 'w') ? -1 : (kl === 'arrowdown' || kl === 's') ? 1 : 0, st = 60 / cam.z;
+    if (V3.on) { const sy = Math.sin(cam3.yaw), cy2 = Math.cos(cam3.yaw); cam.x += (mx * cy2 + my * sy) * st; cam.y += (-mx * sy + my * cy2) * st; }
+    else { cam.x += mx * st; cam.y += my * st; clampCam(); }
+  }
   else if (k === 'Delete' && RT.sel && RT.sel.kind !== 'guest' && RT.sel.kind !== 'base') askDemolish(RT.sel);
 });
 window.addEventListener('keyup', e => { if (e.key === ' ') RT.space = false; });
@@ -3454,7 +4017,7 @@ function updateHUD(force) {
 /* ---------- Meny, lagring og introduksjon ---------- */
 const SAVE_PREFIX = 'skisjefen_lagring_';
 function serialize() {
-  const data = { v: 1, savedAt: Date.now(), map: packMap(M), cam: { x: cam.x, y: cam.y, z: cam.z }, G };
+  const data = { v: 1, savedAt: Date.now(), map: packMap(M), cam: { x: cam.x, y: cam.y, z: cam.z }, cam3: { yaw: cam3.yaw, pitch: cam3.pitch, dist: cam3.dist }, G };
   return JSON.stringify(data, (k, v) => (k && k[0] === '_') ? undefined : v);
 }
 function saveGame(slot, silent) {
@@ -3478,6 +4041,7 @@ function loadGame(slot) {
     M = m; G = g; migrate(G);
     startRuntime();
     if (d.cam) { cam.x = d.cam.x; cam.y = d.cam.y; cam.z = d.cam.z; clampCam(); }
+    if (d.cam3) Object.assign(cam3, d.cam3); else aimCamAtMountain();
     toast(`📂 Lastet «${G.name}»`, 'good');
     return true;
   } catch (e) { console.error(e); G = null; M = null; showMenu(); toast('Lagringen er skadet og kunne ikke lastes.', 'bad'); return false; }
@@ -3521,6 +4085,7 @@ function openGameMenu() {
 }
 function showMenu() {
   G = null; M = null; RT.guests = []; closePanel(); closeSub();
+  V3.on = false; $('#gl').classList.add('hidden');
   $('#hud').classList.add('hidden'); $('#menu').classList.remove('hidden'); menuSnow();
   $('#mContinue').disabled = !lsGet(SAVE_PREFIX + 'auto');
 }
@@ -3563,6 +4128,7 @@ function startRuntime() {
     if (t > 9 * 60 && t < 16 * 60) { const keep = Math.round(RT.demand.alpine * 0.35); for (let i = 0; i < keep; i++) RT.arrivals.push({ t: t + rr(0, 30), kind: 'alpine' }); RT.arrivals.sort((a, b) => a.t - b.t); }
   }
   resize(); updateHUD(true);
+  setView(view3DPref() ? '3d' : '2d', true);
 }
 function newGame(m) {
   const sc = SCEN.find(s => s.id === $('#mScen').value) || SCEN[0];
@@ -3581,6 +4147,7 @@ function newGame(m) {
   initSnow(); G.weather = genWeather(0);
   startRuntime();
   cam.x = M.base.ex; cam.y = M.base.ey - Math.min(30, M.GH * 0.3); cam.z = clamp(Math.min(VW, VH) / 60, minZoom(), 20); clampCam();
+  aimCamAtMountain();
   if (M.imported) {
     const r = importResort(M.imported);
     G.stats.today = newDayStats(); G.stats.season = newSeasonStats(); G.cumProfit = 0;
@@ -3645,10 +4212,14 @@ function boot() {
   $('#tName').onclick = () => { closeSub(); togglePanel('over'); };
   document.querySelectorAll('#tSpeed button').forEach(b => b.onclick = () => setSpeed(+b.dataset.s));
   $('#bSeason').onclick = () => startSeason();
-  $('#bSlope').onclick = () => { RT.showSlope = !RT.showSlope; $('#bSlope').classList.toggle('on', RT.showSlope); if (RT.showSlope) toast('📐 Bratthet: grønn < 20 %, blå < 30 %, rød < 42 %, svart ≥ 42 %'); };
-  $('#bZin').onclick = () => { cam.z *= 1.3; clampCam(); };
-  $('#bZout').onclick = () => { cam.z /= 1.3; clampCam(); };
-  $('#bCenter').onclick = () => { cam.x = M.GW / 2; cam.y = M.GH / 2; cam.z = minZoom() / 0.85; clampCam(); };
+  $('#bSlope').onclick = () => { RT.showSlope = !RT.showSlope; $('#bSlope').classList.toggle('on', RT.showSlope); mark3D(0, 1, 0); if (RT.showSlope) toast('📐 Bratthet: grønn < 20 %, blå < 30 %, rød < 42 %, svart ≥ 42 %'); };
+  $('#bZin').onclick = () => camZoom(1 / 1.3);
+  $('#bZout').onclick = () => camZoom(1.3);
+  $('#bCenter').onclick = () => camCenter();
+  $('#b3D').onclick = () => setView(V3.on || V3.want ? '2d' : '3d');
+  $('#bRotL').onclick = () => camRotate(Math.PI / 8);
+  $('#bRotR').onclick = () => camRotate(-Math.PI / 8);
+  $('#bTilt').onclick = () => camTilt();
   $('#bHelp').onclick = () => showIntro(0);
   window.addEventListener('beforeunload', () => { if (G) autosave(); });
   document.addEventListener('visibilitychange', () => { if (document.hidden && G) autosave(); });

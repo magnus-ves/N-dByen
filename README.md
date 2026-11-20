@@ -57,6 +57,7 @@ Et selvstendig tycoonspill der du bygger og driver ditt eget skisenter. Alt ligg
 * **Ekte data:** høyder fra [AWS Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) (Terrarium-format) med [Open-Meteo Elevation](https://open-meteo.com/en/docs/elevation-api) som reserve. Skog, vann, bekker, veier, bygninger og fjelltopper hentes fra Overpass API. Velger du «Ekte skisenter», hentes også eksisterende nedfarter (`piste:type=downhill`) og heiser (`aerialway`).
 * Nedlastede kart lagres i `localStorage`. Feiler nedlastingen, får du tilbud om et tilfeldig fjell.
 * **Spillet:** seks heistyper (skibånd/magic carpet, koppheis, T-krok, stolheis med fast klype, stolheis med stasjon og gondol), nedfarter med automatisk vanskelighetsgrad ut fra brattheten, langrennsløyper, snøpark, fasiliteter, ansatte, økonomi med lån, vær og snø, dag og natt, høytider, scenarioer og opplåsing. Spillet lagres i `localStorage`.
-* Eneste eksterne bibliotek er Leaflet (fra unpkg), og det lastes først når kartvelgeren åpnes.
+* **3D:** spillet vises i 3D med [Three.js](https://threejs.org/) (r149 fra unpkg). Knappen 2D/3D bytter til det flate kartet, som også virker uten nett.
+* De eksterne bibliotekene er Leaflet og Three.js. Begge lastes fra unpkg først når de trengs.
 
 Kartdata © [OpenStreetMap-bidragsytere](https://www.openstreetmap.org/copyright) (ODbL).
