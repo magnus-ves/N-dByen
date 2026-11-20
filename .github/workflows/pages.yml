@@ -32,6 +32,12 @@ jobs:
           for f in js/*.js scripts/*.mjs; do node --check "$f" || { echo "::error file=$f::Syntaksfeil i $f"; exit 1; }; done
           echo "Alle skriptfiler er gyldige."
 
+      - name: Sjekk JavaScript i skisenter.html
+        run: |
+          node -e "const fs=require('fs');const s=fs.readFileSync('skisenter.html','utf8');const m=s.match(/<script>([\s\S]*)<\/script>/);fs.writeFileSync('/tmp/skisenter.js',m[1]);"
+          node --check /tmp/skisenter.js || { echo "::error file=skisenter.html::Syntaksfeil i skisenter.html"; exit 1; }
+          echo "skisenter.html er gyldig."
+
       - name: Sjekk at alle filer som index.html laster finnes
         run: |
           missing=0
@@ -56,6 +62,7 @@ jobs:
         run: |
           mkdir -p _site
           cp index.html _site/
+          cp skisenter.html _site/
           cp -r css js _site/
           [ -d data ] && cp -r data _site/ || true
           [ -d audio ] && cp -r audio _site/ || true
